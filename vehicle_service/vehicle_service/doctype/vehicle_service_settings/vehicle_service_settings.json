@@ -1,0 +1,286 @@
+{
+ "actions": [],
+ "creation": "2026-10-03 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "sb_company",
+  "company",
+  "parts_warehouse",
+  "wip_warehouse",
+  "cb_company",
+  "labour_item",
+  "labour_rate",
+  "labour_billing_basis",
+  "inspection_fee_item",
+  "sb_locations",
+  "reception_location",
+  "qc_location",
+  "cb_locations",
+  "parking_location",
+  "collection_location",
+  "sb_rules",
+  "default_qc_template",
+  "allow_multiple_open_orders",
+  "cb_rules",
+  "default_service_interval_km",
+  "default_service_interval_months",
+  "satisfaction_followup_days",
+  "next_service_reminder_days"
+ ],
+ "fields": [
+  {
+   "fieldname": "sb_company",
+   "fieldtype": "Section Break",
+   "label": "Company & Stock"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "description": "Parts are issued from here",
+   "fieldname": "parts_warehouse",
+   "fieldtype": "Link",
+   "label": "Parts Store Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "description": "Issued parts sit here until the Sales Invoice consumes them",
+   "fieldname": "wip_warehouse",
+   "fieldtype": "Link",
+   "label": "Workshop WIP Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "cb_company",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Non-stock service item billed per hour",
+   "fieldname": "labour_item",
+   "fieldtype": "Link",
+   "label": "Labour Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "labour_rate",
+   "fieldtype": "Currency",
+   "label": "Default Labour Rate (per hour)"
+  },
+  {
+   "default": "Approved Hours",
+   "fieldname": "labour_billing_basis",
+   "fieldtype": "Select",
+   "label": "Labour Billing Basis",
+   "options": "Approved Hours\nActual Hours (capped at approved)"
+  },
+  {
+   "fieldname": "inspection_fee_item",
+   "fieldtype": "Link",
+   "label": "Inspection Fee Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "sb_locations",
+   "fieldtype": "Section Break",
+   "label": "Default Locations"
+  },
+  {
+   "fieldname": "reception_location",
+   "fieldtype": "Link",
+   "label": "Reception",
+   "options": "Workshop Location"
+  },
+  {
+   "fieldname": "qc_location",
+   "fieldtype": "Link",
+   "label": "QC Area",
+   "options": "Workshop Location"
+  },
+  {
+   "fieldname": "cb_locations",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "parking_location",
+   "fieldtype": "Link",
+   "label": "Parking (after QC)",
+   "options": "Workshop Location"
+  },
+  {
+   "fieldname": "collection_location",
+   "fieldtype": "Link",
+   "label": "Collection Area",
+   "options": "Workshop Location"
+  },
+  {
+   "fieldname": "sb_rules",
+   "fieldtype": "Section Break",
+   "label": "Rules & Follow-up"
+  },
+  {
+   "fieldname": "default_qc_template",
+   "fieldtype": "Link",
+   "label": "Default QC Template",
+   "options": "QC Template"
+  },
+  {
+   "fieldname": "allow_multiple_open_orders",
+   "fieldtype": "Check",
+   "label": "Allow Multiple Open Orders per Vehicle"
+  },
+  {
+   "fieldname": "cb_rules",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5000",
+   "fieldname": "default_service_interval_km",
+   "fieldtype": "Int",
+   "label": "Default Service Interval (km)"
+  },
+  {
+   "default": "6",
+   "fieldname": "default_service_interval_months",
+   "fieldtype": "Int",
+   "label": "Default Service Interval (months)"
+  },
+  {
+   "default": "3",
+   "fieldname": "satisfaction_followup_days",
+   "fieldtype": "Int",
+   "label": "Satisfaction Follow-up After (days)"
+  },
+  {
+   "default": "7",
+   "fieldname": "next_service_reminder_days",
+   "fieldtype": "Int",
+   "label": "Next Service Reminder Lead (days)"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-03 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Vehicle Service Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Receptionist",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Advisor",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Supervisor",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Technician",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Parts Controller",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "QC Inspector",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Accounts",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

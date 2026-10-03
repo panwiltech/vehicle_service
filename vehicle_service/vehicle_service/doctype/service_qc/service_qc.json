@@ -1,0 +1,237 @@
+{
+ "actions": [],
+ "autoname": "format:VQC-{YYYY}-{#####}",
+ "creation": "2026-10-03 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "service_order",
+  "vehicle",
+  "qc_template",
+  "cb_1",
+  "inspector",
+  "inspected_on",
+  "result",
+  "sb_checklist",
+  "checklist",
+  "sb_road",
+  "road_test_done",
+  "road_test_km",
+  "cb_road",
+  "findings",
+  "sb_fail",
+  "failed_jobs",
+  "fail_reason",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "service_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Order",
+   "options": "Service Order",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fetch_from": "service_order.vehicle",
+   "fieldname": "vehicle",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Vehicle",
+   "options": "Service Vehicle",
+   "read_only": 1
+  },
+  {
+   "fieldname": "qc_template",
+   "fieldtype": "Link",
+   "label": "QC Template",
+   "options": "QC Template"
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "__user",
+   "fieldname": "inspector",
+   "fieldtype": "Link",
+   "label": "Inspector",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "inspected_on",
+   "fieldtype": "Datetime",
+   "label": "Inspected On",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "result",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Result",
+   "options": "\nPass\nFail"
+  },
+  {
+   "fieldname": "sb_checklist",
+   "fieldtype": "Section Break",
+   "label": "Final Inspection"
+  },
+  {
+   "fieldname": "checklist",
+   "fieldtype": "Table",
+   "label": "Checklist",
+   "options": "Service QC Item"
+  },
+  {
+   "fieldname": "sb_road",
+   "fieldtype": "Section Break",
+   "label": "Road Test"
+  },
+  {
+   "fieldname": "road_test_done",
+   "fieldtype": "Check",
+   "label": "Road Test Completed"
+  },
+  {
+   "depends_on": "road_test_done",
+   "fieldname": "road_test_km",
+   "fieldtype": "Float",
+   "label": "Distance (km)"
+  },
+  {
+   "fieldname": "cb_road",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "findings",
+   "fieldtype": "Small Text",
+   "label": "Findings"
+  },
+  {
+   "depends_on": "eval:doc.result=='Fail'",
+   "fieldname": "sb_fail",
+   "fieldtype": "Section Break",
+   "label": "Failure"
+  },
+  {
+   "fieldname": "failed_jobs",
+   "fieldtype": "Table MultiSelect",
+   "label": "Return Jobs to Workshop",
+   "mandatory_depends_on": "eval:doc.result=='Fail'",
+   "options": "Service QC Failed Job"
+  },
+  {
+   "fieldname": "fail_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "mandatory_depends_on": "eval:doc.result=='Fail'"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Service QC",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-10-03 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Service QC",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "QC Inspector",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 0,
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Supervisor",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Advisor",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  },
+  {
+   "amend": 0,
+   "cancel": 0,
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Accounts",
+   "share": 0,
+   "submit": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

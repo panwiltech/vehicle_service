@@ -1,0 +1,389 @@
+{
+ "actions": [],
+ "autoname": "field:registration_no",
+ "creation": "2026-10-03 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tab_overview",
+  "sb_identity",
+  "registration_no",
+  "vin",
+  "make",
+  "model",
+  "year",
+  "cb_identity",
+  "colour",
+  "fuel_type",
+  "transmission",
+  "engine_no",
+  "image",
+  "sb_owner",
+  "customer",
+  "customer_name",
+  "cb_owner",
+  "driver_name",
+  "driver_phone",
+  "sb_status",
+  "vehicle_status",
+  "current_service_order",
+  "cb_status",
+  "current_location",
+  "custodian",
+  "sb_mileage",
+  "current_mileage",
+  "last_service_date",
+  "last_service_mileage",
+  "cb_mileage",
+  "service_interval_km",
+  "service_interval_months",
+  "next_service_date",
+  "next_service_mileage",
+  "tab_history",
+  "history_html",
+  "tab_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "tab_overview",
+   "fieldtype": "Tab Break",
+   "label": "Overview"
+  },
+  {
+   "fieldname": "sb_identity",
+   "fieldtype": "Section Break",
+   "label": "Vehicle"
+  },
+  {
+   "bold": 1,
+   "fieldname": "registration_no",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Registration No",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "vin",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_standard_filter": 1,
+   "label": "VIN / Chassis No"
+  },
+  {
+   "fieldname": "make",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Make"
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Model"
+  },
+  {
+   "fieldname": "year",
+   "fieldtype": "Int",
+   "label": "Year"
+  },
+  {
+   "fieldname": "cb_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "colour",
+   "fieldtype": "Data",
+   "label": "Colour"
+  },
+  {
+   "fieldname": "fuel_type",
+   "fieldtype": "Select",
+   "label": "Fuel Type",
+   "options": "\nPetrol\nDiesel\nHybrid\nElectric\nLPG\nOther"
+  },
+  {
+   "fieldname": "transmission",
+   "fieldtype": "Select",
+   "label": "Transmission",
+   "options": "\nManual\nAutomatic"
+  },
+  {
+   "fieldname": "engine_no",
+   "fieldtype": "Data",
+   "label": "Engine No"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "hidden": 1,
+   "label": "Image"
+  },
+  {
+   "fieldname": "sb_owner",
+   "fieldtype": "Section Break",
+   "label": "Owner"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_owner",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "driver_name",
+   "fieldtype": "Data",
+   "label": "Default Driver"
+  },
+  {
+   "fieldname": "driver_phone",
+   "fieldtype": "Data",
+   "label": "Driver Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "sb_status",
+   "fieldtype": "Section Break",
+   "label": "Workshop Status"
+  },
+  {
+   "default": "Outside Workshop",
+   "fieldname": "vehicle_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vehicle Status",
+   "options": "Outside Workshop\nArrived\nChecked In\nWaiting\nIn Workshop\nQC\nAwaiting Release\nReady for Collection",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_service_order",
+   "fieldtype": "Link",
+   "label": "Current Service Order",
+   "options": "Service Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "current_location",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Location",
+   "options": "Workshop Location",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custodian",
+   "fieldtype": "Link",
+   "label": "Custodian",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_mileage",
+   "fieldtype": "Section Break",
+   "label": "Mileage & Next Service"
+  },
+  {
+   "fieldname": "current_mileage",
+   "fieldtype": "Int",
+   "label": "Current Mileage (km)",
+   "read_only_depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "last_service_date",
+   "fieldtype": "Date",
+   "label": "Last Service Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_service_mileage",
+   "fieldtype": "Int",
+   "label": "Last Service Mileage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_mileage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Leave empty to use the default from Vehicle Service Settings",
+   "fieldname": "service_interval_km",
+   "fieldtype": "Int",
+   "label": "Service Interval (km)"
+  },
+  {
+   "fieldname": "service_interval_months",
+   "fieldtype": "Int",
+   "label": "Service Interval (months)"
+  },
+  {
+   "fieldname": "next_service_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Next Service Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_service_mileage",
+   "fieldtype": "Int",
+   "label": "Next Service Mileage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tab_history",
+   "fieldtype": "Tab Break",
+   "label": "Service History"
+  },
+  {
+   "fieldname": "history_html",
+   "fieldtype": "HTML",
+   "label": "History"
+  },
+  {
+   "fieldname": "tab_notes",
+   "fieldtype": "Tab Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
+  }
+ ],
+ "image_field": "image",
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-03 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Service Vehicle",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Advisor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Receptionist",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Supervisor",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Technician",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Parts Controller",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "QC Inspector",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Accounts",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "quick_entry": 1,
+ "row_format": "Dynamic",
+ "search_fields": "vin,make,model,customer_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

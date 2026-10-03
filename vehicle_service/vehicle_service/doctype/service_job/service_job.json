@@ -1,0 +1,367 @@
+{
+ "actions": [],
+ "autoname": "format:VSJ-{YYYY}-{#####}",
+ "creation": "2026-10-03 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "service_order",
+  "vehicle",
+  "job_title",
+  "category",
+  "estimated_hours",
+  "cb_1",
+  "status",
+  "technician",
+  "technician_name",
+  "technician_user",
+  "bay",
+  "cb_2",
+  "source",
+  "raised_by",
+  "actual_hours",
+  "variance_hours",
+  "sb_desc",
+  "customer_complaint",
+  "description",
+  "parts_html",
+  "sb_time",
+  "started_on",
+  "completed_on",
+  "cb_time",
+  "pause_reason",
+  "qc_fail_reason",
+  "time_logs",
+  "sb_commercial",
+  "quotation",
+  "quotation_item",
+  "cb_commercial",
+  "sales_order",
+  "so_detail"
+ ],
+ "fields": [
+  {
+   "fieldname": "service_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Service Order",
+   "options": "Service Order",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fetch_from": "service_order.vehicle",
+   "fieldname": "vehicle",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vehicle",
+   "options": "Service Vehicle",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Job",
+   "reqd": 1
+  },
+  {
+   "default": "Essential",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "Category",
+   "options": "Essential\nRecommended\nOptional"
+  },
+  {
+   "default": "1",
+   "fieldname": "estimated_hours",
+   "fieldtype": "Float",
+   "label": "Estimated Hours"
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "default": "Pending Approval",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending Approval\nApproved\nAssigned\nIn Progress\nPaused\nCompleted\nQC Failed\nPassed\nDeclined\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "technician",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Technician",
+   "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "technician.employee_name",
+   "fieldname": "technician_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Technician Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "technician_user",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Technician User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bay",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Bay",
+   "options": "Workshop Location",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Estimate",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Estimate\nAdditional\nPackage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raised_by",
+   "fieldtype": "Link",
+   "label": "Raised By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actual_hours",
+   "fieldtype": "Float",
+   "label": "Actual Hours",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "variance_hours",
+   "fieldtype": "Float",
+   "label": "Variance (hrs)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_desc",
+   "fieldtype": "Section Break",
+   "label": "Work"
+  },
+  {
+   "fetch_from": "service_order.customer_complaint",
+   "fieldname": "customer_complaint",
+   "fieldtype": "Small Text",
+   "label": "Customer Complaint",
+   "read_only": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "label": "Work Instructions"
+  },
+  {
+   "fieldname": "parts_html",
+   "fieldtype": "HTML",
+   "label": "Issued Parts"
+  },
+  {
+   "fieldname": "sb_time",
+   "fieldtype": "Section Break",
+   "label": "Time"
+  },
+  {
+   "fieldname": "started_on",
+   "fieldtype": "Datetime",
+   "label": "Started On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "Completed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_time",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pause_reason",
+   "fieldtype": "Small Text",
+   "label": "Last Pause Reason",
+   "read_only": 1
+  },
+  {
+   "depends_on": "qc_fail_reason",
+   "fieldname": "qc_fail_reason",
+   "fieldtype": "Small Text",
+   "label": "QC Fail Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_logs",
+   "fieldtype": "Table",
+   "label": "Time Logs",
+   "options": "Service Job Time Log",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sb_commercial",
+   "fieldtype": "Section Break",
+   "label": "Commercial Link"
+  },
+  {
+   "fieldname": "quotation",
+   "fieldtype": "Link",
+   "label": "Quotation",
+   "options": "Quotation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quotation_item",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Quotation Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_commercial",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "so_detail",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Sales Order Item",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-03 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Service Job",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Advisor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Supervisor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Technician",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "QC Inspector",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Parts Controller",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Accounts",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "job_title,vehicle,service_order",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "job_title",
+ "track_changes": 1
+}

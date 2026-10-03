@@ -1,0 +1,217 @@
+# Copyright (c) 2026, Azazel and contributors
+# For license information, please see license.txt
+
+import frappe
+from frappe.tests.utils import FrappeTestCase
+from vehicle_service.state import (
+	compute_operational_status,
+	compute_part_status,
+	vehicle_status_for,
+)
+from vehicle_service.vehicle_service.doctype.service_booking.service_booking import (
+	check_in_booking,
+)
+from vehicle_service.vehicle_service.doctype.service_job.service_job import (
+	complete_job,
+	pause_job,
+	start_job,
+)
+from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+	check_in_vehicle,
+	correct_intake,
+	create_estimate,
+	deliver_vehicle,
+	record_customer_approval,
+)
+from vehicle_service.vehicle_service.doctype.service_qc.service_qc import (
+	create_qc_inspection,
+)
+
+
+class TestVehicleServiceFlow(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self.setup_master_data()
+
+	def setup_master_data(self):
+		# Create test customer
+		if not frappe.db.exists("Customer", "Test Customer"):
+			c = frappe.new_doc("Customer")
+			c.customer_name = "Test Customer"
+			c.customer_type = "Individual"
+			c.insert(ignore_permissions=True)
+
+		# Create test items
+		if not frappe.db.exists("Item", "LABOUR-TEST"):
+			it = frappe.new_doc("Item")
+			it.item_code = "LABOUR-TEST"
+			it.item_name = "Standard Labour"
+			it.item_group = "Services"
+			it.is_stock_item = 0
+			it.insert(ignore_permissions=True)
+
+		if not frappe.db.exists("Item", "BRAKE-PAD-TEST"):
+			it2 = frappe.new_doc("Item")
+			it2.item_code = "BRAKE-PAD-TEST"
+			it2.item_name = "Front Brake Pad"
+			it2.item_group = "Products"
+			it2.is_stock_item = 1
+			it2.insert(ignore_permissions=True)
+
+		# Setup settings
+		settings = frappe.get_single("Vehicle Service Settings")
+		settings.labour_item = "LABOUR-TEST"
+		settings.labour_rate = 60.0
+		settings.save(ignore_permissions=True)
+
+	def test_pure_state_rules(self):
+		# Test vehicle status mapping
+		self.assertEqual(vehicle_status_for("Draft"), "Arrived")
+		self.assertEqual(vehicle_status_for("In Progress"), "In Workshop")
+		self.assertEqual(vehicle_status_for("QC"), "QC")
+		self.assertEqual(vehicle_status_for("Delivered"), "Outside Workshop")
+
+		# Test operational status computation
+		jobs = [{"status": "Assigned"}]
+		parts = []
+		self.assertEqual(compute_operational_status(jobs, parts), "Ready for Work")
+
+		jobs = [{"status": "In Progress"}]
+		self.assertEqual(compute_operational_status(jobs, parts), "In Progress")
+
+		jobs = [{"status": "Completed"}]
+		self.assertEqual(compute_operational_status(jobs, parts), "QC")
+
+	def test_end_to_end_workshop_flow(self):
+		# 1. Create Vehicle
+		reg_no = "TST 9999"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Toyota"
+			veh.model = "Hilux"
+			veh.year = 2022
+			veh.customer = "Test Customer"
+			veh.current_mileage = 50000
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		# 2. Create Service Order
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = veh.customer
+		order.customer_complaint = "Squeaking sound when braking"
+		order.insert(ignore_permissions=True)
+		self.assertEqual(order.status, "Draft")
+
+		# 3. Check-in
+		check_in_vehicle(
+			order_name=order.name,
+			odometer_in=50100,
+			fuel_level="1/2",
+			customer_complaint="Squeaking sound when braking",
+			existing_damage="Minor scratch on rear bumper",
+			vehicle_contents="Spare wheel and jack present",
+			intake_confirmed=1,
+		)
+		order.reload()
+		self.assertEqual(order.status, "Checked In")
+		self.assertEqual(order.intake_frozen, 1)
+
+		# Verify vehicle mileage updated
+		veh.reload()
+		self.assertEqual(veh.current_mileage, 50100)
+		self.assertEqual(veh.vehicle_status, "Checked In")
+
+		# 4. Correct Intake Audit Test
+		correct_intake(order.name, "existing_damage", "Minor scratch on rear bumper + left wing dent", "Customer noticed additional dent")
+		order.reload()
+		self.assertEqual(len(order.corrections), 1)
+		self.assertEqual(order.existing_damage, "Minor scratch on rear bumper + left wing dent")
+
+		# 5. Add Jobs and Parts
+		job1 = frappe.new_doc("Service Job")
+		job1.service_order = order.name
+		job1.job_title = "Brake Inspection & Cleaning"
+		job1.estimated_hours = 1.0
+		job1.category = "Essential"
+		job1.insert(ignore_permissions=True)
+
+		order.append(
+			"parts",
+			{
+				"item_code": "BRAKE-PAD-TEST",
+				"job": job1.name,
+				"category": "Essential",
+				"qty_required": 1.0,
+				"approval_status": "Pending",
+				"part_status": "Pending Approval",
+			},
+		)
+		order.save(ignore_permissions=True)
+
+		# 6. Create Estimate
+		est_res = create_estimate(order.name)
+		q_name = est_res["quotation"]
+		order.reload()
+		self.assertEqual(order.status, "Awaiting Approval")
+
+		# 7. Customer Approval
+		quotation = frappe.get_doc("Quotation", q_name)
+		decisions = {item.name: "Approved" for item in quotation.items}
+		app_res = record_customer_approval(
+			order_name=order.name,
+			quotation_name=q_name,
+			approvals_json=decisions,
+			approval_method="Phone",
+			approved_by_customer="Mr. Tester",
+		)
+		order.reload()
+		job1.reload()
+		self.assertEqual(job1.status, "Approved")
+		self.assertTrue(order.status in ("Approved", "Ready for Work"))
+
+		# 8. Start & Complete Job
+		job1.status = "Assigned"
+		job1.save(ignore_permissions=True)
+
+		start_job(job1.name)
+		job1.reload()
+		self.assertEqual(job1.status, "In Progress")
+
+		complete_job(job1.name)
+		job1.reload()
+		self.assertEqual(job1.status, "Completed")
+
+		order.reload()
+		self.assertEqual(order.status, "QC")
+
+		# 9. QC Inspection
+		qc_res = create_qc_inspection(order.name)
+		qc_doc = frappe.get_doc("Service QC", qc_res["qc_name"])
+		for item in qc_doc.checklist:
+			item.passed = 1
+		qc_doc.result = "Pass"
+		qc_doc.submit()
+
+		order.reload()
+		self.assertEqual(order.status, "Ready for Billing")
+
+		# 10. Deliver
+		order.status = "Ready for Collection"
+		order.save(ignore_permissions=True)
+
+		deliver_vehicle(
+			order_name=order.name,
+			odometer_out=50105,
+			collected_by="Mr. Tester",
+			delivery_notes="All work explained and accepted.",
+		)
+		order.reload()
+		self.assertEqual(order.status, "Delivered")
+
+		veh.reload()
+		self.assertEqual(veh.vehicle_status, "Outside Workshop")
+		self.assertEqual(veh.current_mileage, 50105)
+		self.assertTrue(veh.next_service_mileage > 50105)

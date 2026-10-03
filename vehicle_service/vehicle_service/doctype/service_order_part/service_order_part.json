@@ -1,0 +1,191 @@
+{
+ "actions": [],
+ "creation": "2026-10-03 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "job",
+  "category",
+  "qty_required",
+  "qty_issued",
+  "qty_returned",
+  "qty_used",
+  "part_status",
+  "approval_status",
+  "cb_1",
+  "source",
+  "rate",
+  "quotation",
+  "quotation_item",
+  "sales_order",
+  "so_detail",
+  "material_request",
+  "expected_date",
+  "substituted_by"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "item_code.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "job",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Job",
+   "options": "Service Job"
+  },
+  {
+   "default": "Essential",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "Category",
+   "options": "Essential\nRecommended\nOptional"
+  },
+  {
+   "columns": 1,
+   "default": "1",
+   "fieldname": "qty_required",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Required",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "qty_issued",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Issued",
+   "read_only": 1
+  },
+  {
+   "fieldname": "qty_returned",
+   "fieldtype": "Float",
+   "label": "Returned",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "qty_used",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Used",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "default": "Pending Approval",
+   "fieldname": "part_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Part Status",
+   "options": "Pending Approval\nRequired\nWaiting Stock\nPartially Issued\nIssued\nPartially Returned\nReturned\nSubstituted\nDeclined",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "default": "Pending",
+   "fieldname": "approval_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Approval",
+   "options": "Pending\nApproved\nDeclined",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Estimate",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Estimate\nAdditional\nSubstitution\nPackage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Approved Rate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quotation",
+   "fieldtype": "Link",
+   "label": "Quotation",
+   "options": "Quotation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quotation_item",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Quotation Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_order",
+   "fieldtype": "Link",
+   "label": "Sales Order",
+   "options": "Sales Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "so_detail",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Sales Order Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "material_request",
+   "fieldtype": "Link",
+   "label": "Material Request",
+   "options": "Material Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_date",
+   "fieldtype": "Date",
+   "label": "Expected Stock Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "substituted_by",
+   "fieldtype": "Data",
+   "label": "Substituted By Row",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-03 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Service Order Part",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
