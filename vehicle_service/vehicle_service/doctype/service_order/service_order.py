@@ -71,6 +71,10 @@ class ServiceOrder(Document):
 				self.driver_name = v.driver_name
 			if not self.driver_phone and v.driver_phone:
 				self.driver_phone = v.driver_phone
+			if not self.odometer_in and v.current_mileage:
+				self.odometer_in = v.current_mileage
+			if not self.current_location and v.current_location:
+				self.current_location = v.current_location
 
 		if not self.company:
 			settings = frappe.get_cached_doc("Vehicle Service Settings")

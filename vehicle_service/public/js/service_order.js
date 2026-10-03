@@ -7,6 +7,39 @@ frappe.ui.form.on("Service Order", {
 		frm.trigger("setup_custom_buttons");
 	},
 
+	vehicle(frm) {
+		if (frm.doc.vehicle) {
+			frappe.db.get_value(
+				"Service Vehicle",
+				frm.doc.vehicle,
+				["customer", "customer_name", "make", "model", "year", "current_mileage", "driver_name", "driver_phone", "current_location"],
+				(r) => {
+					if (r) {
+						if (r.customer && (!frm.doc.customer || frm.doc.customer !== r.customer)) {
+							frm.set_value("customer", r.customer);
+						}
+						const descParts = [r.make, r.model, r.year ? `(${r.year})` : ""].filter(Boolean).join(" ");
+						if (descParts && !frm.doc.vehicle_description) {
+							frm.set_value("vehicle_description", descParts);
+						}
+						if (r.driver_name && !frm.doc.driver_name) {
+							frm.set_value("driver_name", r.driver_name);
+						}
+						if (r.driver_phone && !frm.doc.driver_phone) {
+							frm.set_value("driver_phone", r.driver_phone);
+						}
+						if (r.current_mileage && !frm.doc.odometer_in) {
+							frm.set_value("odometer_in", r.current_mileage);
+						}
+						if (r.current_location && !frm.doc.current_location) {
+							frm.set_value("current_location", r.current_location);
+						}
+					}
+				}
+			);
+		}
+	},
+
 	render_status_stepper(frm) {
 		if (frm.is_new()) {
 			frm.set_df_property("status_html", "options", "");

@@ -216,3 +216,32 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(veh.vehicle_status, "Outside Workshop")
 		self.assertEqual(veh.current_mileage, 50105)
 		self.assertTrue(veh.next_service_mileage > 50105)
+
+	def test_service_order_vehicle_autofill(self):
+		reg_no = "TST-AUTOFILL"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Ford"
+			veh.model = "Ranger"
+			veh.vin = "VIN-TST-AUTOFILL"
+			veh.year = 2023
+			veh.customer = "Test Customer"
+			veh.driver_name = "John Driver"
+			veh.driver_phone = "+26377123456"
+			veh.current_mileage = 45000
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		# Create order with only vehicle specified
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.insert(ignore_permissions=True)
+
+		self.assertEqual(order.customer, "Test Customer")
+		self.assertIn("Ford Ranger", order.vehicle_description)
+		self.assertEqual(order.driver_name, "John Driver")
+		self.assertEqual(order.driver_phone, "+26377123456")
+		self.assertEqual(order.odometer_in, 45000)
+
