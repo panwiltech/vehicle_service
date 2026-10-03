@@ -121,6 +121,16 @@ class ServiceOrder(Document):
 			v_status = vehicle_status_for(self.status)
 			frappe.db.set_value("Service Vehicle", self.vehicle, "vehicle_status", v_status)
 
+	def on_update(self):
+		prev = self.get_doc_before_save()
+		prev_status = prev.status if prev else None
+		if self.status == READY_FOR_COLLECTION and prev_status != READY_FOR_COLLECTION:
+			try:
+				from vehicle_service.vehicle_service.notifications import send_ready_for_collection
+				send_ready_for_collection(self.name)
+			except Exception:
+				frappe.log_error(title="Failed to auto-send collection notification", message=frappe.get_traceback())
+
 	def on_trash(self):
 		if self.status not in (DRAFT, CANCELLED):
 			frappe.throw(_("Cannot delete Service Order in status '{0}'. Cancel it first.").format(self.status))
@@ -180,6 +190,12 @@ def check_in_vehicle(
 	# If service package attached, apply it now
 	if order.service_package:
 		apply_service_package(order.name, order.service_package)
+
+	try:
+		from vehicle_service.vehicle_service.notifications import send_intake_confirmation
+		send_intake_confirmation(order.name)
+	except Exception:
+		frappe.log_error(title="Failed to auto-send intake confirmation", message=frappe.get_traceback())
 
 	return {"status": "success", "order_status": order.status}
 
@@ -338,6 +354,12 @@ def create_estimate(order_name: str):
 
 	order.status = AWAITING_APPROVAL
 	order.save(ignore_permissions=True)
+
+	try:
+		from vehicle_service.vehicle_service.notifications import send_estimate_approval_request
+		send_estimate_approval_request(order.name, quotation.name)
+	except Exception:
+		frappe.log_error(title="Failed to auto-send estimate approval request", message=frappe.get_traceback())
 
 	return {"status": "success", "quotation": quotation.name}
 
