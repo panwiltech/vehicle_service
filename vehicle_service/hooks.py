@@ -13,6 +13,9 @@ after_migrate = "vehicle_service.install.after_migrate"
 
 # Document Events
 doc_events = {
+	"Quotation": {
+		"on_update": "vehicle_service.vehicle_service.doctype.service_order.service_order.sync_quotation_to_service_order",
+	},
 	"Stock Entry": {
 		"on_submit": "vehicle_service.stock_events.handle_stock_entry_change",
 		"on_cancel": "vehicle_service.stock_events.handle_stock_entry_change",

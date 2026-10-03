@@ -288,5 +288,75 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(res2["quotation"], qtn_name)
 		self.assertTrue(res2["existing"])
 
+	def test_quotation_sync_to_service_order(self):
+		reg_no = "TST-Q-SYNC"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Nissan"
+			veh.model = "Navara"
+			veh.vin = "VIN-TST-Q-SYNC"
+			veh.customer = "Test Customer"
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = "Test Customer"
+		order.service_advisor = "Administrator"
+		order.insert(ignore_permissions=True)
+
+		# 1. Create quotation via make_service_quotation
+		res = make_service_quotation(order.name)
+		qtn = frappe.get_doc("Quotation", res["quotation"])
+
+		# 2. Add stock part directly on quotation
+		qtn.append(
+			"items",
+			{
+				"item_code": "BRAKE-PAD-TEST",
+				"item_name": "Front Brake Pad",
+				"qty": 2.0,
+				"rate": 85.0,
+				"vs_category": "Essential",
+			},
+		)
+
+		# 3. Add labour service directly on quotation
+		qtn.append(
+			"items",
+			{
+				"item_code": "LABOUR-TEST",
+				"item_name": "Standard Labour",
+				"qty": 2.0,
+				"rate": 60.0,
+				"vs_category": "Recommended",
+			},
+		)
+
+		# Save quotation, which fires on_update hook sync
+		qtn.save(ignore_permissions=True)
+
+		# 4. Verify Service Order parts updated
+		order.reload()
+		self.assertEqual(len(order.parts), 1)
+		part = order.parts[0]
+		self.assertEqual(part.item_code, "BRAKE-PAD-TEST")
+		self.assertEqual(part.qty_required, 2.0)
+		self.assertEqual(part.rate, 85.0)
+		self.assertEqual(part.quotation, qtn.name)
+
+		# 5. Verify Service Job created
+		jobs = frappe.get_all(
+			"Service Job",
+			filters={"service_order": order.name, "quotation": qtn.name},
+			fields=["name", "job_title", "estimated_hours"],
+		)
+		self.assertEqual(len(jobs), 1)
+		self.assertEqual(jobs[0].job_title, "Standard Labour")
+		self.assertEqual(jobs[0].estimated_hours, 2.0)
+
+
 
 

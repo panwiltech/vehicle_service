@@ -472,115 +472,212 @@ def record_customer_approval(
 	notes: str | None = None,
 ):
 	"""Approvals format: { quotation_item_name: 'Approved' | 'Declined' }"""
-	order = frappe.get_doc("Service Order", order_name)
-	quotation = frappe.get_doc("Quotation", quotation_name)
-	decisions = json.loads(approvals_json) if isinstance(approvals_json, str) else approvals_json
+	prev_flag = getattr(frappe.flags, "in_quotation_sync", False)
+	frappe.flags.in_quotation_sync = True
+	try:
+		order = frappe.get_doc("Service Order", order_name)
+		quotation = frappe.get_doc("Quotation", quotation_name)
+		decisions = json.loads(approvals_json) if isinstance(approvals_json, str) else approvals_json
 
-	total_approved = 0.0
-	total_declined = 0.0
-	approved_items = []
+		total_approved = 0.0
+		total_declined = 0.0
+		approved_items = []
 
-	for item in quotation.items:
-		status = decisions.get(item.name, "Approved")
-		item.vs_approval = status
-		if status == "Approved":
-			total_approved += flt(item.amount)
-			approved_items.append(item.name)
-		else:
-			total_declined += flt(item.amount)
+		for item in quotation.items:
+			status = decisions.get(item.name, "Approved")
+			item.vs_approval = status
+			if status == "Approved":
+				total_approved += flt(item.amount)
+				approved_items.append(item.name)
+			else:
+				total_declined += flt(item.amount)
 
-	quotation.save(ignore_permissions=True)
-	quotation.submit()
+		quotation.save(ignore_permissions=True)
+		quotation.submit()
 
-	sales_order_name = None
-	# If any item was approved, generate Sales Order for approved items only
-	if approved_items:
-		from erpnext.selling.doctype.quotation.quotation import _make_sales_order
+		sales_order_name = None
+		# If any item was approved, generate Sales Order for approved items only
+		if approved_items:
+			from erpnext.selling.doctype.quotation.quotation import _make_sales_order
 
-		frappe.flags.args = {"selected_items": [{"name": i} for i in approved_items]}
-		so = _make_sales_order(quotation.name, ignore_permissions=True)
-		so.vs_service_order = order.name
-		delivery_date = order.expected_completion or add_days(nowdate(), 1)
-		so.delivery_date = delivery_date
-		def_wh = frappe.db.get_value("Warehouse", {"company": so.company, "is_group": 0}, "name")
-		for itm in so.items:
-			if not itm.delivery_date:
-				itm.delivery_date = delivery_date
-			if not itm.warehouse and frappe.db.get_value("Item", itm.item_code, "is_stock_item"):
-				itm.warehouse = (
-					frappe.db.get_value("Item Default", {"parent": itm.item_code, "company": so.company}, "default_warehouse")
-					or def_wh
-				)
-		so.insert(ignore_permissions=True)
-		so.submit()
-		sales_order_name = so.name
-
-		# Map SO detail back to jobs and parts
-		for so_item in so.items:
-			q_item = next((qi for qi in quotation.items if qi.name == so_item.quotation_item), None)
-			if q_item:
-				if q_item.vs_job:
-					frappe.db.set_value(
-						"Service Job",
-						q_item.vs_job,
-						{
-							"sales_order": so.name,
-							"so_detail": so_item.name,
-							"status": "Approved",
-						},
+			frappe.flags.args = {"selected_items": [{"name": i} for i in approved_items]}
+			so = _make_sales_order(quotation.name, ignore_permissions=True)
+			so.vs_service_order = order.name
+			delivery_date = order.expected_completion or add_days(nowdate(), 1)
+			so.delivery_date = delivery_date
+			def_wh = frappe.db.get_value("Warehouse", {"company": so.company, "is_group": 0}, "name")
+			for itm in so.items:
+				if not itm.delivery_date:
+					itm.delivery_date = delivery_date
+				if not itm.warehouse and frappe.db.get_value("Item", itm.item_code, "is_stock_item"):
+					itm.warehouse = (
+						frappe.db.get_value("Item Default", {"parent": itm.item_code, "company": so.company}, "default_warehouse")
+						or def_wh
 					)
-				elif q_item.vs_part_row:
-					for p in order.parts:
-						if p.name == q_item.vs_part_row:
-							p.sales_order = so.name
-							p.so_detail = so_item.name
-							p.approval_status = "Approved"
-							p.part_status = PART_REQUIRED
-							p.rate = so_item.rate
+			so.insert(ignore_permissions=True)
+			so.submit()
+			sales_order_name = so.name
 
-	# Mark declined items
-	for item in quotation.items:
-		if item.vs_approval == "Declined":
-			if item.vs_job:
-				frappe.db.set_value("Service Job", item.vs_job, "status", "Declined")
-			elif item.vs_part_row:
+			# Map SO detail back to jobs and parts
+			for so_item in so.items:
+				q_item = next((qi for qi in quotation.items if qi.name == so_item.quotation_item), None)
+				if q_item:
+					if q_item.vs_job:
+						frappe.db.set_value(
+							"Service Job",
+							q_item.vs_job,
+							{
+								"sales_order": so.name,
+								"so_detail": so_item.name,
+								"status": "Approved",
+							},
+						)
+					elif q_item.vs_part_row:
+						for p in order.parts:
+							if p.name == q_item.vs_part_row:
+								p.sales_order = so.name
+								p.so_detail = so_item.name
+								p.approval_status = "Approved"
+								p.part_status = PART_REQUIRED
+								p.rate = so_item.rate
+
+		# Mark declined items
+		for item in quotation.items:
+			if item.vs_approval == "Declined":
+				if item.vs_job:
+					frappe.db.set_value("Service Job", item.vs_job, "status", "Declined")
+				elif item.vs_part_row:
+					for p in order.parts:
+						if p.name == item.vs_part_row:
+							p.approval_status = "Declined"
+							p.part_status = "Declined"
+
+		# Append Approval Log Row
+		round_no = len(order.approvals) + 1
+		order.append(
+			"approvals",
+			{
+				"round": round_no,
+				"quotation": quotation.name,
+				"sales_order": sales_order_name,
+				"approval_method": approval_method,
+				"approved_by_customer": approved_by_customer or order.driver_name,
+				"approved_amount": total_approved,
+				"declined_amount": total_declined,
+				"recorded_by": frappe.session.user,
+				"approved_on": now_datetime(),
+				"notes": notes,
+			},
+		)
+
+		if approved_items:
+			order.status = "Approved"
+		else:
+			order.status = "Cancelled"
+			order.cancellation_reason = _("All estimate items declined by customer.")
+
+		order.save(ignore_permissions=True)
+		order.sync_status_from_jobs_and_parts()
+
+		return {
+			"status": "success",
+			"sales_order": sales_order_name,
+			"order_status": order.status,
+		}
+	finally:
+		frappe.flags.in_quotation_sync = prev_flag
+
+
+def sync_quotation_to_service_order(doc, method=None):
+	"""Bidirectional sync: when a Quotation linked to a Service Order is updated,
+	synchronize any new or updated items back to Service Jobs and Service Order Parts.
+	"""
+	if not getattr(doc, "vs_service_order", None) or doc.docstatus != 0:
+		return
+
+	if getattr(frappe.flags, "in_quotation_sync", False):
+		return
+
+	frappe.flags.in_quotation_sync = True
+	try:
+		if not frappe.db.exists("Service Order", doc.vs_service_order):
+			return
+
+		order = frappe.get_doc("Service Order", doc.vs_service_order)
+		order_modified = False
+
+		for item in doc.items:
+			# 1. Existing linked part row
+			if getattr(item, "vs_part_row", None):
 				for p in order.parts:
 					if p.name == item.vs_part_row:
-						p.approval_status = "Declined"
-						p.part_status = "Declined"
+						if p.qty_required != flt(item.qty) or p.rate != flt(item.rate):
+							p.qty_required = flt(item.qty)
+							p.rate = flt(item.rate)
+							order_modified = True
+						if getattr(item, "vs_approval", None) and p.approval_status != item.vs_approval:
+							p.approval_status = item.vs_approval
+							if item.vs_approval == "Approved":
+								p.part_status = PART_REQUIRED
+							elif item.vs_approval == "Declined":
+								p.part_status = "Declined"
+							order_modified = True
+						break
 
-	# Append Approval Log Row
-	round_no = len(order.approvals) + 1
-	order.append(
-		"approvals",
-		{
-			"round": round_no,
-			"quotation": quotation.name,
-			"sales_order": sales_order_name,
-			"approval_method": approval_method,
-			"approved_by_customer": approved_by_customer or order.driver_name,
-			"approved_amount": total_approved,
-			"declined_amount": total_declined,
-			"recorded_by": frappe.session.user,
-			"approved_on": now_datetime(),
-			"notes": notes,
-		},
-	)
+			# 2. Existing linked job
+			elif getattr(item, "vs_job", None):
+				if frappe.db.exists("Service Job", item.vs_job):
+					job = frappe.get_doc("Service Job", item.vs_job)
+					job_modified = False
+					if job.estimated_hours != flt(item.qty):
+						job.estimated_hours = flt(item.qty)
+						job_modified = True
+					if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
+						if job.status != item.vs_approval and job.status not in ["In Progress", "Completed"]:
+							job.status = item.vs_approval
+							job_modified = True
+					if job_modified:
+						job.save(ignore_permissions=True)
 
-	if approved_items:
-		order.status = "Approved"
-	else:
-		order.status = "Cancelled"
-		order.cancellation_reason = _("All estimate items declined by customer.")
+			# 3. New item added directly on Quotation (neither vs_part_row nor vs_job yet)
+			else:
+				is_stock = frappe.db.get_value("Item", item.item_code, "is_stock_item")
+				if is_stock:
+					row = order.append(
+						"parts",
+						{
+							"item_code": item.item_code,
+							"item_name": item.item_name or item.item_code,
+							"qty_required": flt(item.qty) or 1.0,
+							"rate": flt(item.rate),
+							"quotation": doc.name,
+							"quotation_item": item.name,
+							"category": getattr(item, "vs_category", None) or "Maintenance",
+							"approval_status": getattr(item, "vs_approval", None) or "Pending",
+							"part_status": PART_REQUIRED if getattr(item, "vs_approval", None) == "Approved" else "Pending",
+						},
+					)
+					order_modified = True
+					order.save(ignore_permissions=True)
+					frappe.db.set_value("Quotation Item", item.name, "vs_part_row", row.name)
+					item.vs_part_row = row.name
+				else:
+					job = frappe.new_doc("Service Job")
+					job.service_order = order.name
+					job.job_title = item.item_name or item.item_code
+					job.category = getattr(item, "vs_category", None) or "Maintenance"
+					job.estimated_hours = flt(item.qty) or 1.0
+					job.quotation = doc.name
+					job.quotation_item = item.name
+					job.status = "Approved" if getattr(item, "vs_approval", None) == "Approved" else "Pending Approval"
+					job.insert(ignore_permissions=True)
+					frappe.db.set_value("Quotation Item", item.name, "vs_job", job.name)
+					item.vs_job = job.name
 
-	order.save(ignore_permissions=True)
-	order.sync_status_from_jobs_and_parts()
-
-	return {
-		"status": "success",
-		"sales_order": sales_order_name,
-		"order_status": order.status,
-	}
+		if order_modified:
+			order.save(ignore_permissions=True)
+	finally:
+		frappe.flags.in_quotation_sync = False
 
 
 @frappe.whitelist()
