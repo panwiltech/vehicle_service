@@ -45,7 +45,21 @@ CUSTOM_FIELDS = {
 			"options": "Service Order",
 			"insert_after": "customer",
 			"read_only": 1,
-		}
+		},
+		{
+			"fieldname": "vs_vehicle",
+			"label": "Vehicle",
+			"fieldtype": "Link",
+			"options": "Service Vehicle",
+			"insert_after": "vs_service_order",
+		},
+		{
+			"fieldname": "vs_service_advisor",
+			"label": "Service Advisor",
+			"fieldtype": "Link",
+			"options": "User",
+			"insert_after": "vs_vehicle",
+		},
 	],
 	"Quotation Item": [
 		{

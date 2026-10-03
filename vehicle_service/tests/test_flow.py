@@ -245,3 +245,10 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(order.driver_phone, "+26377123456")
 		self.assertEqual(order.odometer_in, 45000)
 
+	def test_quotation_custom_fields(self):
+		meta = frappe.get_meta("Quotation")
+		self.assertTrue(meta.has_field("vs_service_order"))
+		self.assertTrue(meta.has_field("vs_vehicle"))
+		self.assertTrue(meta.has_field("vs_service_advisor"))
+
+
