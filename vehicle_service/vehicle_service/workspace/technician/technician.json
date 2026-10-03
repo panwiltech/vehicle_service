@@ -1,0 +1,126 @@
+{
+ "app": "vehicle_service",
+ "charts": [],
+ "content": "[{\"id\":\"header_tech\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Technician Workshop Portal</b></span>\",\"col\":12}},{\"id\":\"shortcuts_tech\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_my_work\",\"type\":\"card\",\"data\":{\"card_name\":\"Technician Work Desk\",\"col\":6}},{\"id\":\"card_ref\",\"type\":\"card\",\"data\":{\"card_name\":\"Vehicle References\",\"col\":6}}]",
+ "creation": "2026-10-03 10:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "tool",
+ "idx": 4,
+ "is_hidden": 0,
+ "label": "Technician Portal",
+ "module": "Vehicle Service",
+ "name": "Technician Portal",
+ "roles": [
+  {
+   "role": "Workshop Technician"
+  },
+  {
+   "role": "Workshop Supervisor"
+  },
+  {
+   "role": "Service Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "shortcuts": [
+  {
+   "color": "Green",
+   "label": "My Workshop Clock",
+   "link_to": "my-workshop",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "My Assigned Jobs",
+   "link_to": "Service Job",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "label": "Workshop Live Board",
+   "link_to": "workshop-control",
+   "type": "Page"
+  }
+ ],
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Technician Work Desk",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "My Workshop Live Page",
+   "link_count": 0,
+   "link_to": "my-workshop",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Jobs",
+   "link_count": 0,
+   "link_to": "Service Job",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workshop Live Board",
+   "link_count": 0,
+   "link_to": "workshop-control",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle References",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Orders",
+   "link_count": 0,
+   "link_to": "Service Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Vehicles",
+   "link_count": 0,
+   "link_to": "Service Vehicle",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "title": "Technician Portal"
+}

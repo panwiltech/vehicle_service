@@ -1,0 +1,127 @@
+{
+ "app": "vehicle_service",
+ "charts": [],
+ "content": "[{\"id\":\"header_qc\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quality Control & Inspection Portal</b></span>\",\"col\":12}},{\"id\":\"shortcuts_qc\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_qc_ops\",\"type\":\"card\",\"data\":{\"card_name\":\"Inspections & Checklists\",\"col\":6}},{\"id\":\"card_qc_perf\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Quality Performance\",\"col\":6}}]",
+ "creation": "2026-10-03 10:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "check-circle",
+ "idx": 2,
+ "is_hidden": 0,
+ "label": "Quality Control",
+ "module": "Vehicle Service",
+ "name": "Quality Control",
+ "roles": [
+  {
+   "role": "QC Inspector"
+  },
+  {
+   "role": "Workshop Supervisor"
+  },
+  {
+   "role": "Service Manager"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "shortcuts": [
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "QC Inspections",
+   "link_to": "Service QC",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "label": "Workshop Live Board",
+   "link_to": "workshop-control",
+   "type": "Page"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "Service Orders",
+   "link_to": "Service Order",
+   "type": "DocType"
+  }
+ ],
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Inspections & Checklists",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "QC Inspection Records",
+   "link_count": 0,
+   "link_to": "Service QC",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "QC Templates",
+   "link_count": 0,
+   "link_to": "QC Template",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workshop Service Orders",
+   "link_count": 0,
+   "link_to": "Service Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workshop Quality Performance",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Technician Performance",
+   "link_count": 0,
+   "link_to": "Technician Performance",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Workshop Overall Performance",
+   "link_count": 0,
+   "link_to": "Workshop Performance",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "title": "Quality Control"
+}
