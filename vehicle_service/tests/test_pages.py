@@ -19,6 +19,10 @@ from vehicle_service.vehicle_service.page.workshop_control.workshop_control impo
 	quick_start_job,
 	quick_pause_job,
 )
+from vehicle_service.vehicle_service.page.parts_control.parts_control import (
+	get_parts_control_board,
+	create_shortage_material_request,
+)
 
 
 class TestWorkshopControlPages(FrappeTestCase):
@@ -47,6 +51,16 @@ class TestWorkshopControlPages(FrappeTestCase):
 			c.customer_name = "Live Board Customer"
 			c.customer_type = "Individual"
 			c.insert(ignore_permissions=True)
+
+		# Create test item
+		if not frappe.db.exists("Item", "BRAKE-PAD-TEST"):
+			it = frappe.new_doc("Item")
+			it.item_code = "BRAKE-PAD-TEST"
+			it.item_name = "Front Brake Pad"
+			it.item_group = "Products"
+			it.is_stock_item = 1
+			it.stock_uom = "Nos"
+			it.insert(ignore_permissions=True)
 
 		# Create technician employee
 		company = frappe.get_all("Company")[0].name
@@ -137,3 +151,56 @@ class TestWorkshopControlPages(FrappeTestCase):
 		quick_move_bay(order.name, "Bay 2 - Alignment")
 		order.reload()
 		self.assertEqual(order.current_location, "Bay 2 - Alignment")
+
+	def test_parts_control_board_data(self):
+		# Create dedicated vehicle
+		reg_no = "PARTS 202"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Toyota"
+			veh.model = "Corolla"
+			veh.customer = "Live Board Customer"
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = veh.customer
+		order.priority = "Normal"
+		order.insert(ignore_permissions=True)
+
+		job = frappe.new_doc("Service Job")
+		job.service_order = order.name
+		job.job_title = "Front Brake Replacement"
+		job.status = "Assigned"
+		job.insert(ignore_permissions=True)
+
+		order.append("parts", {
+			"item_code": "BRAKE-PAD-TEST",
+			"item_name": "Front Brake Pad",
+			"job": job.name,
+			"qty_required": 2.0,
+			"qty_issued": 0.0,
+			"part_status": "Draft",
+			"approval_status": "Approved",
+		})
+		order.status = "Approved"
+		order.save(ignore_permissions=True)
+
+		# Fetch parts board
+		board = get_parts_control_board(filters={})
+		self.assertIn("kpis", board)
+		self.assertIn("to_issue", board)
+		self.assertIn("in_wip", board)
+		self.assertIn("shortages", board)
+
+		self.assertGreaterEqual(board["kpis"]["lines_to_pick"], 1)
+
+		# Test shortage material request creation
+		mr_name = create_shortage_material_request("BRAKE-PAD-TEST", 5.0)
+		self.assertTrue(frappe.db.exists("Material Request", mr_name))
+		mr = frappe.get_doc("Material Request", mr_name)
+		self.assertEqual(mr.items[0].item_code, "BRAKE-PAD-TEST")
+		self.assertEqual(mr.items[0].qty, 5.0)
