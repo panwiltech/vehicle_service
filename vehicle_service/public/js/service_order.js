@@ -114,7 +114,24 @@ frappe.ui.form.on("Service Order", {
 			}, __("Actions"));
 		}
 
-		// 3. Create / Revise Estimate (Checked In, Awaiting Approval, Approved, In Progress)
+		// 3. Create Quotation (Primary action to open Quotation pre-populated)
+		if (["Draft", "Checked In", "Awaiting Approval"].includes(frm.doc.status)) {
+			frm.add_custom_button(__("Create Quotation"), () => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.make_service_quotation",
+					args: { order_name: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Preparing Quotation..."),
+					callback: (r) => {
+						if (!r.exc && r.message && r.message.quotation) {
+							frappe.set_route("Form", "Quotation", r.message.quotation);
+						}
+					}
+				});
+			}).addClass("btn-primary");
+		}
+
+		// 3b. Create / Revise Estimate in Actions menu
 		if (["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "In Progress"].includes(frm.doc.status)) {
 			frm.add_custom_button(__("Create / Update Estimate"), () => {
 				frappe.call({

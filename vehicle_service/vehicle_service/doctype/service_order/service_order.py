@@ -287,6 +287,98 @@ def apply_service_package(order_name: str, package_name: str):
 
 
 @frappe.whitelist()
+def make_service_quotation(order_name: str):
+	order = frappe.get_doc("Service Order", order_name)
+	settings = frappe.get_cached_doc("Vehicle Service Settings")
+
+	existing = frappe.db.get_value(
+		"Quotation",
+		{"vs_service_order": order.name, "docstatus": 0},
+		"name",
+	)
+	if existing:
+		return {"status": "success", "quotation": existing, "existing": True}
+
+	quotation = frappe.new_doc("Quotation")
+	quotation.quotation_to = "Customer"
+	quotation.party_name = order.customer
+	quotation.company = order.company
+	quotation.transaction_date = nowdate()
+	quotation.vs_service_order = order.name
+	quotation.vs_vehicle = order.vehicle
+	quotation.vs_service_advisor = order.service_advisor or frappe.session.user
+
+	jobs = frappe.get_all(
+		"Service Job",
+		filters={"service_order": order.name, "quotation": ["in", ["", None]], "status": "Pending Approval"},
+		fields=["name", "job_title", "category", "estimated_hours"],
+	)
+	parts = [p for p in order.parts if not p.quotation and p.approval_status == "Pending"]
+
+	labour_item = settings.labour_item
+	labour_rate = flt(settings.labour_rate) or 50.0
+
+	for j in jobs:
+		quotation.append(
+			"items",
+			{
+				"item_code": labour_item or "Labour",
+				"item_name": j.job_title,
+				"description": f"Labour for job: {j.job_title}",
+				"qty": flt(j.estimated_hours) or 1.0,
+				"rate": labour_rate,
+				"vs_job": j.name,
+				"vs_category": j.category or "Maintenance",
+				"vs_approval": "Pending",
+			},
+		)
+
+	for p in parts:
+		rate = frappe.db.get_value("Item Price", {"item_code": p.item_code, "price_list": "Standard Selling"}, "price_list_rate") or 0.0
+		quotation.append(
+			"items",
+			{
+				"item_code": p.item_code,
+				"qty": flt(p.qty_required) or 1.0,
+				"rate": flt(rate),
+				"vs_part_row": p.name,
+				"vs_category": p.category or "Maintenance",
+				"vs_approval": "Pending",
+			},
+		)
+
+	quotation.order_type = "Sales"
+	if not quotation.items:
+		quotation.total = 0.0
+		quotation.base_total = 0.0
+		quotation.net_total = 0.0
+		quotation.base_net_total = 0.0
+		quotation.grand_total = 0.0
+		quotation.base_grand_total = 0.0
+		quotation.rounded_total = 0.0
+		quotation.base_rounded_total = 0.0
+		quotation.insert(ignore_permissions=True, ignore_mandatory=True)
+	else:
+		quotation.insert(ignore_permissions=True)
+
+	for q_item in quotation.items:
+		if q_item.vs_job:
+			frappe.db.set_value("Service Job", q_item.vs_job, {"quotation": quotation.name, "quotation_item": q_item.name})
+		elif q_item.vs_part_row:
+			for p in order.parts:
+				if p.name == q_item.vs_part_row:
+					p.quotation = quotation.name
+					p.quotation_item = q_item.name
+					p.rate = q_item.rate
+
+	if order.status in [DRAFT, CHECKED_IN]:
+		order.status = AWAITING_APPROVAL
+		order.save(ignore_permissions=True)
+
+	return {"status": "success", "quotation": quotation.name, "existing": False}
+
+
+@frappe.whitelist()
 def create_estimate(order_name: str):
 	order = frappe.get_doc("Service Order", order_name)
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
@@ -311,6 +403,8 @@ def create_estimate(order_name: str):
 	quotation.company = order.company
 	quotation.transaction_date = nowdate()
 	quotation.vs_service_order = order.name
+	quotation.vs_vehicle = order.vehicle
+	quotation.vs_service_advisor = order.service_advisor or frappe.session.user
 
 	# Add labour lines
 	for j in jobs:

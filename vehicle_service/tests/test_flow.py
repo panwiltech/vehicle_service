@@ -21,6 +21,7 @@ from vehicle_service.vehicle_service.doctype.service_order.service_order import 
 	correct_intake,
 	create_estimate,
 	deliver_vehicle,
+	make_service_quotation,
 	record_customer_approval,
 )
 from vehicle_service.vehicle_service.doctype.service_qc.service_qc import (
@@ -250,5 +251,42 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertTrue(meta.has_field("vs_service_order"))
 		self.assertTrue(meta.has_field("vs_vehicle"))
 		self.assertTrue(meta.has_field("vs_service_advisor"))
+
+	def test_make_service_quotation(self):
+		reg_no = "TST-Q-MAKE"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Toyota"
+			veh.model = "Corolla"
+			veh.vin = "VIN-TST-Q-MAKE"
+			veh.customer = "Test Customer"
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = "Test Customer"
+		order.service_advisor = "Administrator"
+		order.insert(ignore_permissions=True)
+
+		# Call make_service_quotation with no pre-existing jobs or parts
+		res = make_service_quotation(order.name)
+		self.assertEqual(res["status"], "success")
+		self.assertFalse(res["existing"])
+		qtn_name = res["quotation"]
+
+		qtn = frappe.get_doc("Quotation", qtn_name)
+		self.assertEqual(qtn.party_name, "Test Customer")
+		self.assertEqual(qtn.vs_service_order, order.name)
+		self.assertEqual(qtn.vs_vehicle, veh.name)
+		self.assertEqual(qtn.vs_service_advisor, "Administrator")
+
+		# Calling it again returns the same existing draft quotation
+		res2 = make_service_quotation(order.name)
+		self.assertEqual(res2["quotation"], qtn_name)
+		self.assertTrue(res2["existing"])
+
 
 
