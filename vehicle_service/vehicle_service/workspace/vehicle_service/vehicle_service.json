@@ -1,7 +1,7 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[{\"id\":\"header1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Vehicle Service & Workshop Management</b></span>\",\"col\":12}},{\"id\":\"card_reception\",\"type\":\"card\",\"data\":{\"card_name\":\"Reception & Intake\",\"col\":4}},{\"id\":\"card_workshop\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Execution\",\"col\":4}},{\"id\":\"card_parts\",\"type\":\"card\",\"data\":{\"card_name\":\"Parts & Materials\",\"col\":4}},{\"id\":\"card_qc\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Control\",\"col\":4}},{\"id\":\"card_settings\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings & Masters\",\"col\":4}}]",
+ "content": "[{\"id\":\"header1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Vehicle Service & Workshop Command Center</b></span>\",\"col\":12}},{\"id\":\"shortcuts_block\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_reception\",\"type\":\"card\",\"data\":{\"card_name\":\"Reception & Intake\",\"col\":4}},{\"id\":\"card_workshop\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Execution\",\"col\":4}},{\"id\":\"card_parts\",\"type\":\"card\",\"data\":{\"card_name\":\"Parts & Materials\",\"col\":4}},{\"id\":\"card_qc\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Control\",\"col\":4}},{\"id\":\"card_analytics\",\"type\":\"card\",\"data\":{\"card_name\":\"Analytics & Reports\",\"col\":4}},{\"id\":\"card_settings\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings & Masters\",\"col\":4}}]",
  "creation": "2026-10-03 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -14,6 +14,40 @@
  "label": "Vehicle Service",
  "module": "Vehicle Service",
  "name": "Vehicle Service",
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "label": "Workshop Control",
+   "link_to": "workshop-control",
+   "type": "Page"
+  },
+  {
+   "color": "Green",
+   "label": "Parts Control",
+   "link_to": "parts-control",
+   "type": "Page"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Service Orders",
+   "link_to": "Service Order",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "QC Inspections",
+   "link_to": "Service QC",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "label": "Estimate vs Actual",
+   "link_to": "Estimate vs Actual",
+   "type": "Report"
+  }
+ ],
  "links": [
   {
    "hidden": 0,
@@ -79,6 +113,17 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Workshop Control (Live Bay Board)",
+   "link_count": 0,
+   "link_to": "workshop-control",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Service Jobs",
    "link_count": 0,
    "link_to": "Service Job",
@@ -115,6 +160,17 @@
    "link_count": 0,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Parts Control (Live Board)",
+   "link_count": 0,
+   "link_to": "parts-control",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
   },
   {
    "dependencies": "",
@@ -188,6 +244,58 @@
    "link_to": "QC Template",
    "link_type": "DocType",
    "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Analytics & Reports",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Estimate vs Actual",
+   "link_count": 0,
+   "link_to": "Estimate vs Actual",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Job",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Technician Performance",
+   "link_count": 0,
+   "link_to": "Technician Performance",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Workshop Performance",
+   "link_count": 0,
+   "link_to": "Workshop Performance",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order Part",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Parts Consumption",
+   "link_count": 0,
+   "link_to": "Parts Consumption",
+   "link_type": "Report",
+   "onboard": 1,
    "type": "Link"
   },
   {
