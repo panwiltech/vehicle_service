@@ -48,6 +48,13 @@
    "type": "DocType"
   },
   {
+   "color": "Yellow",
+   "doc_view": "List",
+   "label": "Quotations",
+   "link_to": "Quotation",
+   "type": "DocType"
+  },
+  {
    "color": "Orange",
    "label": "Workshop Control",
    "link_to": "workshop-control",
