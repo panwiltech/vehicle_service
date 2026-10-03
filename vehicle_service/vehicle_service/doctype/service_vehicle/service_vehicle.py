@@ -8,6 +8,42 @@ from frappe.utils import add_months, getdate, now_datetime, nowdate
 
 
 class ServiceVehicle(Document):
+	# begin: auto-generated types
+	# This code is auto-generated. Do not modify anything in this block.
+
+	from typing import TYPE_CHECKING
+
+	if TYPE_CHECKING:
+		from frappe.types import DF
+
+		colour: DF.Data | None
+		current_location: DF.Link | None
+		current_mileage: DF.Int
+		current_service_order: DF.Link | None
+		custodian: DF.Link | None
+		customer: DF.Link
+		customer_name: DF.Data | None
+		driver_name: DF.Data | None
+		driver_phone: DF.Data | None
+		engine_no: DF.Data | None
+		fuel_type: DF.Literal["", "Petrol", "Diesel", "Hybrid", "Electric", "LPG", "Other"]
+		image: DF.AttachImage | None
+		last_service_date: DF.Date | None
+		last_service_mileage: DF.Int
+		make: DF.Data
+		model: DF.Data
+		next_service_date: DF.Date | None
+		next_service_mileage: DF.Int
+		notes: DF.TextEditor | None
+		registration_no: DF.Data
+		service_interval_km: DF.Int
+		service_interval_months: DF.Int
+		transmission: DF.Literal["", "Manual", "Automatic"]
+		vehicle_status: DF.Literal["Outside Workshop", "Arrived", "Checked In", "Waiting", "In Workshop", "QC", "Awaiting Release", "Ready for Collection"]
+		vin: DF.Data
+		year: DF.Int
+	# end: auto-generated types
+
 	def validate(self):
 		if self.registration_no:
 			self.registration_no = self.registration_no.strip().upper()
