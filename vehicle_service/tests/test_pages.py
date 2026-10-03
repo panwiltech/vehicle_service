@@ -84,6 +84,8 @@ class TestWorkshopControlPages(FrappeTestCase):
 			veh.registration_no = reg_no
 			veh.make = "Ford"
 			veh.model = "Ranger"
+			veh.vin = "VIN-BOARD-101"
+			veh.year = 2023
 			veh.customer = "Live Board Customer"
 			veh.current_mileage = 45000
 			veh.current_location = "Bay 1 - Lift"
@@ -160,6 +162,8 @@ class TestWorkshopControlPages(FrappeTestCase):
 			veh.registration_no = reg_no
 			veh.make = "Toyota"
 			veh.model = "Corolla"
+			veh.vin = "VIN-PARTS-202"
+			veh.year = 2023
 			veh.customer = "Live Board Customer"
 			veh.insert(ignore_permissions=True)
 		else:

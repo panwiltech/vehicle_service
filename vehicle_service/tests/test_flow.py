@@ -90,6 +90,7 @@ class TestVehicleServiceFlow(FrappeTestCase):
 			veh.registration_no = reg_no
 			veh.make = "Toyota"
 			veh.model = "Hilux"
+			veh.vin = "VIN-TST-9999"
 			veh.year = 2022
 			veh.customer = "Test Customer"
 			veh.current_mileage = 50000

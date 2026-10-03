@@ -53,6 +53,8 @@ class TestWorkshopReports(FrappeTestCase):
 			veh.registration_no = reg_no
 			veh.make = "Nissan"
 			veh.model = "Navara"
+			veh.vin = "VIN-RPT-999"
+			veh.year = 2023
 			veh.customer = "Report Customer"
 			veh.insert(ignore_permissions=True)
 

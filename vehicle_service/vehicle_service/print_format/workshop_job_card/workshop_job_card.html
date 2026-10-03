@@ -1,0 +1,357 @@
+<div class="print-format-container job-card">
+<style>
+	.print-format-container {
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+		color: #1f2937;
+		line-height: 1.35;
+		font-size: 10pt;
+		max-width: 800px;
+		margin: 0 auto;
+		padding: 10px;
+	}
+	.card-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
+		border-bottom: 2px solid #0f766e;
+		padding-bottom: 10px;
+		margin-bottom: 12px;
+	}
+	.brand-title {
+		font-size: 18pt;
+		font-weight: 800;
+		color: #0f766e;
+		letter-spacing: -0.5px;
+		margin: 0;
+	}
+	.brand-sub {
+		font-size: 8.5pt;
+		color: #64748b;
+		text-transform: uppercase;
+		letter-spacing: 0.8px;
+	}
+	.doc-badge {
+		text-align: right;
+	}
+	.doc-badge h2 {
+		font-size: 13pt;
+		font-weight: 700;
+		color: #0f172a;
+		margin: 0;
+		text-transform: uppercase;
+	}
+	.doc-badge .ref-no {
+		font-size: 11pt;
+		font-weight: 700;
+		color: #0f766e;
+	}
+	.grid-2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
+		margin-bottom: 12px;
+	}
+	.grid-4 {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1fr 1fr;
+		gap: 10px;
+		margin-bottom: 12px;
+	}
+	.panel {
+		border: 1px solid #e2e8f0;
+		border-radius: 5px;
+		overflow: hidden;
+		background: #ffffff;
+		margin-bottom: 12px;
+	}
+	.panel-head {
+		background: #f1f5f9;
+		border-bottom: 1px solid #e2e8f0;
+		padding: 5px 10px;
+		font-size: 9pt;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		color: #334155;
+	}
+	.panel-body {
+		padding: 8px 10px;
+	}
+	.field-row {
+		display: flex;
+		margin-bottom: 4px;
+		font-size: 9.5pt;
+	}
+	.field-row:last-child {
+		margin-bottom: 0;
+	}
+	.field-label {
+		width: 40%;
+		color: #64748b;
+		font-weight: 500;
+	}
+	.field-val {
+		width: 60%;
+		color: #0f172a;
+		font-weight: 600;
+	}
+	.badge-pill {
+		display: inline-block;
+		padding: 1px 6px;
+		border-radius: 3px;
+		font-size: 8pt;
+		font-weight: 700;
+		text-transform: uppercase;
+	}
+	.badge-urgent { background: #fee2e2; color: #991b1b; }
+	.badge-normal { background: #e0f2fe; color: #075985; }
+	.badge-high { background: #fef3c7; color: #92400e; }
+	.table-custom {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 9pt;
+	}
+	.table-custom th {
+		background: #f8fafc;
+		border: 1px solid #cbd5e1;
+		padding: 6px 8px;
+		text-align: left;
+		font-weight: 700;
+		color: #334155;
+	}
+	.table-custom td {
+		border: 1px solid #cbd5e1;
+		padding: 5px 8px;
+		vertical-align: top;
+	}
+	.table-custom tr:nth-child(even) {
+		background: #fcfcfd;
+	}
+	.sig-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 16px;
+		margin-top: 14px;
+		page-break-inside: avoid;
+	}
+	.sig-box {
+		border: 1px solid #cbd5e1;
+		border-radius: 5px;
+		padding: 8px 12px;
+		background: #ffffff;
+	}
+	.sig-line {
+		border-bottom: 1px solid #94a3b8;
+		height: 40px;
+		margin-bottom: 4px;
+	}
+	@media print {
+		.print-format-container {
+			max-width: 100%;
+			padding: 0;
+		}
+	}
+</style>
+
+{% set veh = frappe.get_doc("Service Vehicle", doc.vehicle) if doc.vehicle else None %}
+{% set jobs = frappe.get_all("Service Job", filters={"service_order": doc.name}, fields=["name", "job_title", "category", "technician", "technician_name", "bay", "estimated_hours", "actual_hours", "status", "description"], order_by="idx asc, creation asc") %}
+
+<div class="card-header">
+	<div>
+		<h1 class="brand-title">{{ doc.company or "VEHICLE SERVICE WORKSHOP" }}</h1>
+		<div class="brand-sub">Workshop Floor Control • Job Card</div>
+	</div>
+	<div class="doc-badge">
+		<h2>Workshop Job Card</h2>
+		<div class="ref-no">{{ doc.name }}</div>
+		<div style="font-size: 8.5pt; color: #64748b;">
+			Status: <b>{{ doc.status }}</b>
+		</div>
+	</div>
+</div>
+
+<!-- Overview Grid -->
+<div class="grid-2">
+	<div class="panel" style="margin-bottom: 0;">
+		<div class="panel-head">Vehicle & Bay Assignment</div>
+		<div class="panel-body">
+			<div class="field-row">
+				<span class="field-label">Reg. Number:</span>
+				<span class="field-val" style="font-size: 11pt; color: #0f766e;">{{ doc.vehicle }}</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Make / Model:</span>
+				<span class="field-val">{{ doc.vehicle_description or (veh.make ~ " " ~ veh.model if veh else "N/A") }}</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Year / Colour:</span>
+				<span class="field-val">{{ (veh.year if veh else "") ~ " • " ~ (veh.colour or "N/A" if veh else "N/A") }}</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Current Bay:</span>
+				<span class="field-val" style="color: #1e40af;">{{ doc.current_location or "Workshop Floor" }}</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Odometer In:</span>
+				<span class="field-val">{{ "{:,.0f}".format(doc.odometer_in or 0) }} km</span>
+			</div>
+		</div>
+	</div>
+
+	<div class="panel" style="margin-bottom: 0;">
+		<div class="panel-head">Service Order Directives</div>
+		<div class="panel-body">
+			<div class="field-row">
+				<span class="field-label">Customer:</span>
+				<span class="field-val">{{ doc.customer_name or doc.customer }}</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Service Advisor:</span>
+				<span class="field-val">{{ doc.service_advisor or "Not Assigned" }}</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Priority:</span>
+				<span class="field-val">
+					{% if doc.priority == "Urgent" %}
+						<span class="badge-pill badge-urgent">Urgent</span>
+					{% elif doc.priority == "High" %}
+						<span class="badge-pill badge-high">High</span>
+					{% else %}
+						<span class="badge-pill badge-normal">Normal</span>
+					{% endif %}
+				</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Promised On:</span>
+				<span class="field-val" style="color: #b45309;">
+					{{ frappe.utils.format_datetime(doc.expected_completion, "dd-MMM-yyyy HH:mm") if doc.expected_completion else "TBD" }}
+				</span>
+			</div>
+			<div class="field-row">
+				<span class="field-label">Order Type:</span>
+				<span class="field-val">{{ doc.order_type or "Customer" }}</span>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Customer Complaints / Scope -->
+<div class="panel" style="margin-top: 10px;">
+	<div class="panel-head">Customer Reported Symptoms / Workshop Scope</div>
+	<div class="panel-body" style="font-size: 9.5pt; color: #1e293b;">
+		{{ doc.customer_complaint or "Regular scheduled workshop service inspection and maintenance." }}
+	</div>
+</div>
+
+<!-- Scheduled Jobs Table -->
+<div class="panel">
+	<div class="panel-head">Operations & Repair Jobs ({{ jobs|length }})</div>
+	<div style="padding: 0;">
+		<table class="table-custom">
+			<thead>
+				<tr>
+					<th style="width: 25px;">#</th>
+					<th>Job / Operation</th>
+					<th style="width: 80px;">Category</th>
+					<th style="width: 130px;">Technician</th>
+					<th style="width: 90px;">Bay</th>
+					<th style="width: 60px; text-align: right;">Est. (h)</th>
+					<th style="width: 60px; text-align: right;">Act. (h)</th>
+					<th style="width: 85px;">Status</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for j in jobs %}
+				<tr>
+					<td>{{ loop.index }}</td>
+					<td>
+						<b>{{ j.job_title }}</b>
+						{% if j.description %}
+							<div style="font-size: 8pt; color: #64748b; margin-top: 2px;">{{ j.description }}</div>
+						{% endif %}
+					</td>
+					<td><span style="font-size: 8pt;">{{ j.category }}</span></td>
+					<td>{{ j.technician_name or j.technician or "Unassigned" }}</td>
+					<td>{{ j.bay or "-" }}</td>
+					<td style="text-align: right;">{{ "{:,.1f}".format(j.estimated_hours or 0) }}</td>
+					<td style="text-align: right;">{{ "{:,.1f}".format(j.actual_hours or 0) }}</td>
+					<td><b>{{ j.status }}</b></td>
+				</tr>
+				{% else %}
+				<tr>
+					<td colspan="8" style="text-align: center; color: #94a3b8; padding: 10px;">
+						No individual repair jobs defined for this service order.
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+</div>
+
+<!-- Parts Required / Allocated Table -->
+<div class="panel">
+	<div class="panel-head">Parts & Consumables Allocated ({{ doc.parts|length if doc.parts else 0 }})</div>
+	<div style="padding: 0;">
+		<table class="table-custom">
+			<thead>
+				<tr>
+					<th style="width: 25px;">#</th>
+					<th style="width: 110px;">Item Code</th>
+					<th>Description</th>
+					<th style="width: 60px; text-align: right;">Req</th>
+					<th style="width: 60px; text-align: right;">Iss</th>
+					<th style="width: 60px; text-align: right;">Ret</th>
+					<th style="width: 60px; text-align: right;">Used</th>
+					<th style="width: 95px;">Part Status</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for p in doc.parts %}
+				<tr>
+					<td>{{ loop.index }}</td>
+					<td><b>{{ p.item_code }}</b></td>
+					<td>{{ p.item_name or "-" }}</td>
+					<td style="text-align: right;">{{ "{:,.0f}".format(p.qty_required or 0) }}</td>
+					<td style="text-align: right;">{{ "{:,.0f}".format(p.qty_issued or 0) }}</td>
+					<td style="text-align: right;">{{ "{:,.0f}".format(p.qty_returned or 0) }}</td>
+					<td style="text-align: right;">{{ "{:,.0f}".format(p.qty_used or 0) }}</td>
+					<td><b>{{ p.part_status or "-" }}</b></td>
+				</tr>
+				{% else %}
+				<tr>
+					<td colspan="8" style="text-align: center; color: #94a3b8; padding: 10px;">
+						No parts or lubricants assigned to this service order.
+					</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+</div>
+
+<!-- Signatures -->
+<div class="sig-grid">
+	<div class="sig-box">
+		<div style="font-weight: 700; font-size: 9pt; color: #334155; margin-bottom: 2px;">
+			Technician Signature & Handover
+		</div>
+		<div class="sig-line"></div>
+		<div style="display: flex; justify-content: space-between; font-size: 8pt; color: #64748b;">
+			<span>Date / Time: _______________</span>
+			<span>Sign: ____________________</span>
+		</div>
+	</div>
+
+	<div class="sig-box">
+		<div style="font-weight: 700; font-size: 9pt; color: #334155; margin-bottom: 2px;">
+			Supervisor Signature & QC Release
+		</div>
+		<div class="sig-line"></div>
+		<div style="display: flex; justify-content: space-between; font-size: 8pt; color: #64748b;">
+			<span>Date / Time: _______________</span>
+			<span>Sign: ____________________</span>
+		</div>
+	</div>
+</div>
+</div>

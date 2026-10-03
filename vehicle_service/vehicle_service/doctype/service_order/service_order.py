@@ -382,9 +382,15 @@ def record_customer_approval(
 		so.vs_service_order = order.name
 		delivery_date = order.expected_completion or add_days(nowdate(), 1)
 		so.delivery_date = delivery_date
+		def_wh = frappe.db.get_value("Warehouse", {"company": so.company, "is_group": 0}, "name")
 		for itm in so.items:
 			if not itm.delivery_date:
 				itm.delivery_date = delivery_date
+			if not itm.warehouse and frappe.db.get_value("Item", itm.item_code, "is_stock_item"):
+				itm.warehouse = (
+					frappe.db.get_value("Item Default", {"parent": itm.item_code, "company": so.company}, "default_warehouse")
+					or def_wh
+				)
 		so.insert(ignore_permissions=True)
 		so.submit()
 		sales_order_name = so.name
