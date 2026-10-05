@@ -15,6 +15,7 @@ APPROVED = "Approved"
 WAITING_FOR_PARTS = "Waiting for Parts"
 READY_FOR_WORK = "Ready for Work"
 IN_PROGRESS = "In Progress"
+PAUSED = "Paused"
 QC = "QC"
 READY_FOR_BILLING = "Ready for Billing"
 INVOICED = "Invoiced"
@@ -25,11 +26,12 @@ CANCELLED = "Cancelled"
 ORDER_FLOW = [
 	DRAFT,
 	CHECKED_IN,
+	IN_PROGRESS,
+	PAUSED,
 	AWAITING_APPROVAL,
 	APPROVED,
 	WAITING_FOR_PARTS,
 	READY_FOR_WORK,
-	IN_PROGRESS,
 	QC,
 	READY_FOR_BILLING,
 	INVOICED,
@@ -40,11 +42,11 @@ ORDER_FLOW = [
 # States recalculated from jobs and parts rather than set explicitly.
 OPERATIONAL = frozenset({APPROVED, WAITING_FOR_PARTS, READY_FOR_WORK, IN_PROGRESS, QC})
 CLOSED = frozenset({DELIVERED, CANCELLED})
-PRE_APPROVAL = frozenset({DRAFT, CHECKED_IN, AWAITING_APPROVAL})
+PRE_APPROVAL = frozenset({DRAFT, CHECKED_IN, IN_PROGRESS, PAUSED, AWAITING_APPROVAL})
 # States in which estimates (first or additional) may be raised.
-ESTIMATE_ALLOWED = frozenset({CHECKED_IN, AWAITING_APPROVAL}) | OPERATIONAL
+ESTIMATE_ALLOWED = frozenset({CHECKED_IN, IN_PROGRESS, PAUSED, AWAITING_APPROVAL}) | OPERATIONAL
 # States in which parts may still be issued or returned (stock not yet consumed by invoice).
-PARTS_MOVABLE = OPERATIONAL | {AWAITING_APPROVAL}
+PARTS_MOVABLE = OPERATIONAL | {AWAITING_APPROVAL, PAUSED}
 
 # ---------------------------------------------------------------- Service Job
 JOB_PENDING = "Pending Approval"
@@ -87,6 +89,7 @@ V_READY = "Ready for Collection"
 _VEHICLE_STATUS = {
 	DRAFT: V_ARRIVED,
 	CHECKED_IN: V_CHECKED_IN,
+	PAUSED: V_WAITING,
 	AWAITING_APPROVAL: V_WAITING,
 	APPROVED: V_WAITING,
 	WAITING_FOR_PARTS: V_WAITING,

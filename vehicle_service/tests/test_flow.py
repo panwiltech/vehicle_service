@@ -66,6 +66,12 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		settings.save(ignore_permissions=True)
 
 	def test_pure_state_rules(self):
+		from vehicle_service.state import PAUSED, ORDER_FLOW, stepper_position
+		self.assertEqual(PAUSED, "Paused")
+		self.assertIn(PAUSED, ORDER_FLOW)
+		self.assertEqual(vehicle_status_for("Paused"), "Waiting")
+		self.assertTrue(stepper_position("Paused") >= 0)
+
 		# Test vehicle status mapping
 		self.assertEqual(vehicle_status_for("Draft"), "Arrived")
 		self.assertEqual(vehicle_status_for("In Progress"), "In Workshop")

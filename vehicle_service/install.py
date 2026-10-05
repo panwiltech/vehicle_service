@@ -91,6 +91,7 @@ CUSTOM_FIELDS = {
 			"fieldtype": "Select",
 			"options": "Pending\nApproved\nDeclined",
 			"default": "Pending",
+			"allow_on_submit": 1,
 			"insert_after": "vs_category",
 		},
 	],

@@ -16,6 +16,7 @@
   "driver_phone",
   "cb_vehicle",
   "status",
+  "pause_reason",
   "order_type",
   "priority",
   "service_advisor",
@@ -153,7 +154,17 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Draft\nChecked In\nAwaiting Approval\nApproved\nWaiting for Parts\nReady for Work\nIn Progress\nQC\nReady for Billing\nInvoiced\nReady for Collection\nDelivered\nCancelled",
+   "options": "Draft\nChecked In\nIn Progress\nPaused\nAwaiting Approval\nApproved\nWaiting for Parts\nReady for Work\nQC\nReady for Billing\nInvoiced\nReady for Collection\nDelivered\nCancelled",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.status=='Paused'",
+   "fieldname": "pause_reason",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Pause Reason",
+   "options": "\nAwaiting Approval\nWaiting for Parts\nCustomer Request\nTechnical Consultation\nOther",
    "read_only": 1
   },
   {
