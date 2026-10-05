@@ -48,9 +48,6 @@ frappe.ui.form.on("Service Order", {
 
 		const steps = [
 			"Draft",
-			"Checked In",
-			"Awaiting Approval",
-			"Approved",
 			"In Progress",
 			"QC",
 			"Ready for Billing",
@@ -61,8 +58,8 @@ frappe.ui.form.on("Service Order", {
 
 		const current = frm.doc.status;
 		let currentIndex = steps.indexOf(current);
-		if (current === "Waiting for Parts" || current === "Ready for Work") {
-			currentIndex = steps.indexOf("Approved");
+		if (["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "Paused"].includes(current)) {
+			currentIndex = steps.indexOf("In Progress");
 		}
 
 		let html = `<div class="status-stepper-container" style="display:flex; overflow-x:auto; padding:10px 0; margin-bottom:15px; border-bottom:1px solid var(--border-color);">`;
@@ -87,6 +84,9 @@ frappe.ui.form.on("Service Order", {
 		});
 		html += `</div>`;
 
+		if (frm.doc.status === "Paused") {
+			html += `<div class="alert alert-warning" style="margin-bottom:15px;"><strong>⏸ PAUSED:</strong> ${frappe.utils.escape_html(frm.doc.pause_reason || 'Awaiting Approval')}</div>`;
+		}
 		if (frm.doc.on_hold) {
 			html += `<div class="alert alert-warning" style="margin-bottom:15px;"><strong>⚠ ON HOLD:</strong> ${frappe.utils.escape_html(frm.doc.hold_reason || 'No reason specified')}</div>`;
 		}
@@ -114,25 +114,45 @@ frappe.ui.form.on("Service Order", {
 			}, __("Actions"));
 		}
 
-		// 3. Create Quotation (Primary action to open Quotation pre-populated)
-		if (["Draft", "Checked In", "Awaiting Approval"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Create Quotation"), () => {
-				frappe.call({
-					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.make_service_quotation",
-					args: { order_name: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Preparing Quotation..."),
-					callback: (r) => {
-						if (!r.exc && r.message && r.message.quotation) {
-							frappe.set_route("Form", "Quotation", r.message.quotation);
+		// 3. Dynamic Quotation Buttons (Create vs View vs Approval)
+		frappe.db.get_list("Quotation", {
+			filters: { vs_service_order: frm.doc.name, docstatus: ["!=", 2] },
+			fields: ["name", "docstatus"],
+			order_by: "creation desc",
+			limit: 1
+		}).then((qRes) => {
+			const hasQuotation = qRes && qRes.length > 0;
+			const qName = hasQuotation ? qRes[0].name : null;
+
+			if (hasQuotation) {
+				frm.add_custom_button(__("View Quotation"), () => {
+					frappe.set_route("Form", "Quotation", qName);
+				}).addClass("btn-secondary");
+
+				if (["Paused", "Awaiting Approval", "In Progress"].includes(frm.doc.status)) {
+					frm.add_custom_button(__("Record Customer Approval"), () => {
+						frm.trigger("show_approval_dialog");
+					}).addClass("btn-primary");
+				}
+			} else if (["Draft", "Checked In", "In Progress"].includes(frm.doc.status)) {
+				frm.add_custom_button(__("Create Quotation"), () => {
+					frappe.call({
+						method: "vehicle_service.vehicle_service.doctype.service_order.service_order.make_service_quotation",
+						args: { order_name: frm.doc.name },
+						freeze: true,
+						freeze_message: __("Preparing Quotation..."),
+						callback: (r) => {
+							if (!r.exc && r.message && r.message.quotation) {
+								frappe.set_route("Form", "Quotation", r.message.quotation);
+							}
 						}
-					}
-				});
-			}).addClass("btn-primary");
-		}
+					});
+				}).addClass("btn-primary");
+			}
+		});
 
 		// 3b. Create / Revise Estimate in Actions menu
-		if (["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "In Progress"].includes(frm.doc.status)) {
+		if (["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "In Progress", "Paused"].includes(frm.doc.status)) {
 			frm.add_custom_button(__("Create / Update Estimate"), () => {
 				frappe.call({
 					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.create_estimate",
@@ -147,13 +167,6 @@ frappe.ui.form.on("Service Order", {
 					}
 				});
 			}, __("Actions"));
-		}
-
-		// 4. Record Customer Approval (if Awaiting Approval)
-		if (frm.doc.status === "Awaiting Approval") {
-			frm.add_custom_button(__("Record Customer Approval"), () => {
-				frm.trigger("show_approval_dialog");
-			}).addClass("btn-primary");
 		}
 
 		// 5. Parts Issue / Return actions
@@ -357,13 +370,13 @@ frappe.ui.form.on("Service Order", {
 	show_approval_dialog(frm) {
 		// Find latest quotation for this order
 		frappe.db.get_list("Quotation", {
-			filters: { vs_service_order: frm.doc.name, docstatus: 0 },
+			filters: { vs_service_order: frm.doc.name, docstatus: ["in", [0, 1]] },
 			fields: ["name"],
 			order_by: "creation desc",
 			limit: 1
 		}).then((res) => {
 			if (!res || !res.length) {
-				frappe.msgprint(__("No open draft Quotation found for this order. Please create an estimate first."));
+				frappe.msgprint(__("No open Quotation found for this order. Please create an estimate first."));
 				return;
 			}
 			const qName = res[0].name;
