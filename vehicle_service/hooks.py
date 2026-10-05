@@ -15,6 +15,7 @@ after_migrate = "vehicle_service.install.after_migrate"
 doc_events = {
 	"Quotation": {
 		"on_update": "vehicle_service.vehicle_service.doctype.service_order.service_order.sync_quotation_to_service_order",
+		"on_submit": "vehicle_service.vehicle_service.doctype.service_order.service_order.on_quotation_submit",
 	},
 	"Stock Entry": {
 		"on_submit": "vehicle_service.stock_events.handle_stock_entry_change",

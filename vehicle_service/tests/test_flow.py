@@ -124,13 +124,13 @@ class TestVehicleServiceFlow(FrappeTestCase):
 			intake_confirmed=1,
 		)
 		order.reload()
-		self.assertEqual(order.status, "Checked In")
+		self.assertEqual(order.status, "In Progress")
 		self.assertEqual(order.intake_frozen, 1)
 
 		# Verify vehicle mileage updated
 		veh.reload()
 		self.assertEqual(veh.current_mileage, 50100)
-		self.assertEqual(veh.vehicle_status, "Checked In")
+		self.assertEqual(veh.vehicle_status, "In Workshop")
 
 		# 4. Correct Intake Audit Test
 		correct_intake(order.name, "existing_damage", "Minor scratch on rear bumper + left wing dent", "Customer noticed additional dent")
@@ -163,7 +163,7 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		est_res = create_estimate(order.name)
 		q_name = est_res["quotation"]
 		order.reload()
-		self.assertEqual(order.status, "Awaiting Approval")
+		self.assertEqual(order.status, "In Progress")
 
 		# 7. Customer Approval
 		quotation = frappe.get_doc("Quotation", q_name)
@@ -362,6 +362,72 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(len(jobs), 1)
 		self.assertEqual(jobs[0].job_title, "Standard Labour")
 		self.assertEqual(jobs[0].estimated_hours, 2.0)
+
+	def test_workflow_intake_to_submitted_approval(self):
+		reg_no = "TST-SUBMIT-APP"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Toyota"
+			veh.model = "Prado"
+			veh.vin = "VIN-TST-SUBMIT-APP"
+			veh.customer = "Test Customer"
+			veh.current_mileage = 120000
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = "Test Customer"
+		order.service_advisor = "Administrator"
+		order.insert(ignore_permissions=True)
+
+		# 1. Check in vehicle -> should move to In Progress
+		check_in_vehicle(
+			order_name=order.name,
+			odometer_in=120000,
+			fuel_level="Full",
+			customer_complaint="Engine noise",
+			intake_confirmed=1,
+		)
+		order.reload()
+		self.assertEqual(order.status, "In Progress")
+
+		# Add job
+		job = frappe.new_doc("Service Job")
+		job.service_order = order.name
+		job.job_title = "Engine Diagnostic Scan"
+		job.estimated_hours = 2.0
+		job.insert(ignore_permissions=True)
+
+		# 2. Make Service Quotation -> order remains In Progress
+		q_res = make_service_quotation(order.name)
+		q_name = q_res["quotation"]
+		order.reload()
+		self.assertEqual(order.status, "In Progress")
+
+		# 3. Submit Quotation -> order becomes Paused (Awaiting Approval)
+		qtn = frappe.get_doc("Quotation", q_name)
+		qtn.submit()
+		order.reload()
+		self.assertEqual(order.status, "Paused")
+		self.assertEqual(order.pause_reason, "Awaiting Approval")
+
+		# 4. Record Customer Approval on submitted quotation -> order resumes to In Progress
+		decisions = {item.name: "Approved" for item in qtn.items}
+		app_res = record_customer_approval(
+			order_name=order.name,
+			quotation_name=q_name,
+			approvals_json=decisions,
+			approval_method="Phone",
+			approved_by_customer="Customer Test",
+		)
+		order.reload()
+		self.assertTrue(order.status in ("Approved", "Ready for Work", "In Progress"))
+		self.assertFalse(order.pause_reason)
+		self.assertTrue(app_res.get("sales_order"))
+
 
 
 

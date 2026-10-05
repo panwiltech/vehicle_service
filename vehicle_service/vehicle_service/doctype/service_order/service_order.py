@@ -19,6 +19,7 @@ from vehicle_service.state import (
 	CHECKED_IN,
 	DELIVERED,
 	DRAFT,
+	IN_PROGRESS,
 	INVOICED,
 	JOB_DONE,
 	JOB_INACTIVE,
@@ -26,6 +27,7 @@ from vehicle_service.state import (
 	ORDER_FLOW,
 	PART_REQUIRED,
 	PART_WAITING,
+	PAUSED,
 	QC,
 	READY_FOR_BILLING,
 	READY_FOR_COLLECTION,
@@ -110,7 +112,7 @@ class ServiceOrder(Document):
 
 	def sync_status_from_jobs_and_parts(self):
 		"""Derives operational status when order is in active workshop stages."""
-		if self.status in (DRAFT, CHECKED_IN, AWAITING_APPROVAL, READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION, DELIVERED, CANCELLED):
+		if self.status in (DRAFT, CHECKED_IN, PAUSED, AWAITING_APPROVAL, READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION, DELIVERED, CANCELLED):
 			return
 
 		jobs = frappe.get_all("Service Job", filters={"service_order": self.name}, fields=["status"])
@@ -178,13 +180,13 @@ def check_in_vehicle(
 	order.intake_frozen = 1
 	order.checked_in_on = now_datetime()
 	order.checked_in_by = frappe.session.user
-	order.status = CHECKED_IN
+	order.status = IN_PROGRESS
 	order.save(ignore_permissions=True)
 
 	# Update vehicle status and mileage
 	vehicle.current_mileage = order.odometer_in
 	vehicle.current_service_order = order.name
-	vehicle.vehicle_status = "Checked In"
+	vehicle.vehicle_status = "In Workshop"
 
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
 	if settings.reception_location:
@@ -371,10 +373,6 @@ def make_service_quotation(order_name: str):
 					p.quotation_item = q_item.name
 					p.rate = q_item.rate
 
-	if order.status in [DRAFT, CHECKED_IN]:
-		order.status = AWAITING_APPROVAL
-		order.save(ignore_permissions=True)
-
 	return {"status": "success", "quotation": quotation.name, "existing": False}
 
 
@@ -450,9 +448,6 @@ def create_estimate(order_name: str):
 					p.quotation_item = q_item.name
 					p.rate = q_item.rate
 
-	order.status = AWAITING_APPROVAL
-	order.save(ignore_permissions=True)
-
 	try:
 		from vehicle_service.vehicle_service.notifications import send_estimate_approval_request
 		send_estimate_approval_request(order.name, quotation.name)
@@ -460,6 +455,15 @@ def create_estimate(order_name: str):
 		frappe.log_error(title="Failed to auto-send estimate approval request", message=frappe.get_traceback())
 
 	return {"status": "success", "quotation": quotation.name}
+
+
+def on_quotation_submit(doc, method=None):
+	if getattr(doc, "vs_service_order", None) and frappe.db.exists("Service Order", doc.vs_service_order):
+		order = frappe.get_doc("Service Order", doc.vs_service_order)
+		if order.status not in (DELIVERED, CANCELLED):
+			order.status = PAUSED
+			order.pause_reason = "Awaiting Approval"
+			order.save(ignore_permissions=True)
 
 
 @frappe.whitelist()
@@ -486,14 +490,18 @@ def record_customer_approval(
 		for item in quotation.items:
 			status = decisions.get(item.name, "Approved")
 			item.vs_approval = status
+			if quotation.docstatus == 1:
+				frappe.db.set_value("Quotation Item", item.name, "vs_approval", status)
 			if status == "Approved":
 				total_approved += flt(item.amount)
 				approved_items.append(item.name)
 			else:
 				total_declined += flt(item.amount)
 
-		quotation.save(ignore_permissions=True)
-		quotation.submit()
+		if quotation.docstatus == 0:
+			quotation.save(ignore_permissions=True)
+			quotation.submit()
+			order.reload()
 
 		sales_order_name = None
 		# If any item was approved, generate Sales Order for approved items only
@@ -571,9 +579,10 @@ def record_customer_approval(
 		)
 
 		if approved_items:
-			order.status = "Approved"
+			order.status = IN_PROGRESS
+			order.pause_reason = None
 		else:
-			order.status = "Cancelled"
+			order.status = CANCELLED
 			order.cancellation_reason = _("All estimate items declined by customer.")
 
 		order.save(ignore_permissions=True)
