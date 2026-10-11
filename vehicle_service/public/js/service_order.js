@@ -4,6 +4,8 @@
 frappe.ui.form.on("Service Order", {
 	refresh(frm) {
 		frm.trigger("render_status_stepper");
+		frm.trigger("render_jobs_html");
+		frm.trigger("setup_parts_tab_actions");
 		frm.trigger("setup_custom_buttons");
 	},
 
@@ -171,7 +173,7 @@ frappe.ui.form.on("Service Order", {
 
 		// 5. Parts Issue / Return actions
 		if (["Approved", "Waiting for Parts", "Ready for Work", "In Progress"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Issue Parts to Workshop"), () => {
+			frm.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
 			}, __("Parts Control"));
 
@@ -438,21 +440,57 @@ frappe.ui.form.on("Service Order", {
 		});
 	},
 
-	show_parts_issue_dialog(frm) {
-		const approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (p.qty_required - (p.qty_issued - (p.qty_returned || 0))) > 0);
+	setup_parts_tab_actions(frm) {
+		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+			const grid = frm.fields_dict.parts.grid;
+			if (!grid._issue_parts_btn_setup) {
+				grid.add_custom_button(__("Issue Selected Parts"), () => {
+					frm.trigger("show_parts_issue_dialog");
+				});
+				grid._issue_parts_btn_setup = true;
+			}
+		}
+	},
+
+	show_parts_issue_dialog(frm, selected_rows = null) {
+		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (p.qty_required - (p.qty_issued - (p.qty_returned || 0))) > 0);
 		if (!approvedParts.length) {
 			frappe.msgprint(__("No pending approved parts to issue for this order."));
 			return;
 		}
 
-		let fields = approvedParts.map((p) => {
+		if (!selected_rows && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+			const gridSelected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
+			if (gridSelected && gridSelected.length > 0) {
+				selected_rows = gridSelected;
+			}
+		}
+
+		if (selected_rows && selected_rows.length > 0) {
+			const selectedNames = new Set(selected_rows.map(r => r.name));
+			approvedParts = approvedParts.filter(p => selectedNames.has(p.name));
+			if (!approvedParts.length) {
+				frappe.msgprint(__("None of the selected parts are approved or pending issuance."));
+				return;
+			}
+		}
+
+		let fields = [];
+		approvedParts.forEach((p) => {
 			let max = (p.qty_required - (p.qty_issued - (p.qty_returned || 0)));
-			return {
+			fields.push({
+				fieldname: `check_${p.name}`,
+				label: `${p.item_name || p.item_code} (${p.item_code})`,
+				fieldtype: "Check",
+				default: 1
+			});
+			fields.push({
 				fieldname: `part_${p.name}`,
-				label: `${p.item_name || p.item_code} (Max to issue: ${max})`,
+				label: __("Qty to Issue (Max: {0})", [max]),
 				fieldtype: "Float",
-				default: max
-			};
+				default: max,
+				depends_on: `eval:doc.check_${p.name}==1`
+			});
 		});
 
 		const d = new frappe.ui.Dialog({
@@ -462,20 +500,32 @@ frappe.ui.form.on("Service Order", {
 			primary_action: (vals) => {
 				let payload = [];
 				approvedParts.forEach(p => {
-					let qty = vals[`part_${p.name}`];
-					if (qty && qty > 0) {
-						payload.push({ part_row: p.name, qty: qty });
+					if (vals[`check_${p.name}`]) {
+						let qty = vals[`part_${p.name}`];
+						if (qty && qty > 0) {
+							payload.push({ part_row: p.name, qty: qty });
+						}
 					}
 				});
-				if (!payload.length) return;
+				if (!payload.length) {
+					frappe.msgprint(__("Please select at least one part with quantity > 0."));
+					return;
+				}
 
 				frappe.call({
 					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.issue_parts_to_workshop",
 					args: { order_name: frm.doc.name, items_json: JSON.stringify(payload) },
 					freeze: true,
-					callback: () => {
-						d.hide();
-						frm.reload_doc();
+					freeze_message: __("Issuing Parts to Workshop WIP..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({
+								message: __("Parts issued successfully via Stock Entry {0}", [r.message.stock_entry]),
+								indicator: "green"
+							});
+							frm.reload_doc();
+						}
 					}
 				});
 			}
@@ -553,6 +603,272 @@ frappe.ui.form.on("Service Order", {
 					callback: (r) => {
 						if (!r.exc) {
 							d.hide();
+							frm.reload_doc();
+						}
+					}
+				});
+			}
+		});
+		d.show();
+	},
+
+	render_jobs_html(frm) {
+		if (frm.is_new()) {
+			frm.set_df_property("jobs_html", "options", `<div class="text-muted p-3 text-center border rounded">${__("Please save the Service Order to manage workshop jobs.")}</div>`);
+			return;
+		}
+
+		frappe.db.get_list("Service Job", {
+			filters: { service_order: frm.doc.name },
+			fields: ["name", "job_title", "category", "estimated_hours", "actual_hours", "status", "technician", "technician_name", "bay"],
+			order_by: "creation asc",
+			limit: 100
+		}).then((jobs) => {
+			const isClosed = ["Delivered", "Cancelled"].includes(frm.doc.status);
+			const canAdd = !isClosed;
+
+			let html = `
+				<div class="service-jobs-panel" style="padding: 10px 0;">
+					<div class="d-flex justify-content-between align-items-center mb-3">
+						<div>
+							<h6 class="mb-0" style="font-weight: 600;">${__("Workshop Jobs")} (${jobs ? jobs.length : 0})</h6>
+							<small class="text-muted">${__("Manage active labor operations, technician assignments, and job clocks.")}</small>
+						</div>
+						${canAdd ? `
+						<button type="button" class="btn btn-sm btn-primary" data-action="add-job">
+							<i class="fa fa-plus"></i> ${__("Add Job")}
+						</button>
+						` : ''}
+					</div>
+			`;
+
+			if (!jobs || jobs.length === 0) {
+				html += `
+					<div class="text-center text-muted p-4 border rounded" style="background: var(--bg-color, #fafbfc);">
+						<p class="mb-2">${__("No jobs created yet for this service order.")}</p>
+						${canAdd ? `
+						<button type="button" class="btn btn-sm btn-outline-primary" data-action="add-job">
+							<i class="fa fa-plus"></i> ${__("Add First Job")}
+						</button>
+						` : ''}
+					</div>
+				`;
+			} else {
+				html += `
+					<div class="table-responsive border rounded">
+						<table class="table table-hover table-bordered mb-0" style="font-size: 13px;">
+							<thead style="background: var(--subtle-fg, #f8f9fa);">
+								<tr>
+									<th>${__("Job Title")}</th>
+									<th style="width: 120px;">${__("Category")}</th>
+									<th style="width: 120px;">${__("Hours (Est / Act)")}</th>
+									<th style="width: 130px;">${__("Status")}</th>
+									<th style="width: 170px;">${__("Technician / Bay")}</th>
+									<th style="width: 190px; text-align: right;">${__("Actions")}</th>
+								</tr>
+							</thead>
+							<tbody>
+				`;
+
+				jobs.forEach((job) => {
+					let catBadge = "badge-secondary";
+					if (job.category === "Essential") catBadge = "badge-danger";
+					else if (job.category === "Recommended") catBadge = "badge-info";
+					else if (job.category === "Optional") catBadge = "badge-warning";
+
+					let statusClass = "secondary";
+					if (job.status === "In Progress") statusClass = "primary";
+					else if (job.status === "Completed") statusClass = "success";
+					else if (job.status === "Paused") statusClass = "warning";
+					else if (job.status === "Assigned") statusClass = "info";
+					else if (job.status === "QC Failed") statusClass = "danger";
+
+					let est = job.estimated_hours || 0;
+					let act = job.actual_hours || 0;
+
+					let techBay = [];
+					if (job.technician_name || job.technician) {
+						techBay.push(`<strong>${frappe.utils.escape_html(job.technician_name || job.technician)}</strong>`);
+					}
+					if (job.bay) {
+						techBay.push(`<span class="text-muted"><i class="fa fa-map-marker"></i> ${frappe.utils.escape_html(job.bay)}</span>`);
+					}
+					let techBayHtml = techBay.length ? techBay.join("<br>") : `<span class="text-muted italic">${__("Unassigned")}</span>`;
+
+					let actionBtns = [];
+					if (!isClosed) {
+						if (["Pending Approval", "Assigned", "Paused"].includes(job.status)) {
+							actionBtns.push(`<button type="button" class="btn btn-xs btn-default" data-action="assign-job" data-job="${job.name}" title="${__('Assign Technician or Bay')}"><i class="fa fa-user"></i> ${__('Assign')}</button>`);
+						}
+						if (["Assigned", "Paused", "QC Failed"].includes(job.status)) {
+							actionBtns.push(`<button type="button" class="btn btn-xs btn-primary" data-action="start-job" data-job="${job.name}" title="${__('Start Clock')}"><i class="fa fa-play"></i> ${__('Start')}</button>`);
+						}
+						if (job.status === "In Progress") {
+							actionBtns.push(`<button type="button" class="btn btn-xs btn-warning" data-action="pause-job" data-job="${job.name}" title="${__('Pause Clock')}"><i class="fa fa-pause"></i> ${__('Pause')}</button>`);
+							actionBtns.push(`<button type="button" class="btn btn-xs btn-success" data-action="complete-job" data-job="${job.name}" title="${__('Complete Job')}"><i class="fa fa-check"></i> ${__('Complete')}</button>`);
+						}
+					}
+
+					html += `
+						<tr>
+							<td>
+								<a href="/app/service-job/${job.name}" style="font-weight: 600;">${frappe.utils.escape_html(job.job_title || job.name)}</a>
+								<div class="text-muted small">${job.name}</div>
+							</td>
+							<td><span class="badge ${catBadge}">${frappe.utils.escape_html(job.category || 'Essential')}</span></td>
+							<td>${est}h / <strong>${act}h</strong></td>
+							<td><span class="indicator-pill ${statusClass}">${frappe.utils.escape_html(job.status)}</span></td>
+							<td>${techBayHtml}</td>
+							<td style="text-align: right; white-space: nowrap;">
+								${actionBtns.join(" ") || '<span class="text-muted text-sm">-</span>'}
+							</td>
+						</tr>
+					`;
+				});
+
+				html += `
+							</tbody>
+						</table>
+					</div>
+				`;
+			}
+
+			html += `</div>`;
+			frm.set_df_property("jobs_html", "options", html);
+
+			if (frm.fields_dict.jobs_html && frm.fields_dict.jobs_html.$wrapper) {
+				const $wrapper = frm.fields_dict.jobs_html.$wrapper;
+				$wrapper.off("click", "[data-action]").on("click", "[data-action]", function (e) {
+					e.preventDefault();
+					const action = $(this).data("action");
+					const jobName = $(this).data("job");
+
+					if (action === "add-job") {
+						frm.trigger("show_add_job_dialog");
+					} else if (action === "assign-job") {
+						frm.trigger("show_assign_job_dialog", jobName);
+					} else if (action === "start-job") {
+						frappe.call({
+							method: "vehicle_service.vehicle_service.doctype.service_job.service_job.start_job",
+							args: { job_name: jobName },
+							freeze: true,
+							freeze_message: __("Starting Job Clock..."),
+							callback: (r) => {
+								if (!r.exc) {
+									frappe.show_alert({ message: __("Job clock started"), indicator: "green" });
+									frm.trigger("render_jobs_html");
+									frm.reload_doc();
+								}
+							}
+						});
+					} else if (action === "pause-job") {
+						frappe.prompt(
+							[{ fieldname: "reason", label: __("Pause Reason"), fieldtype: "Small Text", reqd: 1 }],
+							(vals) => {
+								frappe.call({
+									method: "vehicle_service.vehicle_service.doctype.service_job.service_job.pause_job",
+									args: { job_name: jobName, reason: vals.reason },
+									freeze: true,
+									freeze_message: __("Pausing Job Clock..."),
+									callback: (r) => {
+										if (!r.exc) {
+											frappe.show_alert({ message: __("Job clock paused"), indicator: "orange" });
+											frm.trigger("render_jobs_html");
+											frm.reload_doc();
+										}
+									}
+								});
+							},
+							__("Pause Job Clock"),
+							__("Pause")
+						);
+					} else if (action === "complete-job") {
+						frappe.confirm(__("Are you sure you want to mark this job as completed?"), () => {
+							frappe.call({
+								method: "vehicle_service.vehicle_service.doctype.service_job.service_job.complete_job",
+								args: { job_name: jobName },
+								freeze: true,
+								freeze_message: __("Completing Job..."),
+								callback: (r) => {
+									if (!r.exc) {
+										frappe.show_alert({ message: __("Job completed successfully"), indicator: "green" });
+										frm.trigger("render_jobs_html");
+										frm.reload_doc();
+									}
+								}
+							});
+						});
+					}
+				});
+			}
+		});
+	},
+
+	show_add_job_dialog(frm) {
+		const d = new frappe.ui.Dialog({
+			title: __("Add Workshop Job"),
+			fields: [
+				{ fieldname: "job_title", label: __("Job Title"), fieldtype: "Data", reqd: 1 },
+				{ fieldname: "category", label: __("Category"), fieldtype: "Select", options: "Essential\nRecommended\nOptional", default: "Essential", reqd: 1 },
+				{ fieldname: "estimated_hours", label: __("Estimated Hours"), fieldtype: "Float", default: 1.0, reqd: 1 },
+				{ fieldname: "description", label: __("Description"), fieldtype: "Small Text" },
+				{ fieldname: "col_brk_1", fieldtype: "Column Break" },
+				{ fieldname: "technician", label: __("Assign Technician"), fieldtype: "Link", options: "Employee" },
+				{ fieldname: "bay", label: __("Workshop Bay"), fieldtype: "Link", options: "Workshop Location" }
+			],
+			primary_action_label: __("Create Job"),
+			primary_action: (vals) => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.add_ad_hoc_job",
+					args: {
+						service_order: frm.doc.name,
+						job_title: vals.job_title,
+						category: vals.category,
+						estimated_hours: vals.estimated_hours,
+						description: vals.description,
+						technician: vals.technician,
+						bay: vals.bay
+					},
+					freeze: true,
+					freeze_message: __("Creating Job..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({ message: __("Job {0} created", [r.message.job]), indicator: "green" });
+							frm.trigger("render_jobs_html");
+							frm.reload_doc();
+						}
+					}
+				});
+			}
+		});
+		d.show();
+	},
+
+	show_assign_job_dialog(frm, jobName) {
+		if (!jobName) return;
+		const d = new frappe.ui.Dialog({
+			title: __("Assign Technician & Bay ({0})", [jobName]),
+			fields: [
+				{ fieldname: "technician", label: __("Technician"), fieldtype: "Link", options: "Employee", reqd: 1 },
+				{ fieldname: "bay", label: __("Workshop Bay"), fieldtype: "Link", options: "Workshop Location" }
+			],
+			primary_action_label: __("Assign"),
+			primary_action: (vals) => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.assign_job",
+					args: {
+						job_name: jobName,
+						technician: vals.technician,
+						bay: vals.bay
+					},
+					freeze: true,
+					freeze_message: __("Assigning Job..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({ message: __("Technician assigned to {0}", [jobName]), indicator: "green" });
+							frm.trigger("render_jobs_html");
 							frm.reload_doc();
 						}
 					}
