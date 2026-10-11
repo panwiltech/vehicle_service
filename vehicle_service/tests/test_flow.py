@@ -17,6 +17,7 @@ from vehicle_service.vehicle_service.doctype.service_job.service_job import (
 	start_job,
 )
 from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+	add_ad_hoc_job,
 	check_in_vehicle,
 	correct_intake,
 	create_estimate,
@@ -427,6 +428,44 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertTrue(order.status in ("Approved", "Ready for Work", "In Progress"))
 		self.assertFalse(order.pause_reason)
 		self.assertTrue(app_res.get("sales_order"))
+
+	def test_add_ad_hoc_job_workflow(self):
+		reg_no = "TST-ADHOC-01"
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Toyota"
+			veh.model = "Corolla"
+			veh.vin = "VIN-TST-ADHOC"
+			veh.customer = "Test Customer"
+			veh.current_mileage = 60000
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = "Test Customer"
+		order.service_advisor = "Administrator"
+		order.insert(ignore_permissions=True)
+
+		res = add_ad_hoc_job(
+			service_order=order.name,
+			job_title="Inspect Suspension Struts",
+			category="Essential",
+			estimated_hours=1.5,
+			description="Check front suspension noise"
+		)
+		self.assertEqual(res["status"], "success")
+		job_name = res["job"]
+		self.assertTrue(frappe.db.exists("Service Job", job_name))
+
+		job_doc = frappe.get_doc("Service Job", job_name)
+		self.assertEqual(job_doc.job_title, "Inspect Suspension Struts")
+		self.assertEqual(job_doc.category, "Essential")
+		self.assertEqual(job_doc.estimated_hours, 1.5)
+		self.assertEqual(job_doc.source, "Additional")
+
 
 
 

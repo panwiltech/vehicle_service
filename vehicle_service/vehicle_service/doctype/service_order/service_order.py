@@ -207,6 +207,49 @@ def check_in_vehicle(
 
 
 @frappe.whitelist()
+def add_ad_hoc_job(
+	service_order: str,
+	job_title: str,
+	category: str = "Essential",
+	estimated_hours: float = 1.0,
+	description: str | None = None,
+	technician: str | None = None,
+	bay: str | None = None,
+):
+	order = frappe.get_doc("Service Order", service_order)
+	if order.status in (DELIVERED, CANCELLED):
+		frappe.throw(_("Cannot add job to order in status '{0}'.").format(order.status))
+
+	job = frappe.new_doc("Service Job")
+	job.service_order = order.name
+	job.job_title = job_title
+	job.category = category
+	job.estimated_hours = flt(estimated_hours) or 1.0
+	job.description = description
+	job.source = "Additional"
+	job.raised_by = frappe.session.user
+	job.status = "Pending Approval"
+
+	if technician:
+		emp = frappe.get_doc("Employee", technician)
+		job.technician = emp.name
+		job.technician_user = emp.user_id
+		job.status = "Assigned"
+
+	if bay:
+		job.bay = bay
+
+	job.insert(ignore_permissions=True)
+
+	if bay and order.vehicle:
+		vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
+		vehicle.move_location(bay, _("Assigned to bay {0}").format(bay), order.name)
+
+	order.sync_status_from_jobs_and_parts()
+	return {"status": "success", "job": job.name}
+
+
+@frappe.whitelist()
 def correct_intake(order_name: str, fieldname: str, new_value: str, reason: str):
 	order = frappe.get_doc("Service Order", order_name)
 	user = frappe.session.user
