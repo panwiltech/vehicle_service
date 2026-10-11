@@ -120,7 +120,9 @@
    "fieldtype": "Select",
    "label": "Source",
    "options": "From Quotation\nManually Added\nAdditional Part\nSubstitute Part\nEstimate\nAdditional\nSubstitution\nPackage",
-   "read_only": 1
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
   },
   {
    "fieldname": "rate",

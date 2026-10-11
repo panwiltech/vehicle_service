@@ -443,11 +443,214 @@ frappe.ui.form.on("Service Order", {
 	setup_parts_tab_actions(frm) {
 		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const grid = frm.fields_dict.parts.grid;
-			if (!grid._issue_parts_btn_setup) {
+			if (!grid._parts_custom_buttons_setup) {
+				grid.add_custom_button(__("+ Add Part"), () => {
+					frm.trigger("show_add_part_dialog");
+				});
+				grid.add_custom_button(__("Substitute Part"), () => {
+					frm.trigger("show_part_substitution_dialog");
+				});
 				grid.add_custom_button(__("Issue Selected Parts"), () => {
 					frm.trigger("show_parts_issue_dialog");
 				});
-				grid._issue_parts_btn_setup = true;
+				grid._parts_custom_buttons_setup = true;
+			}
+		}
+	},
+
+	show_add_part_dialog(frm) {
+		if (frm.is_new()) {
+			frappe.msgprint(__("Please save the Service Order before adding parts."));
+			return;
+		}
+
+		const d = new frappe.ui.Dialog({
+			title: __("Add Part to Service Order"),
+			fields: [
+				{
+					fieldname: "item_code",
+					label: __("Item (Part)"),
+					fieldtype: "Link",
+					options: "Item",
+					reqd: 1,
+					get_query: () => {
+						return {
+							filters: {
+								is_stock_item: 1
+							}
+						};
+					}
+				},
+				{
+					fieldname: "qty_required",
+					label: __("Quantity Required"),
+					fieldtype: "Float",
+					default: 1.0,
+					reqd: 1
+				},
+				{
+					fieldname: "rate",
+					label: __("Rate / Unit Price (Optional)"),
+					fieldtype: "Currency"
+				},
+				{
+					fieldname: "col_brk_1",
+					fieldtype: "Column Break"
+				},
+				{
+					fieldname: "job",
+					label: __("Link to Job (Optional)"),
+					fieldtype: "Link",
+					options: "Service Job",
+					get_query: () => {
+						return {
+							filters: {
+								service_order: frm.doc.name
+							}
+						};
+					}
+				},
+				{
+					fieldname: "reason_for_adding",
+					label: __("Reason for Adding"),
+					fieldtype: "Small Text",
+					description: __("Explanation for adding part directly outside initial quotation")
+				}
+			],
+			primary_action_label: __("Add Part"),
+			primary_action: (vals) => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.add_manual_part",
+					args: {
+						service_order: frm.doc.name,
+						item_code: vals.item_code,
+						qty_required: vals.qty_required,
+						rate: vals.rate || 0,
+						job: vals.job || null,
+						reason: vals.reason_for_adding || null
+					},
+					freeze: true,
+					freeze_message: __("Adding Part..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({
+								message: __("Part {0} added to order", [vals.item_code]),
+								indicator: "green"
+							});
+							frm.reload_doc();
+						}
+					}
+				});
+			}
+		});
+		d.show();
+	},
+
+	show_part_substitution_dialog(frm, part_row_name = null) {
+		if (frm.is_new()) {
+			frappe.msgprint(__("Please save the Service Order before substituting parts."));
+			return;
+		}
+
+		if (!part_row_name && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+			const selected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
+			if (selected && selected.length === 1) {
+				part_row_name = selected[0].name;
+			}
+		}
+
+		const eligibleParts = (frm.doc.parts || []).filter(p => p.part_status !== "Substituted");
+		if (!eligibleParts.length) {
+			frappe.msgprint(__("No parts available to substitute on this service order."));
+			return;
+		}
+
+		const partOptions = eligibleParts.map(p => ({
+			label: `${p.item_name || p.item_code} (${p.item_code}) - Qty: ${p.qty_required}`,
+			value: p.name
+		}));
+
+		const defaultPart = part_row_name || (eligibleParts.length ? eligibleParts[0].name : "");
+
+		const d = new frappe.ui.Dialog({
+			title: __("Substitute Part"),
+			fields: [
+				{
+					fieldname: "part_row",
+					label: __("Original Part to Substitute"),
+					fieldtype: "Select",
+					options: partOptions,
+					default: defaultPart,
+					reqd: 1,
+					onchange: () => {
+						const selName = d.get_value("part_row");
+						const sel = eligibleParts.find(p => p.name === selName);
+						if (sel) {
+							d.set_value("qty", sel.qty_required);
+						}
+					}
+				},
+				{
+					fieldname: "substitute_item",
+					label: __("Substitute Item"),
+					fieldtype: "Link",
+					options: "Item",
+					reqd: 1,
+					get_query: () => {
+						return {
+							filters: {
+								is_stock_item: 1
+							}
+						};
+					}
+				},
+				{
+					fieldname: "qty",
+					label: __("Quantity"),
+					fieldtype: "Float",
+					default: 1.0,
+					reqd: 1
+				},
+				{
+					fieldname: "reason",
+					label: __("Reason for Substitution"),
+					fieldtype: "Small Text",
+					reqd: 1
+				}
+			],
+			primary_action_label: __("Substitute Part"),
+			primary_action: (vals) => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.request_part_substitution",
+					args: {
+						service_order: frm.doc.name,
+						part_row: vals.part_row,
+						substitute_item: vals.substitute_item,
+						qty: vals.qty,
+						reason: vals.reason
+					},
+					freeze: true,
+					freeze_message: __("Processing Part Substitution..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({
+								message: __("Part substituted successfully with {0}", [vals.substitute_item]),
+								indicator: "green"
+							});
+							frm.reload_doc();
+						}
+					}
+				});
+			}
+		});
+		d.show();
+
+		if (defaultPart) {
+			const sel = eligibleParts.find(p => p.name === defaultPart);
+			if (sel) {
+				d.set_value("qty", sel.qty_required);
 			}
 		}
 	},
@@ -620,7 +823,7 @@ frappe.ui.form.on("Service Order", {
 
 		frappe.db.get_list("Service Job", {
 			filters: { service_order: frm.doc.name },
-			fields: ["name", "job_title", "category", "estimated_hours", "actual_hours", "status", "technician", "technician_name", "bay"],
+			fields: ["name", "job_title", "category", "priority", "source", "reason_for_adding", "estimated_hours", "actual_hours", "status", "technician", "technician_name", "bay"],
 			order_by: "creation asc",
 			limit: 100
 		}).then((jobs) => {
@@ -660,11 +863,13 @@ frappe.ui.form.on("Service Order", {
 							<thead style="background: var(--subtle-fg, #f8f9fa);">
 								<tr>
 									<th>${__("Job Title")}</th>
-									<th style="width: 120px;">${__("Category")}</th>
-									<th style="width: 120px;">${__("Hours (Est / Act)")}</th>
-									<th style="width: 130px;">${__("Status")}</th>
-									<th style="width: 170px;">${__("Technician / Bay")}</th>
-									<th style="width: 190px; text-align: right;">${__("Actions")}</th>
+									<th style="width: 90px;">${__("Priority")}</th>
+									<th style="width: 110px;">${__("Source")}</th>
+									<th style="width: 105px;">${__("Category")}</th>
+									<th style="width: 105px;">${__("Hours (Est / Act)")}</th>
+									<th style="width: 120px;">${__("Status")}</th>
+									<th style="width: 160px;">${__("Technician / Bay")}</th>
+									<th style="width: 180px; text-align: right;">${__("Actions")}</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -685,6 +890,39 @@ frappe.ui.form.on("Service Order", {
 
 					let est = job.estimated_hours || 0;
 					let act = job.actual_hours || 0;
+
+					let prioColor = "#4b5563";
+					let prioBg = "#f3f4f6";
+					let prio = job.priority || "Medium";
+					if (prio === "Urgent") {
+						prioColor = "#b91c1c";
+						prioBg = "#fee2e2";
+					} else if (prio === "High") {
+						prioColor = "#c2410c";
+						prioBg = "#ffedd5";
+					} else if (prio === "Medium") {
+						prioColor = "#1d4ed8";
+						prioBg = "#dbeafe";
+					} else if (prio === "Low") {
+						prioColor = "#4b5563";
+						prioBg = "#f3f4f6";
+					}
+					let prioHtml = `<span style="font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; color: ${prioColor}; background: ${prioBg};">${frappe.utils.escape_html(prio)}</span>`;
+
+					let srcColor = "#4b5563";
+					let srcBg = "#f3f4f6";
+					let src = job.source || "From Quotation";
+					if (src === "From Quotation") {
+						srcColor = "#6d28d9";
+						srcBg = "#ede9fe";
+					} else if (src === "Manually Added") {
+						srcColor = "#047857";
+						srcBg = "#d1fae5";
+					} else if (src === "Additional Work") {
+						srcColor = "#b45309";
+						srcBg = "#fef3c7";
+					}
+					let srcHtml = `<span style="font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; color: ${srcColor}; background: ${srcBg};">${frappe.utils.escape_html(src)}</span>`;
 
 					let techBay = [];
 					if (job.technician_name || job.technician) {
@@ -714,7 +952,10 @@ frappe.ui.form.on("Service Order", {
 							<td>
 								<a href="/app/service-job/${job.name}" style="font-weight: 600;">${frappe.utils.escape_html(job.job_title || job.name)}</a>
 								<div class="text-muted small">${job.name}</div>
+								${job.reason_for_adding ? `<div class="text-muted small" style="font-style: italic;"><i class="fa fa-info-circle"></i> ${frappe.utils.escape_html(job.reason_for_adding)}</div>` : ''}
 							</td>
+							<td>${prioHtml}</td>
+							<td>${srcHtml}</td>
 							<td><span class="badge ${catBadge}">${frappe.utils.escape_html(job.category || 'Essential')}</span></td>
 							<td>${est}h / <strong>${act}h</strong></td>
 							<td><span class="indicator-pill ${statusClass}">${frappe.utils.escape_html(job.status)}</span></td>
@@ -809,12 +1050,14 @@ frappe.ui.form.on("Service Order", {
 			title: __("Add Workshop Job"),
 			fields: [
 				{ fieldname: "job_title", label: __("Job Title"), fieldtype: "Data", reqd: 1 },
+				{ fieldname: "priority", label: __("Priority"), fieldtype: "Select", options: "Low\nMedium\nHigh\nUrgent", default: "Medium", reqd: 1 },
 				{ fieldname: "category", label: __("Category"), fieldtype: "Select", options: "Essential\nRecommended\nOptional", default: "Essential", reqd: 1 },
 				{ fieldname: "estimated_hours", label: __("Estimated Hours"), fieldtype: "Float", default: 1.0, reqd: 1 },
-				{ fieldname: "description", label: __("Description"), fieldtype: "Small Text" },
 				{ fieldname: "col_brk_1", fieldtype: "Column Break" },
 				{ fieldname: "technician", label: __("Assign Technician"), fieldtype: "Link", options: "Employee" },
-				{ fieldname: "bay", label: __("Workshop Bay"), fieldtype: "Link", options: "Workshop Location" }
+				{ fieldname: "bay", label: __("Workshop Bay"), fieldtype: "Link", options: "Workshop Location" },
+				{ fieldname: "reason_for_adding", label: __("Reason for Adding"), fieldtype: "Small Text", description: __("Explanation for adding job directly") },
+				{ fieldname: "description", label: __("Description"), fieldtype: "Small Text" }
 			],
 			primary_action_label: __("Create Job"),
 			primary_action: (vals) => {
@@ -827,7 +1070,9 @@ frappe.ui.form.on("Service Order", {
 						estimated_hours: vals.estimated_hours,
 						description: vals.description,
 						technician: vals.technician,
-						bay: vals.bay
+						bay: vals.bay,
+						priority: vals.priority,
+						reason: vals.reason_for_adding
 					},
 					freeze: true,
 					freeze_message: __("Creating Job..."),
