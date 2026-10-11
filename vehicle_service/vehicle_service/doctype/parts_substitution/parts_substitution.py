@@ -65,7 +65,7 @@ def approve_substitution(sub_name: str, review_notes: str | None = None):
 			"qty_required": sub.qty,
 			"approval_status": new_approval,
 			"part_status": new_part_status,
-			"source": "Substitution",
+			"source": "Substitute Part",
 		},
 	)
 

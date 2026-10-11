@@ -26,6 +26,7 @@ from vehicle_service.state import (
 	OPERATIONAL,
 	ORDER_FLOW,
 	PART_REQUIRED,
+	PART_SUBSTITUTED,
 	PART_WAITING,
 	PAUSED,
 	QC,
@@ -212,21 +213,28 @@ def add_ad_hoc_job(
 	job_title: str,
 	category: str = "Essential",
 	estimated_hours: float = 1.0,
+	priority: str = "Medium",
 	description: str | None = None,
 	technician: str | None = None,
 	bay: str | None = None,
+	reason: str | None = None,
 ):
 	order = frappe.get_doc("Service Order", service_order)
 	if order.status in (DELIVERED, CANCELLED):
 		frappe.throw(_("Cannot add job to order in status '{0}'.").format(order.status))
+
+	has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": order.name, "docstatus": 1}))
+	source = "Additional Work" if has_quote else "Manually Added"
 
 	job = frappe.new_doc("Service Job")
 	job.service_order = order.name
 	job.job_title = job_title
 	job.category = category
 	job.estimated_hours = flt(estimated_hours) or 1.0
+	job.priority = priority or "Medium"
 	job.description = description
-	job.source = "Additional"
+	job.reason_for_adding = reason
+	job.source = source
 	job.raised_by = frappe.session.user
 	job.status = "Pending Approval"
 
@@ -247,6 +255,123 @@ def add_ad_hoc_job(
 
 	order.sync_status_from_jobs_and_parts()
 	return {"status": "success", "job": job.name}
+
+
+@frappe.whitelist()
+def add_manual_part(
+	service_order: str,
+	item_code: str,
+	qty_required: float = 1.0,
+	rate: float | None = None,
+	job: str | None = None,
+	category: str = "Essential",
+	reason: str | None = None,
+):
+	order = frappe.get_doc("Service Order", service_order)
+	if order.status in (DELIVERED, CANCELLED):
+		frappe.throw(_("Cannot add parts to order in status '{0}'.").format(order.status))
+
+	if not frappe.db.exists("Item", item_code):
+		frappe.throw(_("Item '{0}' does not exist in catalog.").format(item_code))
+
+	item_doc = frappe.get_doc("Item", item_code)
+	if not item_doc.is_stock_item:
+		frappe.throw(_("Item '{0}' is not a stock item.").format(item_code))
+
+	if rate is None or flt(rate) <= 0:
+		std_price = frappe.db.get_value("Item Price", {"item_code": item_code, "price_list": "Standard Selling"}, "price_list_rate")
+		rate = flt(std_price) if std_price else flt(item_doc.valuation_rate or 0)
+
+	has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": order.name, "docstatus": 1}))
+	source = "Additional Part" if has_quote else "Manually Added"
+
+	new_part = order.append(
+		"parts",
+		{
+			"item_code": item_doc.name,
+			"item_name": item_doc.item_name or item_doc.name,
+			"job": job,
+			"category": category or "Essential",
+			"qty_required": flt(qty_required) or 1.0,
+			"rate": flt(rate),
+			"approval_status": "Approved",
+			"part_status": PART_REQUIRED,
+			"source": source,
+			"reason_for_adding": reason,
+		},
+	)
+	order.save(ignore_permissions=True)
+	order.sync_status_from_jobs_and_parts()
+
+	return {"status": "success", "part": new_part.name}
+
+
+@frappe.whitelist()
+def request_part_substitution(
+	service_order: str,
+	part_row: str,
+	substitute_item: str,
+	qty: float | None = None,
+	reason: str | None = None,
+):
+	order = frappe.get_doc("Service Order", service_order)
+	orig_row = next((p for p in order.parts if p.name == part_row), None)
+	if not orig_row:
+		frappe.throw(_("Original part row not found on Service Order."))
+
+	if orig_row.qty_issued and orig_row.qty_issued > (orig_row.qty_returned or 0):
+		frappe.throw(_("Parts have already been issued for this row. Please return them first before substituting."))
+
+	if not frappe.db.exists("Item", substitute_item):
+		frappe.throw(_("Substitute item '{0}' does not exist.").format(substitute_item))
+
+	sub_qty = flt(qty) if qty and flt(qty) > 0 else flt(orig_row.qty_required)
+
+	orig_price = flt(orig_row.rate) or flt(frappe.db.get_value("Item Price", {"item_code": orig_row.item_code, "price_list": "Standard Selling"}, "price_list_rate") or 0)
+	sub_price = flt(frappe.db.get_value("Item Price", {"item_code": substitute_item, "price_list": "Standard Selling"}, "price_list_rate") or 0)
+	needs_cust_approval = 1 if sub_price > orig_price else 0
+
+	sub = frappe.new_doc("Parts Substitution")
+	sub.service_order = order.name
+	sub.part_row = orig_row.name
+	sub.original_item = orig_row.item_code
+	sub.original_qty = orig_row.qty_required
+	sub.substitute_item = substitute_item
+	sub.qty = sub_qty
+	sub.reason = reason or _("Substituted by Parts Manager")
+	sub.needs_customer_approval = needs_cust_approval
+	sub.requested_by = frappe.session.user
+	sub.status = "Approved"
+	sub.reviewed_by = frappe.session.user
+	sub.reviewed_on = now_datetime()
+	sub.review_notes = reason or _("Direct substitution from Service Order")
+
+	new_row = order.append(
+		"parts",
+		{
+			"item_code": substitute_item,
+			"item_name": frappe.db.get_value("Item", substitute_item, "item_name") or substitute_item,
+			"job": orig_row.job,
+			"category": orig_row.category,
+			"qty_required": sub_qty,
+			"rate": sub_price,
+			"approval_status": "Approved",
+			"part_status": PART_REQUIRED,
+			"source": "Substitute Part",
+			"reason_for_adding": reason,
+		},
+	)
+
+	orig_row.substituted_by = new_row.name or "New"
+	orig_row.part_status = PART_SUBSTITUTED
+
+	order.save(ignore_permissions=True)
+	sub.new_part_row = new_row.name
+	sub.insert(ignore_permissions=True)
+
+	order.sync_status_from_jobs_and_parts()
+
+	return {"status": "success", "substitution": sub.name, "new_part_row": new_row.name}
 
 
 @frappe.whitelist()
@@ -581,6 +706,7 @@ def record_customer_approval(
 								"sales_order": so.name,
 								"so_detail": so_item.name,
 								"status": "Approved",
+								"source": "From Quotation",
 							},
 						)
 					elif q_item.vs_part_row:
@@ -590,7 +716,67 @@ def record_customer_approval(
 								p.so_detail = so_item.name
 								p.approval_status = "Approved"
 								p.part_status = PART_REQUIRED
+								p.source = "From Quotation"
 								p.rate = so_item.rate
+					else:
+						is_stock = frappe.db.get_value("Item", q_item.item_code, "is_stock_item")
+						if is_stock:
+							p = next((x for x in order.parts if x.quotation_item == q_item.name or (x.quotation == quotation.name and x.item_code == q_item.item_code)), None)
+							if not p:
+								p = order.append(
+									"parts",
+									{
+										"item_code": q_item.item_code,
+										"item_name": q_item.item_name or q_item.item_code,
+										"qty_required": flt(q_item.qty) or 1.0,
+										"rate": flt(so_item.rate),
+										"quotation": quotation.name,
+										"quotation_item": q_item.name,
+										"category": getattr(q_item, "vs_category", None) or "Essential",
+										"approval_status": "Approved",
+										"part_status": PART_REQUIRED,
+										"source": "From Quotation",
+										"sales_order": so.name,
+										"so_detail": so_item.name,
+									},
+								)
+							else:
+								p.approval_status = "Approved"
+								p.part_status = PART_REQUIRED
+								p.source = "From Quotation"
+								p.sales_order = so.name
+								p.so_detail = so_item.name
+							frappe.db.set_value("Quotation Item", q_item.name, "vs_part_row", p.name)
+						else:
+							job_name = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation_item": q_item.name}, "name")
+							if not job_name:
+								job_name = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation": quotation.name, "job_title": q_item.item_name or q_item.item_code}, "name")
+							if not job_name:
+								job = frappe.new_doc("Service Job")
+								job.service_order = order.name
+								job.job_title = q_item.item_name or q_item.item_code
+								job.category = getattr(q_item, "vs_category", None) or "Essential"
+								job.estimated_hours = flt(q_item.qty) or 1.0
+								job.quotation = quotation.name
+								job.quotation_item = q_item.name
+								job.status = "Approved"
+								job.source = "From Quotation"
+								job.sales_order = so.name
+								job.so_detail = so_item.name
+								job.insert(ignore_permissions=True)
+								job_name = job.name
+							else:
+								frappe.db.set_value(
+									"Service Job",
+									job_name,
+									{
+										"status": "Approved",
+										"source": "From Quotation",
+										"sales_order": so.name,
+										"so_detail": so_item.name,
+									},
+								)
+							frappe.db.set_value("Quotation Item", q_item.name, "vs_job", job_name)
 
 		# Mark declined items
 		for item in quotation.items:
@@ -671,6 +857,7 @@ def sync_quotation_to_service_order(doc, method=None):
 							p.approval_status = item.vs_approval
 							if item.vs_approval == "Approved":
 								p.part_status = PART_REQUIRED
+								p.source = "From Quotation"
 							elif item.vs_approval == "Declined":
 								p.part_status = "Declined"
 							order_modified = True
@@ -687,6 +874,7 @@ def sync_quotation_to_service_order(doc, method=None):
 					if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 						if job.status != item.vs_approval and job.status not in ["In Progress", "Completed"]:
 							job.status = item.vs_approval
+							job.source = "From Quotation"
 							job_modified = True
 					if job_modified:
 						job.save(ignore_permissions=True)
@@ -695,36 +883,50 @@ def sync_quotation_to_service_order(doc, method=None):
 			else:
 				is_stock = frappe.db.get_value("Item", item.item_code, "is_stock_item")
 				if is_stock:
-					row = order.append(
-						"parts",
-						{
-							"item_code": item.item_code,
-							"item_name": item.item_name or item.item_code,
-							"qty_required": flt(item.qty) or 1.0,
-							"rate": flt(item.rate),
-							"quotation": doc.name,
-							"quotation_item": item.name,
-							"category": getattr(item, "vs_category", None) or "Maintenance",
-							"approval_status": getattr(item, "vs_approval", None) or "Pending",
-							"part_status": PART_REQUIRED if getattr(item, "vs_approval", None) == "Approved" else "Pending",
-						},
-					)
-					order_modified = True
-					order.save(ignore_permissions=True)
-					frappe.db.set_value("Quotation Item", item.name, "vs_part_row", row.name)
-					item.vs_part_row = row.name
+					existing_part = next((p for p in order.parts if p.quotation_item == item.name or (p.quotation == doc.name and p.item_code == item.item_code)), None)
+					if existing_part:
+						frappe.db.set_value("Quotation Item", item.name, "vs_part_row", existing_part.name)
+						item.vs_part_row = existing_part.name
+					else:
+						row = order.append(
+							"parts",
+							{
+								"item_code": item.item_code,
+								"item_name": item.item_name or item.item_code,
+								"qty_required": flt(item.qty) or 1.0,
+								"rate": flt(item.rate),
+								"quotation": doc.name,
+								"quotation_item": item.name,
+								"category": getattr(item, "vs_category", None) or "Maintenance",
+								"approval_status": getattr(item, "vs_approval", None) or "Pending",
+								"part_status": PART_REQUIRED if getattr(item, "vs_approval", None) == "Approved" else "Pending",
+								"source": "From Quotation",
+							},
+						)
+						order_modified = True
+						order.save(ignore_permissions=True)
+						frappe.db.set_value("Quotation Item", item.name, "vs_part_row", row.name)
+						item.vs_part_row = row.name
 				else:
-					job = frappe.new_doc("Service Job")
-					job.service_order = order.name
-					job.job_title = item.item_name or item.item_code
-					job.category = getattr(item, "vs_category", None) or "Maintenance"
-					job.estimated_hours = flt(item.qty) or 1.0
-					job.quotation = doc.name
-					job.quotation_item = item.name
-					job.status = "Approved" if getattr(item, "vs_approval", None) == "Approved" else "Pending Approval"
-					job.insert(ignore_permissions=True)
-					frappe.db.set_value("Quotation Item", item.name, "vs_job", job.name)
-					item.vs_job = job.name
+					existing_job = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation_item": item.name}, "name")
+					if not existing_job:
+						existing_job = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation": doc.name, "job_title": item.item_name or item.item_code}, "name")
+					if existing_job:
+						frappe.db.set_value("Quotation Item", item.name, "vs_job", existing_job)
+						item.vs_job = existing_job
+					else:
+						job = frappe.new_doc("Service Job")
+						job.service_order = order.name
+						job.job_title = item.item_name or item.item_code
+						job.category = getattr(item, "vs_category", None) or "Maintenance"
+						job.estimated_hours = flt(item.qty) or 1.0
+						job.quotation = doc.name
+						job.quotation_item = item.name
+						job.status = "Approved" if getattr(item, "vs_approval", None) == "Approved" else "Pending Approval"
+						job.source = "From Quotation"
+						job.insert(ignore_permissions=True)
+						frappe.db.set_value("Quotation Item", item.name, "vs_job", job.name)
+						item.vs_job = job.name
 
 		if order_modified:
 			order.save(ignore_permissions=True)
