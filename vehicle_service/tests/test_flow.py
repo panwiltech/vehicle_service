@@ -24,6 +24,7 @@ from vehicle_service.vehicle_service.doctype.service_order.service_order import 
 	correct_intake,
 	create_estimate,
 	deliver_vehicle,
+	issue_parts_to_workshop,
 	make_service_quotation,
 	record_customer_approval,
 	request_part_substitution,
@@ -803,6 +804,46 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		# Ensure no duplicates were spawned
 		self.assertEqual(subsequent_jobs_count, initial_jobs_count)
 		self.assertEqual(subsequent_parts_count, initial_parts_count)
+
+	def test_issue_parts_to_workshop_workflow(self):
+		import json
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+		order = self.create_clean_order("TST-ISSUE-01")
+		settings = frappe.get_cached_doc("Vehicle Service Settings")
+
+		# Ensure stock exists in stores warehouse before transfer
+		make_stock_entry(
+			item_code="BRAKE-PAD-TEST",
+			to_warehouse=settings.parts_warehouse,
+			qty=10.0,
+			rate=50.0,
+			purpose="Material Receipt",
+			company=order.company,
+		)
+
+		# Add an approved part directly
+		part_res = add_manual_part(
+			service_order=order.name,
+			item_code="BRAKE-PAD-TEST",
+			qty_required=2.0,
+			rate=100.0,
+			reason="Direct issuance test",
+		)
+		self.assertEqual(part_res["status"], "success")
+
+		# Issue parts to workshop WIP
+		issue_res = issue_parts_to_workshop(
+			order_name=order.name,
+			items_json=json.dumps([{"part_row": part_res["part"], "qty": 2.0}]),
+		)
+		self.assertEqual(issue_res["status"], "success")
+		self.assertTrue(issue_res.get("stock_entry"))
+
+		order.reload()
+		part = next(p for p in order.parts if p.name == part_res["part"])
+		self.assertEqual(part.qty_issued, 2.0)
+		self.assertEqual(part.part_status, "Issued")
+
 
 
 

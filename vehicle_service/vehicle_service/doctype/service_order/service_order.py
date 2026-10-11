@@ -976,9 +976,16 @@ def issue_parts_to_workshop(order_name: str, items_json: str | list):
 
 	items = json.loads(items_json) if isinstance(items_json, str) else items_json
 
+	company = (
+		order.company
+		or settings.company
+		or frappe.db.get_single_value("Global Defaults", "default_company")
+		or frappe.get_all("Company")[0].name
+	)
+
 	se = frappe.new_doc("Stock Entry")
 	se.stock_entry_type = "Material Transfer"
-	se.company = order.company
+	se.company = company
 	se.vs_service_order = order.name
 	se.from_warehouse = stores_wh
 	se.to_warehouse = wip_wh
@@ -994,6 +1001,8 @@ def issue_parts_to_workshop(order_name: str, items_json: str | list):
 		if qty > issuable:
 			frappe.throw(_("Cannot issue {0} units for {1}. Max issuable is {2}.").format(qty, part_row.item_code, issuable))
 
+		val_rate = flt(part_row.rate) or flt(frappe.db.get_value("Item", part_row.item_code, "valuation_rate")) or 0.0
+
 		se.append(
 			"items",
 			{
@@ -1002,8 +1011,13 @@ def issue_parts_to_workshop(order_name: str, items_json: str | list):
 				"s_warehouse": stores_wh,
 				"t_warehouse": wip_wh,
 				"vs_part_row": part_row.name,
+				"basic_rate": val_rate,
+				"allow_zero_valuation_rate": 1,
 			},
 		)
+
+	if not se.items:
+		frappe.throw(_("No valid items to issue."))
 
 	se.insert(ignore_permissions=True)
 	se.submit()

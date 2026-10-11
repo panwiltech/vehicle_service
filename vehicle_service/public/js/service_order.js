@@ -443,18 +443,18 @@ frappe.ui.form.on("Service Order", {
 	setup_parts_tab_actions(frm) {
 		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const grid = frm.fields_dict.parts.grid;
-			if (!grid._parts_custom_buttons_setup) {
-				grid.add_custom_button(__("+ Add Part"), () => {
-					frm.trigger("show_add_part_dialog");
-				});
-				grid.add_custom_button(__("Substitute Part"), () => {
-					frm.trigger("show_part_substitution_dialog");
-				});
-				grid.add_custom_button(__("Issue Selected Parts"), () => {
-					frm.trigger("show_parts_issue_dialog");
-				});
-				grid._parts_custom_buttons_setup = true;
-			}
+			grid.add_custom_button(__("+ Add Part"), () => {
+				frm.trigger("show_add_part_dialog");
+			});
+			grid.add_custom_button(__("Substitute Part"), () => {
+				frm.trigger("show_part_substitution_dialog");
+			});
+			grid.add_custom_button(__("Issue Selected Parts"), () => {
+				frm.trigger("show_parts_issue_dialog");
+			});
+			grid.add_custom_button(__("Return Parts"), () => {
+				frm.trigger("show_parts_return_dialog");
+			});
 		}
 	},
 
@@ -656,7 +656,7 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	show_parts_issue_dialog(frm, selected_rows = null) {
-		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (p.qty_required - (p.qty_issued - (p.qty_returned || 0))) > 0);
+		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0))) > 0);
 		if (!approvedParts.length) {
 			frappe.msgprint(__("No pending approved parts to issue for this order."));
 			return;
@@ -671,28 +671,34 @@ frappe.ui.form.on("Service Order", {
 
 		if (selected_rows && selected_rows.length > 0) {
 			const selectedNames = new Set(selected_rows.map(r => r.name));
-			approvedParts = approvedParts.filter(p => selectedNames.has(p.name));
-			if (!approvedParts.length) {
-				frappe.msgprint(__("None of the selected parts are approved or pending issuance."));
-				return;
+			const filtered = approvedParts.filter(p => selectedNames.has(p.name));
+			if (filtered.length > 0) {
+				approvedParts = filtered;
 			}
 		}
 
 		let fields = [];
-		approvedParts.forEach((p) => {
-			let max = (p.qty_required - (p.qty_issued - (p.qty_returned || 0)));
+		approvedParts.forEach((p, idx) => {
+			let max = flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0));
 			fields.push({
-				fieldname: `check_${p.name}`,
+				fieldname: `check_${idx}`,
 				label: `${p.item_name || p.item_code} (${p.item_code})`,
 				fieldtype: "Check",
 				default: 1
 			});
 			fields.push({
-				fieldname: `part_${p.name}`,
-				label: __("Qty to Issue (Max: {0})", [max]),
+				fieldname: `col_${idx}`,
+				fieldtype: "Column Break"
+			});
+			fields.push({
+				fieldname: `qty_${idx}`,
+				label: __("Qty to Issue (Pending: {0})", [max]),
 				fieldtype: "Float",
-				default: max,
-				depends_on: `eval:doc.check_${p.name}==1`
+				default: max
+			});
+			fields.push({
+				fieldname: `sec_${idx}`,
+				fieldtype: "Section Break"
 			});
 		});
 
@@ -700,16 +706,17 @@ frappe.ui.form.on("Service Order", {
 			title: __("Issue Parts to Workshop WIP"),
 			fields: fields,
 			primary_action_label: __("Issue Parts"),
-			primary_action: (vals) => {
+			primary_action: () => {
+				const vals = d.get_values() || {};
 				let payload = [];
-				approvedParts.forEach(p => {
-					if (vals[`check_${p.name}`]) {
-						let qty = vals[`part_${p.name}`];
-						if (qty && qty > 0) {
-							payload.push({ part_row: p.name, qty: qty });
-						}
+				approvedParts.forEach((p, idx) => {
+					let isChecked = vals[`check_${idx}`] !== undefined ? vals[`check_${idx}`] : 1;
+					let qty = vals[`qty_${idx}`] !== undefined ? flt(vals[`qty_${idx}`]) : (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0)));
+					if (isChecked && qty > 0) {
+						payload.push({ part_row: p.name, qty: qty });
 					}
 				});
+
 				if (!payload.length) {
 					frappe.msgprint(__("Please select at least one part with quantity > 0."));
 					return;
@@ -733,7 +740,14 @@ frappe.ui.form.on("Service Order", {
 				});
 			}
 		});
+
 		d.show();
+
+		approvedParts.forEach((p, idx) => {
+			let max = flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0));
+			d.set_value(`check_${idx}`, 1);
+			d.set_value(`qty_${idx}`, max);
+		});
 	},
 
 	show_parts_return_dialog(frm) {
