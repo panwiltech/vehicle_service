@@ -24,7 +24,8 @@
   "so_detail",
   "material_request",
   "expected_date",
-  "substituted_by"
+  "substituted_by",
+  "reason_for_adding"
  ],
  "fields": [
   {
@@ -114,11 +115,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "Estimate",
+   "default": "From Quotation",
    "fieldname": "source",
    "fieldtype": "Select",
    "label": "Source",
-   "options": "Estimate\nAdditional\nSubstitution\nPackage",
+   "options": "From Quotation\nManually Added\nAdditional Part\nSubstitute Part\nEstimate\nAdditional\nSubstitution\nPackage",
    "read_only": 1
   },
   {
@@ -173,6 +174,11 @@
    "fieldtype": "Data",
    "label": "Substituted By Row",
    "read_only": 1
+  },
+  {
+   "fieldname": "reason_for_adding",
+   "fieldtype": "Small Text",
+   "label": "Reason for Adding"
   }
  ],
  "index_web_pages_for_search": 0,
