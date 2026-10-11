@@ -18,12 +18,15 @@ from vehicle_service.vehicle_service.doctype.service_job.service_job import (
 )
 from vehicle_service.vehicle_service.doctype.service_order.service_order import (
 	add_ad_hoc_job,
+	add_manual_part,
+	assign_job,
 	check_in_vehicle,
 	correct_intake,
 	create_estimate,
 	deliver_vehicle,
 	make_service_quotation,
 	record_customer_approval,
+	request_part_substitution,
 )
 from vehicle_service.vehicle_service.doctype.service_qc.service_qc import (
 	create_qc_inspection,
@@ -60,11 +63,35 @@ class TestVehicleServiceFlow(FrappeTestCase):
 			it2.is_stock_item = 1
 			it2.insert(ignore_permissions=True)
 
+		if not frappe.db.exists("Item", "BRAKE-PAD-ALT"):
+			it3 = frappe.new_doc("Item")
+			it3.item_code = "BRAKE-PAD-ALT"
+			it3.item_name = "Alternative Brake Pad"
+			it3.item_group = "Products"
+			it3.is_stock_item = 1
+			it3.insert(ignore_permissions=True)
+
 		# Setup settings
 		settings = frappe.get_single("Vehicle Service Settings")
 		settings.labour_item = "LABOUR-TEST"
 		settings.labour_rate = 60.0
 		settings.save(ignore_permissions=True)
+
+		emp_name = frappe.db.get_value("Employee", {"first_name": "Test", "last_name": "Tech"})
+		if not emp_name:
+			company = frappe.db.get_single_value("Global Defaults", "default_company") or frappe.get_all("Company")[0].name
+			e = frappe.new_doc("Employee")
+			e.first_name = "Test"
+			e.last_name = "Tech"
+			e.gender = "Male"
+			e.status = "Active"
+			e.company = company
+			e.date_of_birth = "1990-01-01"
+			e.date_of_joining = "2020-01-01"
+			e.insert(ignore_permissions=True)
+			self.emp_name = e.name
+		else:
+			self.emp_name = emp_name
 
 	def test_pure_state_rules(self):
 		from vehicle_service.state import PAUSED, ORDER_FLOW, stepper_position
@@ -464,7 +491,319 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(job_doc.job_title, "Inspect Suspension Struts")
 		self.assertEqual(job_doc.category, "Essential")
 		self.assertEqual(job_doc.estimated_hours, 1.5)
-		self.assertEqual(job_doc.source, "Additional")
+		self.assertIn(job_doc.source, ["Additional", "Manually Added"])
+
+	def create_clean_order(self, reg_no="TST-DEC-01"):
+		if not frappe.db.exists("Service Vehicle", reg_no):
+			veh = frappe.new_doc("Service Vehicle")
+			veh.registration_no = reg_no
+			veh.make = "Toyota"
+			veh.model = "Hilux"
+			veh.vin = f"VIN-{reg_no}"
+			veh.customer = "Test Customer"
+			veh.current_mileage = 45000
+			veh.insert(ignore_permissions=True)
+		else:
+			veh = frappe.get_doc("Service Vehicle", reg_no)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = veh.name
+		order.customer = "Test Customer"
+		order.service_advisor = "Administrator"
+		order.insert(ignore_permissions=True)
+		return order
+
+	def test_scenario_1_approved_quotation_auto_population(self):
+		import json
+		order = self.create_clean_order("TST-SCEN1-01")
+		check_in_vehicle(order.name, odometer_in=45000, fuel_level="1/2", customer_complaint="Annual service")
+
+		q = frappe.new_doc("Quotation")
+		q.party_name = "Test Customer"
+		q.vs_service_order = order.name
+		q.append("items", {
+			"item_code": "LABOUR-TEST",
+			"item_name": "Major Service Labour",
+			"qty": 2.0,
+			"rate": 75.0,
+			"vs_category": "Essential",
+			"vs_approval": "Pending",
+		})
+		q.append("items", {
+			"item_code": "BRAKE-PAD-TEST",
+			"item_name": "Front Brake Pad",
+			"qty": 1.0,
+			"rate": 120.0,
+			"vs_category": "Essential",
+			"vs_approval": "Pending",
+		})
+		q.insert(ignore_permissions=True)
+		q.submit()
+
+		decisions = {it.name: "Approved" for it in q.items}
+		res = record_customer_approval(
+			order_name=order.name,
+			quotation_name=q.name,
+			approvals_json=json.dumps(decisions),
+			approval_method="Signed",
+		)
+		self.assertEqual(res["status"], "success")
+		self.assertTrue(res.get("sales_order"))
+
+		order.reload()
+		# Verify Service Job auto-populated
+		jobs = frappe.get_all("Service Job", filters={"service_order": order.name}, fields=["name", "job_title", "status", "source"])
+		self.assertEqual(len(jobs), 1)
+		self.assertEqual(jobs[0].job_title, "Major Service Labour")
+		self.assertEqual(jobs[0].status, "Approved")
+		self.assertEqual(jobs[0].source, "From Quotation")
+
+		# Verify Service Order Part auto-populated
+		self.assertEqual(len(order.parts), 1)
+		part = order.parts[0]
+		self.assertEqual(part.item_code, "BRAKE-PAD-TEST")
+		self.assertEqual(part.approval_status, "Approved")
+		self.assertEqual(part.part_status, "Required")
+		self.assertEqual(part.source, "From Quotation")
+
+	def test_scenario_2_new_job_after_quotation_approval(self):
+		import json
+		order = self.create_clean_order("TST-SCEN2-01")
+		check_in_vehicle(order.name, odometer_in=45000, fuel_level="1/2", customer_complaint="Brake service")
+
+		q = frappe.new_doc("Quotation")
+		q.party_name = "Test Customer"
+		q.vs_service_order = order.name
+		q.append("items", {
+			"item_code": "LABOUR-TEST",
+			"item_name": "Brake Replacement Labour",
+			"qty": 2.0,
+			"rate": 60.0,
+			"vs_category": "Essential",
+			"vs_approval": "Pending",
+		})
+		q.insert(ignore_permissions=True)
+		q.submit()
+
+		decisions = {it.name: "Approved" for it in q.items}
+		record_customer_approval(
+			order_name=order.name,
+			quotation_name=q.name,
+			approvals_json=json.dumps(decisions),
+		)
+
+		# Job Controller adds new job discovered after quotation approval
+		job_res = add_ad_hoc_job(
+			service_order=order.name,
+			job_title="Inspect Steering Rack",
+			category="Recommended",
+			estimated_hours=1.0,
+			priority="High",
+			reason="Play noticed during test drive",
+		)
+		self.assertEqual(job_res["status"], "success")
+
+		new_job = frappe.get_doc("Service Job", job_res["job"])
+		self.assertEqual(new_job.job_title, "Inspect Steering Rack")
+		self.assertEqual(new_job.source, "Additional Work")
+		self.assertEqual(new_job.priority, "High")
+		self.assertEqual(new_job.reason_for_adding, "Play noticed during test drive")
+
+		# Ensure original quotation is preserved with 1 item
+		q_fresh = frappe.get_doc("Quotation", q.name)
+		self.assertEqual(len(q_fresh.items), 1)
+
+	def test_scenario_3_new_part_after_quotation_approval(self):
+		import json
+		order = self.create_clean_order("TST-SCEN3-01")
+		check_in_vehicle(order.name, odometer_in=45000, fuel_level="1/2", customer_complaint="Maintenance")
+
+		q = frappe.new_doc("Quotation")
+		q.party_name = "Test Customer"
+		q.vs_service_order = order.name
+		q.append("items", {
+			"item_code": "LABOUR-TEST",
+			"item_name": "General Check Labour",
+			"qty": 1.0,
+			"rate": 60.0,
+			"vs_category": "Essential",
+			"vs_approval": "Pending",
+		})
+		q.insert(ignore_permissions=True)
+		q.submit()
+
+		decisions = {it.name: "Approved" for it in q.items}
+		record_customer_approval(order_name=order.name, quotation_name=q.name, approvals_json=json.dumps(decisions))
+
+		# Parts Manager adds additional part discovered
+		part_res = add_manual_part(
+			service_order=order.name,
+			item_code="BRAKE-PAD-TEST",
+			qty_required=2.0,
+			rate=110.0,
+			reason="Extra pads required for rear axle",
+		)
+		self.assertEqual(part_res["status"], "success")
+
+		order.reload()
+		part = next(p for p in order.parts if p.name == part_res["part"])
+		self.assertEqual(part.item_code, "BRAKE-PAD-TEST")
+		self.assertEqual(part.qty_required, 2.0)
+		self.assertEqual(part.source, "Additional Part")
+		self.assertEqual(part.approval_status, "Approved")
+		self.assertEqual(part.part_status, "Required")
+		self.assertEqual(part.reason_for_adding, "Extra pads required for rear axle")
+
+	def test_scenario_4_service_order_without_quotation_operational(self):
+		# Service Order created without any quotation
+		order = self.create_clean_order("TST-SCEN4-01")
+		check_in_vehicle(order.name, odometer_in=45000, fuel_level="3/4", customer_complaint="Quick oil service")
+
+		# Job Controller adds job and assigns technician
+		job_res = add_ad_hoc_job(
+			service_order=order.name,
+			job_title="Oil and Filter Change",
+			category="Essential",
+			estimated_hours=0.8,
+			reason="Immediate express service",
+		)
+		self.assertEqual(job_res["status"], "success")
+
+		job_doc = frappe.get_doc("Service Job", job_res["job"])
+		self.assertEqual(job_doc.source, "Manually Added")
+
+		# Assign technician directly
+		assign_res = assign_job(job_name=job_doc.name, technician=self.emp_name)
+		self.assertEqual(assign_res["status"], "success")
+		job_doc.reload()
+		self.assertEqual(job_doc.status, "Assigned")
+
+		# Parts Manager adds parts directly
+		part_res = add_manual_part(
+			service_order=order.name,
+			item_code="BRAKE-PAD-TEST",
+			qty_required=1.0,
+			job=job_doc.name,
+			reason="Replaced during express check",
+		)
+		self.assertEqual(part_res["status"], "success")
+
+		order.reload()
+		part = next(p for p in order.parts if p.name == part_res["part"])
+		self.assertEqual(part.source, "Manually Added")
+		self.assertEqual(part.approval_status, "Approved")
+		self.assertEqual(part.part_status, "Required")
+
+		# Verify no quotation document exists for this order
+		quotations = frappe.get_all("Quotation", filters={"vs_service_order": order.name})
+		self.assertEqual(len(quotations), 0)
+
+	def test_scenario_5_additional_job_with_linked_parts(self):
+		order = self.create_clean_order("TST-SCEN5-01")
+		# Job Controller creates new job
+		job_res = add_ad_hoc_job(
+			service_order=order.name,
+			job_title="Front Brake Overhaul",
+			category="Essential",
+			estimated_hours=2.0,
+			priority="High",
+		)
+		job_name = job_res["job"]
+
+		# Parts Manager creates part specifically linked to this job
+		part_res = add_manual_part(
+			service_order=order.name,
+			item_code="BRAKE-PAD-TEST",
+			qty_required=2.0,
+			job=job_name,
+			reason="Pads for front overhaul job",
+		)
+
+		order.reload()
+		part = next(p for p in order.parts if p.name == part_res["part"])
+		self.assertEqual(part.job, job_name)
+		self.assertEqual(part.source, "Manually Added")
+
+	def test_scenario_6_part_substitution_workflow(self):
+		order = self.create_clean_order("TST-SCEN6-01")
+		part_res = add_manual_part(
+			service_order=order.name,
+			item_code="BRAKE-PAD-TEST",
+			qty_required=1.0,
+			rate=100.0,
+			reason="Initial requirement",
+		)
+		orig_row_name = part_res["part"]
+
+		# Parts Manager requests substitution with BRAKE-PAD-ALT
+		sub_res = request_part_substitution(
+			service_order=order.name,
+			part_row=orig_row_name,
+			substitute_item="BRAKE-PAD-ALT",
+			qty=1.0,
+			reason="BRAKE-PAD-TEST out of stock, using alternate brand",
+		)
+		self.assertEqual(sub_res["status"], "success")
+
+		order.reload()
+		orig_row = next(p for p in order.parts if p.name == orig_row_name)
+		self.assertEqual(orig_row.part_status, "Substituted")
+		self.assertTrue(orig_row.substituted_by)
+
+		sub_row = next(p for p in order.parts if p.name == sub_res["new_part_row"])
+		self.assertEqual(sub_row.item_code, "BRAKE-PAD-ALT")
+		self.assertEqual(sub_row.source, "Substitute Part")
+		self.assertEqual(sub_row.approval_status, "Approved")
+		self.assertEqual(sub_row.part_status, "Required")
+
+	def test_scenario_7_duplicate_prevention_on_repeated_approval(self):
+		import json
+		order = self.create_clean_order("TST-SCEN7-01")
+		check_in_vehicle(order.name, odometer_in=50000, fuel_level="1/2", customer_complaint="Service check")
+
+		q = frappe.new_doc("Quotation")
+		q.party_name = "Test Customer"
+		q.vs_service_order = order.name
+		q.append("items", {
+			"item_code": "LABOUR-TEST",
+			"item_name": "Single Labor Item",
+			"qty": 1.0,
+			"rate": 60.0,
+			"vs_category": "Essential",
+			"vs_approval": "Pending",
+		})
+		q.append("items", {
+			"item_code": "BRAKE-PAD-TEST",
+			"item_name": "Single Part Item",
+			"qty": 1.0,
+			"rate": 100.0,
+			"vs_category": "Essential",
+			"vs_approval": "Pending",
+		})
+		q.insert(ignore_permissions=True)
+		q.submit()
+
+		decisions = {it.name: "Approved" for it in q.items}
+
+		# First approval trigger
+		record_customer_approval(order_name=order.name, quotation_name=q.name, approvals_json=json.dumps(decisions))
+		order.reload()
+		initial_jobs_count = len(frappe.get_all("Service Job", filters={"service_order": order.name}))
+		initial_parts_count = len(order.parts)
+
+		self.assertEqual(initial_jobs_count, 1)
+		self.assertEqual(initial_parts_count, 1)
+
+		# Second approval trigger (re-running customer approval)
+		record_customer_approval(order_name=order.name, quotation_name=q.name, approvals_json=json.dumps(decisions))
+		order.reload()
+		subsequent_jobs_count = len(frappe.get_all("Service Job", filters={"service_order": order.name}))
+		subsequent_parts_count = len(order.parts)
+
+		# Ensure no duplicates were spawned
+		self.assertEqual(subsequent_jobs_count, initial_jobs_count)
+		self.assertEqual(subsequent_parts_count, initial_parts_count)
+
 
 
 

@@ -678,105 +678,108 @@ def record_customer_approval(
 
 			frappe.flags.args = {"selected_items": [{"name": i} for i in approved_items]}
 			so = _make_sales_order(quotation.name, ignore_permissions=True)
-			so.vs_service_order = order.name
-			delivery_date = order.expected_completion or add_days(nowdate(), 1)
-			so.delivery_date = delivery_date
-			def_wh = frappe.db.get_value("Warehouse", {"company": so.company, "is_group": 0}, "name")
-			for itm in so.items:
-				if not itm.delivery_date:
-					itm.delivery_date = delivery_date
-				if not itm.warehouse and frappe.db.get_value("Item", itm.item_code, "is_stock_item"):
-					itm.warehouse = (
-						frappe.db.get_value("Item Default", {"parent": itm.item_code, "company": so.company}, "default_warehouse")
-						or def_wh
-					)
-			so.insert(ignore_permissions=True)
-			so.submit()
-			sales_order_name = so.name
-
-			# Map SO detail back to jobs and parts
-			for so_item in so.items:
-				q_item = next((qi for qi in quotation.items if qi.name == so_item.quotation_item), None)
-				if q_item:
-					if q_item.vs_job:
-						frappe.db.set_value(
-							"Service Job",
-							q_item.vs_job,
-							{
-								"sales_order": so.name,
-								"so_detail": so_item.name,
-								"status": "Approved",
-								"source": "From Quotation",
-							},
+			if so and getattr(so, "items", None):
+				so.vs_service_order = order.name
+				delivery_date = order.expected_completion or add_days(nowdate(), 1)
+				so.delivery_date = delivery_date
+				def_wh = frappe.db.get_value("Warehouse", {"company": so.company, "is_group": 0}, "name")
+				for itm in so.items:
+					if not itm.delivery_date:
+						itm.delivery_date = delivery_date
+					if not itm.warehouse and frappe.db.get_value("Item", itm.item_code, "is_stock_item"):
+						itm.warehouse = (
+							frappe.db.get_value("Item Default", {"parent": itm.item_code, "company": so.company}, "default_warehouse")
+							or def_wh
 						)
-					elif q_item.vs_part_row:
-						for p in order.parts:
-							if p.name == q_item.vs_part_row:
-								p.sales_order = so.name
-								p.so_detail = so_item.name
-								p.approval_status = "Approved"
-								p.part_status = PART_REQUIRED
-								p.source = "From Quotation"
-								p.rate = so_item.rate
-					else:
-						is_stock = frappe.db.get_value("Item", q_item.item_code, "is_stock_item")
-						if is_stock:
-							p = next((x for x in order.parts if x.quotation_item == q_item.name or (x.quotation == quotation.name and x.item_code == q_item.item_code)), None)
-							if not p:
-								p = order.append(
-									"parts",
-									{
-										"item_code": q_item.item_code,
-										"item_name": q_item.item_name or q_item.item_code,
-										"qty_required": flt(q_item.qty) or 1.0,
-										"rate": flt(so_item.rate),
-										"quotation": quotation.name,
-										"quotation_item": q_item.name,
-										"category": getattr(q_item, "vs_category", None) or "Essential",
-										"approval_status": "Approved",
-										"part_status": PART_REQUIRED,
-										"source": "From Quotation",
-										"sales_order": so.name,
-										"so_detail": so_item.name,
-									},
-								)
-							else:
-								p.approval_status = "Approved"
-								p.part_status = PART_REQUIRED
-								p.source = "From Quotation"
-								p.sales_order = so.name
-								p.so_detail = so_item.name
-							frappe.db.set_value("Quotation Item", q_item.name, "vs_part_row", p.name)
+				so.insert(ignore_permissions=True)
+				so.submit()
+				sales_order_name = so.name
+
+				# Map SO detail back to jobs and parts
+				for so_item in so.items:
+					q_item = next((qi for qi in quotation.items if qi.name == so_item.quotation_item), None)
+					if q_item:
+						if q_item.vs_job:
+							frappe.db.set_value(
+								"Service Job",
+								q_item.vs_job,
+								{
+									"sales_order": so.name,
+									"so_detail": so_item.name,
+									"status": "Approved",
+									"source": "From Quotation",
+								},
+							)
+						elif q_item.vs_part_row:
+							for p in order.parts:
+								if p.name == q_item.vs_part_row:
+									p.sales_order = so.name
+									p.so_detail = so_item.name
+									p.approval_status = "Approved"
+									p.part_status = PART_REQUIRED
+									p.source = "From Quotation"
+									p.rate = so_item.rate
 						else:
-							job_name = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation_item": q_item.name}, "name")
-							if not job_name:
-								job_name = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation": quotation.name, "job_title": q_item.item_name or q_item.item_code}, "name")
-							if not job_name:
-								job = frappe.new_doc("Service Job")
-								job.service_order = order.name
-								job.job_title = q_item.item_name or q_item.item_code
-								job.category = getattr(q_item, "vs_category", None) or "Essential"
-								job.estimated_hours = flt(q_item.qty) or 1.0
-								job.quotation = quotation.name
-								job.quotation_item = q_item.name
-								job.status = "Approved"
-								job.source = "From Quotation"
-								job.sales_order = so.name
-								job.so_detail = so_item.name
-								job.insert(ignore_permissions=True)
-								job_name = job.name
+							is_stock = frappe.db.get_value("Item", q_item.item_code, "is_stock_item")
+							if is_stock:
+								p = next((x for x in order.parts if x.quotation_item == q_item.name or (x.quotation == quotation.name and x.item_code == q_item.item_code)), None)
+								if not p:
+									p = order.append(
+										"parts",
+										{
+											"item_code": q_item.item_code,
+											"item_name": q_item.item_name or q_item.item_code,
+											"qty_required": flt(q_item.qty) or 1.0,
+											"rate": flt(so_item.rate),
+											"quotation": quotation.name,
+											"quotation_item": q_item.name,
+											"category": getattr(q_item, "vs_category", None) or "Essential",
+											"approval_status": "Approved",
+											"part_status": PART_REQUIRED,
+											"source": "From Quotation",
+											"sales_order": so.name,
+											"so_detail": so_item.name,
+										},
+									)
+								else:
+									p.approval_status = "Approved"
+									p.part_status = PART_REQUIRED
+									p.source = "From Quotation"
+									p.sales_order = so.name
+									p.so_detail = so_item.name
+								frappe.db.set_value("Quotation Item", q_item.name, "vs_part_row", p.name)
 							else:
-								frappe.db.set_value(
-									"Service Job",
-									job_name,
-									{
-										"status": "Approved",
-										"source": "From Quotation",
-										"sales_order": so.name,
-										"so_detail": so_item.name,
-									},
-								)
-							frappe.db.set_value("Quotation Item", q_item.name, "vs_job", job_name)
+								job_name = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation_item": q_item.name}, "name")
+								if not job_name:
+									job_name = frappe.db.get_value("Service Job", {"service_order": order.name, "quotation": quotation.name, "job_title": q_item.item_name or q_item.item_code}, "name")
+								if not job_name:
+									job = frappe.new_doc("Service Job")
+									job.service_order = order.name
+									job.job_title = q_item.item_name or q_item.item_code
+									job.category = getattr(q_item, "vs_category", None) or "Essential"
+									job.estimated_hours = flt(q_item.qty) or 1.0
+									job.quotation = quotation.name
+									job.quotation_item = q_item.name
+									job.status = "Approved"
+									job.source = "From Quotation"
+									job.sales_order = so.name
+									job.so_detail = so_item.name
+									job.insert(ignore_permissions=True)
+									job_name = job.name
+								else:
+									frappe.db.set_value(
+										"Service Job",
+										job_name,
+										{
+											"status": "Approved",
+											"source": "From Quotation",
+											"sales_order": so.name,
+											"so_detail": so_item.name,
+										},
+									)
+								frappe.db.set_value("Quotation Item", q_item.name, "vs_job", job_name)
+			else:
+				sales_order_name = frappe.db.get_value("Sales Order Item", {"quotation_item": ["in", approved_items]}, "parent")
 
 		# Mark declined items
 		for item in quotation.items:
