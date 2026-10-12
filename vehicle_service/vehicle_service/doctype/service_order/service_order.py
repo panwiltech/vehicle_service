@@ -1022,6 +1022,20 @@ def issue_parts_to_workshop(order_name: str, items_json: str | list):
 		if qty > issuable:
 			frappe.throw(_("Cannot issue {0} units for {1}. Max issuable is {2}.").format(qty, part_row.item_code, issuable))
 
+		# Check available stock balance in stores warehouse before creating stock entry
+		stock_bal = flt(frappe.db.get_value("Bin", {"item_code": part_row.item_code, "warehouse": stores_wh}, "actual_qty") or 0.0)
+		allow_neg = cint(frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0)
+		if not allow_neg and stock_bal < qty:
+			frappe.throw(
+				_("Insufficient stock for item {0} in warehouse '{1}'. Required: {2}, Available in Stores: {3}. Please receive stock into '{1}' first.").format(
+					frappe.bold(part_row.item_code),
+					stores_wh,
+					qty,
+					stock_bal,
+				),
+				title=_("Insufficient Stock in Stores"),
+			)
+
 		val_rate = flt(part_row.rate) or flt(frappe.db.get_value("Item", part_row.item_code, "valuation_rate")) or 0.0
 
 		se.append(

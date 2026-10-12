@@ -172,7 +172,7 @@ frappe.ui.form.on("Service Order", {
 		}
 
 		// 5. Parts Issue / Return actions
-		if (["Approved", "Waiting for Parts", "Ready for Work", "In Progress"].includes(frm.doc.status)) {
+		if (["Checked In", "Approved", "Waiting for Parts", "Ready for Work", "In Progress"].includes(frm.doc.status)) {
 			frm.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
 			}, __("Parts Control"));
@@ -443,16 +443,52 @@ frappe.ui.form.on("Service Order", {
 	setup_parts_tab_actions(frm) {
 		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const grid = frm.fields_dict.parts.grid;
-			// Parts are added directly via standard grid rows like in Quotation
-			grid.add_custom_button(__("Substitute Part"), () => {
-				frm.trigger("show_part_substitution_dialog");
-			});
+			// Top toolbar buttons for immediate visibility
 			grid.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
+			}, "top");
+			grid.add_custom_button(__("Substitute Part"), () => {
+				frm.trigger("show_part_substitution_dialog");
+			}, "top");
+			grid.add_custom_button(__("Return Parts"), () => {
+				frm.trigger("show_parts_return_dialog");
+			}, "top");
+
+			// Bottom toolbar buttons
+			grid.add_custom_button(__("Issue Selected Parts"), () => {
+				frm.trigger("show_parts_issue_dialog");
+			});
+			grid.add_custom_button(__("Substitute Part"), () => {
+				frm.trigger("show_part_substitution_dialog");
 			});
 			grid.add_custom_button(__("Return Parts"), () => {
 				frm.trigger("show_parts_return_dialog");
 			});
+
+			// Rebind click handlers directly on existing buttons to prevent stale references
+			if (grid.custom_buttons) {
+				Object.keys(grid.custom_buttons).forEach(label => {
+					const $btn = grid.custom_buttons[label];
+					if ($btn && $btn.length) {
+						if (label.indexOf("Issue") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("show_parts_issue_dialog");
+							});
+						} else if (label.indexOf("Substitute") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("show_part_substitution_dialog");
+							});
+						} else if (label.indexOf("Return") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("show_parts_return_dialog");
+							});
+						}
+					}
+				});
+			}
 		}
 	},
 
@@ -551,8 +587,26 @@ frappe.ui.form.on("Service Order", {
 			return;
 		}
 
+		if (typeof part_row_name !== "string" || part_row_name === frm.doctype) {
+			part_row_name = null;
+		}
+
 		if (!part_row_name && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
-			const selected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
+			const grid = frm.fields_dict.parts.grid;
+			let selected = grid.get_selected_children ? grid.get_selected_children() : [];
+			if (!selected.length && grid.get_selected) {
+				const names = grid.get_selected() || [];
+				selected = (frm.doc.parts || []).filter(p => names.includes(p.name));
+			}
+			if (!selected.length) {
+				grid.wrapper.find(".grid-body .grid-row-check:checked").each(function () {
+					const name = $(this).closest(".grid-row").attr("data-name");
+					if (name) {
+						const match = (frm.doc.parts || []).find(p => p.name === name);
+						if (match) selected.push(match);
+					}
+				});
+			}
 			if (selected && selected.length === 1) {
 				part_row_name = selected[0].name;
 			}
@@ -653,7 +707,7 @@ frappe.ui.form.on("Service Order", {
 		}
 	},
 
-	show_parts_issue_dialog(frm, selected_rows = null) {
+	show_parts_issue_dialog(frm) {
 		if (frm.is_new()) {
 			frappe.msgprint(__("Please save the Service Order before issuing parts."));
 			return;
@@ -663,6 +717,15 @@ frappe.ui.form.on("Service Order", {
 			frappe.confirm(
 				__("You have unsaved changes. Would you like to save the Service Order first and proceed to issue parts?"),
 				() => {
+					let pre_selected = [];
+					if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+						const g = frm.fields_dict.parts.grid;
+						if (g.get_selected) pre_selected = g.get_selected() || [];
+						if (!pre_selected.length && g.get_selected_children) {
+							pre_selected = (g.get_selected_children() || []).map(r => r.name || r.docname);
+						}
+					}
+					frm._pre_selected_parts = pre_selected.filter(Boolean);
 					frm.save().then(() => {
 						frm.trigger("show_parts_issue_dialog");
 					});
@@ -671,17 +734,40 @@ frappe.ui.form.on("Service Order", {
 			return;
 		}
 
-		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0))) > 0);
+		let selected_rows = [];
+		if (frm._pre_selected_parts && frm._pre_selected_parts.length) {
+			const saved_names = frm._pre_selected_parts;
+			delete frm._pre_selected_parts;
+			selected_rows = (frm.doc.parts || []).filter(p => saved_names.includes(p.name));
+		}
 
-		if (!selected_rows && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
-			const gridSelected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
-			if (gridSelected && gridSelected.length > 0) {
-				selected_rows = gridSelected;
+		if (!selected_rows.length && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+			const grid = frm.fields_dict.parts.grid;
+			if (grid.get_selected_children) {
+				selected_rows = grid.get_selected_children() || [];
+			}
+			if (!selected_rows.length && grid.get_selected) {
+				const names = grid.get_selected() || [];
+				if (names.length) {
+					selected_rows = (frm.doc.parts || []).filter(p => names.includes(p.name));
+				}
+			}
+			if (!selected_rows.length) {
+				const checked_names = [];
+				grid.wrapper.find(".grid-body .grid-row-check:checked").each(function () {
+					const name = $(this).closest(".grid-row").attr("data-name");
+					if (name) checked_names.push(name);
+				});
+				if (checked_names.length) {
+					selected_rows = (frm.doc.parts || []).filter(p => checked_names.includes(p.name));
+				}
 			}
 		}
 
-		if (selected_rows && selected_rows.length > 0) {
-			const selectedNames = new Set(selected_rows.map(r => r.name));
+		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0))) > 0);
+
+		if (Array.isArray(selected_rows) && selected_rows.length > 0) {
+			const selectedNames = new Set(selected_rows.map(r => (typeof r === "string" ? r : (r.name || r.docname || ""))).filter(Boolean));
 			const unapproved = (frm.doc.parts || []).filter(p => selectedNames.has(p.name) && p.approval_status !== "Approved");
 			if (unapproved.length > 0 && unapproved.length === selected_rows.length) {
 				frappe.msgprint(__("The selected part(s) are not approved for workshop issuance."));
@@ -729,8 +815,8 @@ frappe.ui.form.on("Service Order", {
 			title: __("Issue Parts to Workshop WIP"),
 			fields: fields,
 			primary_action_label: __("Issue Parts"),
-			primary_action: () => {
-				const vals = d.get_values() || {};
+			primary_action: (values) => {
+				const vals = values || d.get_values() || {};
 				let payload = [];
 				approvedParts.forEach((p, idx) => {
 					let isChecked = vals[`check_${idx}`] !== undefined ? vals[`check_${idx}`] : 1;
@@ -784,6 +870,15 @@ frappe.ui.form.on("Service Order", {
 			frappe.confirm(
 				__("You have unsaved changes. Would you like to save the Service Order first and proceed to return parts?"),
 				() => {
+					let pre_selected = [];
+					if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+						const g = frm.fields_dict.parts.grid;
+						if (g.get_selected) pre_selected = g.get_selected() || [];
+						if (!pre_selected.length && g.get_selected_children) {
+							pre_selected = (g.get_selected_children() || []).map(r => r.name || r.docname);
+						}
+					}
+					frm._pre_selected_parts_return = pre_selected.filter(Boolean);
 					frm.save().then(() => {
 						frm.trigger("show_parts_return_dialog");
 					});
@@ -792,20 +887,47 @@ frappe.ui.form.on("Service Order", {
 			return;
 		}
 
+		let selected_rows = [];
+		if (frm._pre_selected_parts_return && frm._pre_selected_parts_return.length) {
+			const saved_names = frm._pre_selected_parts_return;
+			delete frm._pre_selected_parts_return;
+			selected_rows = (frm.doc.parts || []).filter(p => saved_names.includes(p.name));
+		}
+
+		if (!selected_rows.length && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+			const grid = frm.fields_dict.parts.grid;
+			if (grid.get_selected_children) {
+				selected_rows = grid.get_selected_children() || [];
+			}
+			if (!selected_rows.length && grid.get_selected) {
+				const names = grid.get_selected() || [];
+				if (names.length) {
+					selected_rows = (frm.doc.parts || []).filter(p => names.includes(p.name));
+				}
+			}
+			if (!selected_rows.length) {
+				const checked_names = [];
+				grid.wrapper.find(".grid-body .grid-row-check:checked").each(function () {
+					const name = $(this).closest(".grid-row").attr("data-name");
+					if (name) checked_names.push(name);
+				});
+				if (checked_names.length) {
+					selected_rows = (frm.doc.parts || []).filter(p => checked_names.includes(p.name));
+				}
+			}
+		}
+
 		let issuedParts = (frm.doc.parts || []).filter(p => (flt(p.qty_issued) - flt(p.qty_returned || 0)) > 0);
 		if (!issuedParts.length) {
 			frappe.msgprint(__("No parts currently issued on vehicle to return."));
 			return;
 		}
 
-		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
-			const gridSelected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
-			if (gridSelected && gridSelected.length > 0) {
-				const selectedNames = new Set(gridSelected.map(r => r.name));
-				const filtered = issuedParts.filter(p => selectedNames.has(p.name));
-				if (filtered.length > 0) {
-					issuedParts = filtered;
-				}
+		if (Array.isArray(selected_rows) && selected_rows.length > 0) {
+			const selectedNames = new Set(selected_rows.map(r => (typeof r === "string" ? r : (r.name || r.docname || ""))).filter(Boolean));
+			const filtered = issuedParts.filter(p => selectedNames.has(p.name));
+			if (filtered.length > 0) {
+				issuedParts = filtered;
 			}
 		}
 
