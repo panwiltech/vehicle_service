@@ -47,7 +47,139 @@ class ServiceOrder(Document):
 		self.fetch_vehicle_and_company_defaults()
 		self.validate_intake_frozen()
 		self.validate_parts_defaults()
+		self.validate_jobs_defaults()
+		self.sync_jobs_with_service_job_docs()
 		self.recalculate_parts_summary()
+
+	def validate_jobs_defaults(self):
+		has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": self.name, "docstatus": 1}))
+		for row in self.get("jobs", []):
+			if not row.category:
+				row.category = "Essential"
+			if not row.priority:
+				row.priority = "Medium"
+			if not row.estimated_hours or flt(row.estimated_hours) <= 0:
+				row.estimated_hours = 1.0
+			if not row.status:
+				row.status = "Approved"
+			if not row.source or row.source == "From Quotation":
+				if not row.quotation_item:
+					row.source = "Additional Work" if has_quote else "Manually Added"
+			if row.technician and not row.technician_name:
+				row.technician_name = frappe.db.get_value("Employee", row.technician, "employee_name")
+
+	def sync_jobs_with_service_job_docs(self):
+		if not self.name or self.is_new():
+			return
+
+		existing_sjs = frappe.get_all(
+			"Service Job",
+			filters={"service_order": self.name},
+			fields=[
+				"name",
+				"job_title",
+				"category",
+				"priority",
+				"estimated_hours",
+				"actual_hours",
+				"status",
+				"technician",
+				"technician_name",
+				"bay",
+				"source",
+				"quotation",
+				"quotation_item",
+				"reason_for_adding",
+			],
+		)
+		existing_sj_map = {sj.name: sj for sj in existing_sjs}
+		linked_sj_names = {row.service_job for row in self.get("jobs", []) if row.service_job}
+
+		# Populate any missing standalone Service Jobs into self.jobs
+		for sj_name, sj in existing_sj_map.items():
+			if sj_name not in linked_sj_names:
+				self.append(
+					"jobs",
+					{
+						"job_title": sj.job_title,
+						"category": sj.category or "Essential",
+						"priority": sj.priority or "Medium",
+						"estimated_hours": flt(sj.estimated_hours or 1.0),
+						"actual_hours": flt(sj.actual_hours or 0.0),
+						"status": sj.status or "Approved",
+						"technician": sj.technician,
+						"technician_name": sj.technician_name,
+						"bay": sj.bay,
+						"source": sj.source or "Manually Added",
+						"service_job": sj.name,
+						"quotation": sj.quotation,
+						"quotation_item": sj.quotation_item,
+						"reason_for_adding": sj.reason_for_adding,
+					},
+				)
+				linked_sj_names.add(sj_name)
+
+		# Synchronize child rows to standalone Service Job docs
+		current_row_sjs = set()
+		for row in self.get("jobs", []):
+			if not row.service_job:
+				sj = frappe.new_doc("Service Job")
+				sj.service_order = self.name
+				sj.vehicle = self.vehicle
+				sj.job_title = row.job_title
+				sj.category = row.category or "Essential"
+				sj.priority = row.priority or "Medium"
+				sj.estimated_hours = flt(row.estimated_hours or 1.0)
+				sj.status = row.status or "Approved"
+				sj.technician = row.technician
+				if row.technician:
+					sj.technician_user = frappe.db.get_value("Employee", row.technician, "user_id")
+				sj.bay = row.bay
+				sj.source = row.source or "Manually Added"
+				sj.reason_for_adding = row.reason_for_adding
+				if row.quotation:
+					sj.quotation = row.quotation
+				if row.quotation_item:
+					sj.quotation_item = row.quotation_item
+				sj.insert(ignore_permissions=True)
+				row.service_job = sj.name
+				current_row_sjs.add(sj.name)
+			else:
+				current_row_sjs.add(row.service_job)
+				if row.service_job in existing_sj_map:
+					sj = existing_sj_map[row.service_job]
+					fields_to_update = {}
+					if row.job_title != sj.job_title:
+						fields_to_update["job_title"] = row.job_title
+					if row.category != sj.category:
+						fields_to_update["category"] = row.category
+					if row.priority != sj.priority:
+						fields_to_update["priority"] = row.priority
+					if flt(row.estimated_hours) != flt(sj.estimated_hours):
+						fields_to_update["estimated_hours"] = flt(row.estimated_hours)
+					if row.technician != sj.technician:
+						fields_to_update["technician"] = row.technician
+						fields_to_update["technician_user"] = frappe.db.get_value("Employee", row.technician, "user_id") if row.technician else None
+					if row.bay != sj.bay:
+						fields_to_update["bay"] = row.bay
+					if row.source != sj.source:
+						fields_to_update["source"] = row.source
+					if row.reason_for_adding != sj.reason_for_adding:
+						fields_to_update["reason_for_adding"] = row.reason_for_adding
+
+					row.actual_hours = flt(sj.actual_hours or 0.0)
+					if sj.status and row.status != sj.status and not getattr(row, "__status_modified_by_user", False):
+						row.status = sj.status
+
+					if fields_to_update:
+						frappe.db.set_value("Service Job", row.service_job, fields_to_update, update_modified=False)
+
+		# If rows were removed, cancel unstarted Service Jobs
+		for sj_name in existing_sj_map:
+			if sj_name not in current_row_sjs:
+				sj = existing_sj_map[sj_name]
+				if sj.status in ("Draft", "Pending Approval", "Approved", "Assigned") and flt(sj.actual_hours or 0) == 0:
+					frappe.db.set_value("Service Job", sj_name, "status", "Cancelled")
 
 	def validate_parts_defaults(self):
 		has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": self.name, "docstatus": 1}))
@@ -134,6 +266,23 @@ class ServiceOrder(Document):
 
 	def sync_status_from_jobs_and_parts(self):
 		"""Derives operational status when order is in active workshop stages."""
+		# Also synchronize child rows in self.jobs from latest Service Job docs
+		for row in self.get("jobs", []):
+			if row.service_job:
+				sj_info = frappe.db.get_value("Service Job", row.service_job, ["status", "actual_hours", "technician", "technician_name", "bay"], as_dict=True)
+				if sj_info:
+					if row.status != sj_info.status or flt(row.actual_hours) != flt(sj_info.actual_hours):
+						row.status = sj_info.status
+						row.actual_hours = flt(sj_info.actual_hours)
+						frappe.db.set_value("Service Order Job", row.name, {"status": sj_info.status, "actual_hours": flt(sj_info.actual_hours)}, update_modified=False)
+					if sj_info.technician and row.technician != sj_info.technician:
+						row.technician = sj_info.technician
+						row.technician_name = sj_info.technician_name
+						frappe.db.set_value("Service Order Job", row.name, {"technician": sj_info.technician, "technician_name": sj_info.technician_name}, update_modified=False)
+					if sj_info.bay and row.bay != sj_info.bay:
+						row.bay = sj_info.bay
+						frappe.db.set_value("Service Order Job", row.name, {"bay": sj_info.bay}, update_modified=False)
+
 		if self.status in (DRAFT, CHECKED_IN, PAUSED, AWAITING_APPROVAL, READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION, DELIVERED, CANCELLED):
 			return
 
@@ -150,6 +299,31 @@ class ServiceOrder(Document):
 			frappe.db.set_value("Service Vehicle", self.vehicle, "vehicle_status", v_status)
 
 	def on_update(self):
+		# Create Service Job for any child row created without service_job (e.g. newly inserted doc)
+		for row in self.get("jobs", []):
+			if not row.service_job:
+				sj = frappe.new_doc("Service Job")
+				sj.service_order = self.name
+				sj.vehicle = self.vehicle
+				sj.job_title = row.job_title
+				sj.category = row.category or "Essential"
+				sj.priority = row.priority or "Medium"
+				sj.estimated_hours = flt(row.estimated_hours or 1.0)
+				sj.status = row.status or "Approved"
+				sj.technician = row.technician
+				if row.technician:
+					sj.technician_user = frappe.db.get_value("Employee", row.technician, "user_id")
+				sj.bay = row.bay
+				sj.source = row.source or "Manually Added"
+				sj.reason_for_adding = row.reason_for_adding
+				if row.quotation:
+					sj.quotation = row.quotation
+				if row.quotation_item:
+					sj.quotation_item = row.quotation_item
+				sj.insert(ignore_permissions=True)
+				frappe.db.set_value("Service Order Job", row.name, "service_job", sj.name)
+				row.service_job = sj.name
+
 		prev = self.get_doc_before_save()
 		prev_status = prev.status if prev else None
 		if self.status == READY_FOR_COLLECTION and prev_status != READY_FOR_COLLECTION:
@@ -269,6 +443,24 @@ def add_ad_hoc_job(
 		job.bay = bay
 
 	job.insert(ignore_permissions=True)
+
+	order.append(
+		"jobs",
+		{
+			"job_title": job_title,
+			"category": category,
+			"priority": priority or "Medium",
+			"estimated_hours": flt(estimated_hours) or 1.0,
+			"status": job.status,
+			"technician": technician,
+			"technician_name": emp.employee_name if technician else None,
+			"bay": bay,
+			"source": source,
+			"service_job": job.name,
+			"reason_for_adding": reason,
+		},
+	)
+	order.save(ignore_permissions=True)
 
 	if bay and order.vehicle:
 		vehicle = frappe.get_doc("Service Vehicle", order.vehicle)

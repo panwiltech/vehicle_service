@@ -4,7 +4,7 @@
 frappe.ui.form.on("Service Order", {
 	refresh(frm) {
 		frm.trigger("render_status_stepper");
-		frm.trigger("render_jobs_html");
+		frm.trigger("setup_jobs_tab_actions");
 		frm.trigger("setup_parts_tab_actions");
 		frm.trigger("setup_custom_buttons");
 	},
@@ -1039,233 +1039,177 @@ frappe.ui.form.on("Service Order", {
 		d.show();
 	},
 
-	render_jobs_html(frm) {
-		if (frm.is_new()) {
-			frm.set_df_property("jobs_html", "options", `<div class="text-muted p-3 text-center border rounded">${__("Please save the Service Order to manage workshop jobs.")}</div>`);
+	setup_jobs_tab_actions(frm) {
+		if (frm.fields_dict.jobs && frm.fields_dict.jobs.grid) {
+			const grid = frm.fields_dict.jobs.grid;
+
+			// Add custom action buttons to the jobs grid
+			grid.add_custom_button(__("Assign Technician"), () => {
+				frm.trigger("show_assign_job_dialog");
+			}, "top");
+			grid.add_custom_button(__("Start Clock"), () => {
+				frm.trigger("start_selected_job");
+			}, "top");
+			grid.add_custom_button(__("Pause Clock"), () => {
+				frm.trigger("pause_selected_job");
+			}, "top");
+			grid.add_custom_button(__("Complete Job"), () => {
+				frm.trigger("complete_selected_job");
+			}, "top");
+
+			// Bottom toolbar buttons
+			grid.add_custom_button(__("Assign Technician"), () => {
+				frm.trigger("show_assign_job_dialog");
+			});
+			grid.add_custom_button(__("Start Clock"), () => {
+				frm.trigger("start_selected_job");
+			});
+			grid.add_custom_button(__("Pause Clock"), () => {
+				frm.trigger("pause_selected_job");
+			});
+			grid.add_custom_button(__("Complete Job"), () => {
+				frm.trigger("complete_selected_job");
+			});
+
+			// Rebind click handlers directly on existing buttons to prevent stale references
+			if (grid.custom_buttons) {
+				Object.keys(grid.custom_buttons).forEach(label => {
+					const $btn = grid.custom_buttons[label];
+					if ($btn && $btn.length) {
+						if (label.indexOf("Assign") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("show_assign_job_dialog");
+							});
+						} else if (label.indexOf("Start") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("start_selected_job");
+							});
+						} else if (label.indexOf("Pause") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("pause_selected_job");
+							});
+						} else if (label.indexOf("Complete") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("complete_selected_job");
+							});
+						}
+					}
+				});
+			}
+		}
+	},
+
+	get_selected_jobs(frm) {
+		if (!frm.fields_dict.jobs || !frm.fields_dict.jobs.grid) return [];
+		const grid = frm.fields_dict.jobs.grid;
+		let selected = [];
+		if (grid.get_selected_children) {
+			selected = grid.get_selected_children() || [];
+		}
+		if (!selected.length && grid.get_selected) {
+			const names = grid.get_selected() || [];
+			if (names.length) {
+				selected = (frm.doc.jobs || []).filter(j => names.includes(j.name));
+			}
+		}
+		if (!selected.length) {
+			const checked_names = [];
+			grid.wrapper.find(".grid-body .grid-row-check:checked").each(function () {
+				const name = $(this).closest(".grid-row").attr("data-name");
+				if (name) checked_names.push(name);
+			});
+			if (checked_names.length) {
+				selected = (frm.doc.jobs || []).filter(j => checked_names.includes(j.name));
+			}
+		}
+		return selected;
+	},
+
+	start_selected_job(frm) {
+		const selected = frm.trigger("get_selected_jobs") || [];
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a job row first."));
 			return;
 		}
-
-		frappe.db.get_list("Service Job", {
-			filters: { service_order: frm.doc.name },
-			fields: ["name", "job_title", "category", "priority", "source", "reason_for_adding", "estimated_hours", "actual_hours", "status", "technician", "technician_name", "bay"],
-			order_by: "creation asc",
-			limit: 100
-		}).then((jobs) => {
-			const isClosed = ["Delivered", "Cancelled"].includes(frm.doc.status);
-			const canAdd = !isClosed;
-
-			let html = `
-				<div class="service-jobs-panel" style="padding: 10px 0;">
-					<div class="d-flex justify-content-between align-items-center mb-3">
-						<div>
-							<h6 class="mb-0" style="font-weight: 600;">${__("Workshop Jobs")} (${jobs ? jobs.length : 0})</h6>
-							<small class="text-muted">${__("Manage active labor operations, technician assignments, and job clocks.")}</small>
-						</div>
-						${canAdd ? `
-						<button type="button" class="btn btn-sm btn-primary" data-action="add-job">
-							<i class="fa fa-plus"></i> ${__("Add Job")}
-						</button>
-						` : ''}
-					</div>
-			`;
-
-			if (!jobs || jobs.length === 0) {
-				html += `
-					<div class="text-center text-muted p-4 border rounded" style="background: var(--bg-color, #fafbfc);">
-						<p class="mb-2">${__("No jobs created yet for this service order.")}</p>
-						${canAdd ? `
-						<button type="button" class="btn btn-sm btn-outline-primary" data-action="add-job">
-							<i class="fa fa-plus"></i> ${__("Add First Job")}
-						</button>
-						` : ''}
-					</div>
-				`;
-			} else {
-				html += `
-					<div class="table-responsive border rounded">
-						<table class="table table-hover table-bordered mb-0" style="font-size: 13px;">
-							<thead style="background: var(--subtle-fg, #f8f9fa);">
-								<tr>
-									<th>${__("Job Title")}</th>
-									<th style="width: 90px;">${__("Priority")}</th>
-									<th style="width: 110px;">${__("Source")}</th>
-									<th style="width: 105px;">${__("Category")}</th>
-									<th style="width: 105px;">${__("Hours (Est / Act)")}</th>
-									<th style="width: 120px;">${__("Status")}</th>
-									<th style="width: 160px;">${__("Technician / Bay")}</th>
-									<th style="width: 180px; text-align: right;">${__("Actions")}</th>
-								</tr>
-							</thead>
-							<tbody>
-				`;
-
-				jobs.forEach((job) => {
-					let catBadge = "badge-secondary";
-					if (job.category === "Essential") catBadge = "badge-danger";
-					else if (job.category === "Recommended") catBadge = "badge-info";
-					else if (job.category === "Optional") catBadge = "badge-warning";
-
-					let statusClass = "secondary";
-					if (job.status === "In Progress") statusClass = "primary";
-					else if (job.status === "Completed") statusClass = "success";
-					else if (job.status === "Paused") statusClass = "warning";
-					else if (job.status === "Assigned") statusClass = "info";
-					else if (job.status === "QC Failed") statusClass = "danger";
-
-					let est = job.estimated_hours || 0;
-					let act = job.actual_hours || 0;
-
-					let prioColor = "#4b5563";
-					let prioBg = "#f3f4f6";
-					let prio = job.priority || "Medium";
-					if (prio === "Urgent") {
-						prioColor = "#b91c1c";
-						prioBg = "#fee2e2";
-					} else if (prio === "High") {
-						prioColor = "#c2410c";
-						prioBg = "#ffedd5";
-					} else if (prio === "Medium") {
-						prioColor = "#1d4ed8";
-						prioBg = "#dbeafe";
-					} else if (prio === "Low") {
-						prioColor = "#4b5563";
-						prioBg = "#f3f4f6";
-					}
-					let prioHtml = `<span style="font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; color: ${prioColor}; background: ${prioBg};">${frappe.utils.escape_html(prio)}</span>`;
-
-					let srcColor = "#4b5563";
-					let srcBg = "#f3f4f6";
-					let src = job.source || "From Quotation";
-					if (src === "From Quotation") {
-						srcColor = "#6d28d9";
-						srcBg = "#ede9fe";
-					} else if (src === "Manually Added") {
-						srcColor = "#047857";
-						srcBg = "#d1fae5";
-					} else if (src === "Additional Work") {
-						srcColor = "#b45309";
-						srcBg = "#fef3c7";
-					}
-					let srcHtml = `<span style="font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; color: ${srcColor}; background: ${srcBg};">${frappe.utils.escape_html(src)}</span>`;
-
-					let techBay = [];
-					if (job.technician_name || job.technician) {
-						techBay.push(`<strong>${frappe.utils.escape_html(job.technician_name || job.technician)}</strong>`);
-					}
-					if (job.bay) {
-						techBay.push(`<span class="text-muted"><i class="fa fa-map-marker"></i> ${frappe.utils.escape_html(job.bay)}</span>`);
-					}
-					let techBayHtml = techBay.length ? techBay.join("<br>") : `<span class="text-muted italic">${__("Unassigned")}</span>`;
-
-					let actionBtns = [];
-					if (!isClosed) {
-						if (["Pending Approval", "Assigned", "Paused"].includes(job.status)) {
-							actionBtns.push(`<button type="button" class="btn btn-xs btn-default" data-action="assign-job" data-job="${job.name}" title="${__('Assign Technician or Bay')}"><i class="fa fa-user"></i> ${__('Assign')}</button>`);
-						}
-						if (["Assigned", "Paused", "QC Failed"].includes(job.status)) {
-							actionBtns.push(`<button type="button" class="btn btn-xs btn-primary" data-action="start-job" data-job="${job.name}" title="${__('Start Clock')}"><i class="fa fa-play"></i> ${__('Start')}</button>`);
-						}
-						if (job.status === "In Progress") {
-							actionBtns.push(`<button type="button" class="btn btn-xs btn-warning" data-action="pause-job" data-job="${job.name}" title="${__('Pause Clock')}"><i class="fa fa-pause"></i> ${__('Pause')}</button>`);
-							actionBtns.push(`<button type="button" class="btn btn-xs btn-success" data-action="complete-job" data-job="${job.name}" title="${__('Complete Job')}"><i class="fa fa-check"></i> ${__('Complete')}</button>`);
-						}
-					}
-
-					html += `
-						<tr>
-							<td>
-								<a href="/app/service-job/${job.name}" style="font-weight: 600;">${frappe.utils.escape_html(job.job_title || job.name)}</a>
-								<div class="text-muted small">${job.name}</div>
-								${job.reason_for_adding ? `<div class="text-muted small" style="font-style: italic;"><i class="fa fa-info-circle"></i> ${frappe.utils.escape_html(job.reason_for_adding)}</div>` : ''}
-							</td>
-							<td>${prioHtml}</td>
-							<td>${srcHtml}</td>
-							<td><span class="badge ${catBadge}">${frappe.utils.escape_html(job.category || 'Essential')}</span></td>
-							<td>${est}h / <strong>${act}h</strong></td>
-							<td><span class="indicator-pill ${statusClass}">${frappe.utils.escape_html(job.status)}</span></td>
-							<td>${techBayHtml}</td>
-							<td style="text-align: right; white-space: nowrap;">
-								${actionBtns.join(" ") || '<span class="text-muted text-sm">-</span>'}
-							</td>
-						</tr>
-					`;
-				});
-
-				html += `
-							</tbody>
-						</table>
-					</div>
-				`;
+		const jobName = selected[0].service_job;
+		if (!jobName) {
+			frappe.msgprint(__("Please save the Service Order first so the job doc is created."));
+			return;
+		}
+		frappe.call({
+			method: "vehicle_service.vehicle_service.doctype.service_job.service_job.start_job",
+			args: { job_name: jobName },
+			freeze: true,
+			freeze_message: __("Starting Job Clock..."),
+			callback: (r) => {
+				if (!r.exc) {
+					frappe.show_alert({ message: __("Job clock started for {0}", [jobName]), indicator: "green" });
+					frm.reload_doc();
+				}
 			}
+		});
+	},
 
-			html += `</div>`;
-			frm.set_df_property("jobs_html", "options", html);
-
-			if (frm.fields_dict.jobs_html && frm.fields_dict.jobs_html.$wrapper) {
-				const $wrapper = frm.fields_dict.jobs_html.$wrapper;
-				$wrapper.off("click", "[data-action]").on("click", "[data-action]", function (e) {
-					e.preventDefault();
-					const action = $(this).data("action");
-					const jobName = $(this).data("job");
-
-					if (action === "add-job") {
-						frm.trigger("show_add_job_dialog");
-					} else if (action === "assign-job") {
-						frm.trigger("show_assign_job_dialog", jobName);
-					} else if (action === "start-job") {
-						frappe.call({
-							method: "vehicle_service.vehicle_service.doctype.service_job.service_job.start_job",
-							args: { job_name: jobName },
-							freeze: true,
-							freeze_message: __("Starting Job Clock..."),
-							callback: (r) => {
-								if (!r.exc) {
-									frappe.show_alert({ message: __("Job clock started"), indicator: "green" });
-									frm.trigger("render_jobs_html");
-									frm.reload_doc();
-								}
-							}
-						});
-					} else if (action === "pause-job") {
-						frappe.prompt(
-							[{ fieldname: "reason", label: __("Pause Reason"), fieldtype: "Small Text", reqd: 1 }],
-							(vals) => {
-								frappe.call({
-									method: "vehicle_service.vehicle_service.doctype.service_job.service_job.pause_job",
-									args: { job_name: jobName, reason: vals.reason },
-									freeze: true,
-									freeze_message: __("Pausing Job Clock..."),
-									callback: (r) => {
-										if (!r.exc) {
-											frappe.show_alert({ message: __("Job clock paused"), indicator: "orange" });
-											frm.trigger("render_jobs_html");
-											frm.reload_doc();
-										}
-									}
-								});
-							},
-							__("Pause Job Clock"),
-							__("Pause")
-						);
-					} else if (action === "complete-job") {
-						frappe.confirm(__("Are you sure you want to mark this job as completed?"), () => {
-							frappe.call({
-								method: "vehicle_service.vehicle_service.doctype.service_job.service_job.complete_job",
-								args: { job_name: jobName },
-								freeze: true,
-								freeze_message: __("Completing Job..."),
-								callback: (r) => {
-									if (!r.exc) {
-										frappe.show_alert({ message: __("Job completed successfully"), indicator: "green" });
-										frm.trigger("render_jobs_html");
-										frm.reload_doc();
-									}
-								}
-							});
-						});
+	pause_selected_job(frm) {
+		const selected = frm.trigger("get_selected_jobs") || [];
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a job row first."));
+			return;
+		}
+		const jobName = selected[0].service_job;
+		if (!jobName) {
+			frappe.msgprint(__("Please save the Service Order first so the job doc is created."));
+			return;
+		}
+		frappe.prompt(
+			[{ fieldname: "reason", label: __("Pause Reason"), fieldtype: "Small Text", reqd: 1 }],
+			(vals) => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_job.service_job.pause_job",
+					args: { job_name: jobName, reason: vals.reason },
+					freeze: true,
+					freeze_message: __("Pausing Job Clock..."),
+					callback: (r) => {
+						if (!r.exc) {
+							frappe.show_alert({ message: __("Job clock paused for {0}", [jobName]), indicator: "orange" });
+							frm.reload_doc();
+						}
 					}
 				});
-			}
+			},
+			__("Pause Job Clock ({0})", [jobName]),
+			__("Pause")
+		);
+	},
+
+	complete_selected_job(frm) {
+		const selected = frm.trigger("get_selected_jobs") || [];
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a job row first."));
+			return;
+		}
+		const jobName = selected[0].service_job;
+		if (!jobName) {
+			frappe.msgprint(__("Please save the Service Order first so the job doc is created."));
+			return;
+		}
+		frappe.confirm(__("Are you sure you want to mark job {0} as completed?", [jobName]), () => {
+			frappe.call({
+				method: "vehicle_service.vehicle_service.doctype.service_job.service_job.complete_job",
+				args: { job_name: jobName },
+				freeze: true,
+				freeze_message: __("Completing Job..."),
+				callback: (r) => {
+					if (!r.exc) {
+						frappe.show_alert({ message: __("Job {0} completed successfully", [jobName]), indicator: "green" });
+						frm.reload_doc();
+					}
+				}
+			});
 		});
 	},
 
@@ -1304,7 +1248,6 @@ frappe.ui.form.on("Service Order", {
 						if (!r.exc) {
 							d.hide();
 							frappe.show_alert({ message: __("Job {0} created", [r.message.job]), indicator: "green" });
-							frm.trigger("render_jobs_html");
 							frm.reload_doc();
 						}
 					}
@@ -1315,7 +1258,16 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	show_assign_job_dialog(frm, jobName) {
-		if (!jobName) return;
+		if (!jobName) {
+			const selected = frm.trigger("get_selected_jobs") || [];
+			if (selected.length) {
+				jobName = selected[0].service_job;
+			}
+		}
+		if (!jobName) {
+			frappe.msgprint(__("Please select a saved job row to assign a technician."));
+			return;
+		}
 		const d = new frappe.ui.Dialog({
 			title: __("Assign Technician & Bay ({0})", [jobName]),
 			fields: [
@@ -1337,7 +1289,6 @@ frappe.ui.form.on("Service Order", {
 						if (!r.exc) {
 							d.hide();
 							frappe.show_alert({ message: __("Technician assigned to {0}", [jobName]), indicator: "green" });
-							frm.trigger("render_jobs_html");
 							frm.reload_doc();
 						}
 					}
@@ -1394,3 +1345,31 @@ frappe.ui.form.on("Service Order Part", {
 			});
 	}
 });
+
+frappe.ui.form.on("Service Order Job", {
+	jobs_add(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		row.category = "Essential";
+		row.priority = "Medium";
+		row.status = "Approved";
+		row.source = "Manually Added";
+		row.estimated_hours = 1.0;
+		row.actual_hours = 0.0;
+		frm.refresh_field("jobs");
+	},
+
+	technician(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.technician) {
+			frappe.model.set_value(cdt, cdn, "technician_name", "");
+			return;
+		}
+		frappe.db.get_value("Employee", row.technician, "employee_name")
+			.then(r => {
+				if (r && r.message) {
+					frappe.model.set_value(cdt, cdn, "technician_name", r.message.employee_name);
+				}
+			});
+	}
+});
+

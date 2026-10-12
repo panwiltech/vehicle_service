@@ -1,0 +1,149 @@
+{
+ "actions": [],
+ "creation": "2026-10-12 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "job_title",
+  "category",
+  "priority",
+  "estimated_hours",
+  "actual_hours",
+  "status",
+  "technician",
+  "technician_name",
+  "bay",
+  "cb_1",
+  "source",
+  "service_job",
+  "quotation",
+  "quotation_item",
+  "reason_for_adding"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "fieldname": "job_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Job",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "Essential",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Category",
+   "options": "Essential\nRecommended\nOptional"
+  },
+  {
+   "columns": 1,
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Priority",
+   "options": "Low\nMedium\nHigh\nUrgent"
+  },
+  {
+   "columns": 1,
+   "default": "1.0",
+   "fieldname": "estimated_hours",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Est Hours"
+  },
+  {
+   "columns": 1,
+   "default": "0.0",
+   "fieldname": "actual_hours",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Act Hours",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "default": "Approved",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending Approval\nApproved\nAssigned\nIn Progress\nPaused\nCompleted\nQC Failed\nPassed\nDeclined\nCancelled"
+  },
+  {
+   "columns": 2,
+   "fieldname": "technician",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Technician",
+   "options": "Employee"
+  },
+  {
+   "fetch_from": "technician.employee_name",
+   "fieldname": "technician_name",
+   "fieldtype": "Data",
+   "label": "Technician Name",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "bay",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bay",
+   "options": "Workshop Location"
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Manually Added",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "From Quotation\nManually Added\nAdditional Work\nEstimate\nAdditional\nPackage"
+  },
+  {
+   "fieldname": "service_job",
+   "fieldtype": "Link",
+   "label": "Service Job",
+   "options": "Service Job",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quotation",
+   "fieldtype": "Link",
+   "label": "Quotation",
+   "options": "Quotation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quotation_item",
+   "fieldtype": "Data",
+   "label": "Quotation Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason_for_adding",
+   "fieldtype": "Small Text",
+   "label": "Reason for Adding"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-12 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Service Order Job",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

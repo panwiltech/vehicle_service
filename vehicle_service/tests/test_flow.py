@@ -887,6 +887,49 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(part.qty_issued, 3.0)
 		self.assertEqual(part.part_status, "Issued")
 
+	def test_direct_table_row_job_addition_and_sync(self):
+		order = self.create_clean_order("TST-GRID-JOB-01")
+
+		# 1. Add job row directly to child table (Quotation-style grid row)
+		jrow = order.append("jobs", {
+			"job_title": "Direct Brake Check",
+			"category": "Essential",
+			"estimated_hours": 1.5,
+		})
+		order.save()
+
+		order.reload()
+		self.assertEqual(len(order.jobs), 1)
+		jrow = order.jobs[0]
+		self.assertEqual(jrow.job_title, "Direct Brake Check")
+		self.assertEqual(jrow.source, "Manually Added")
+		self.assertEqual(jrow.status, "Approved")
+		self.assertTrue(jrow.service_job)
+
+		# 2. Verify standalone Service Job doc exists and matches
+		sj = frappe.get_doc("Service Job", jrow.service_job)
+		self.assertEqual(sj.service_order, order.name)
+		self.assertEqual(sj.job_title, "Direct Brake Check")
+		self.assertEqual(sj.estimated_hours, 1.5)
+
+		# 3. Update Service Job status to 'In Progress' and verify sync back to order.jobs
+		sj.status = "In Progress"
+		from frappe.utils import add_to_date, now_datetime
+		t1 = now_datetime()
+		t2 = add_to_date(t1, hours=1)
+		sj.append("time_logs", {
+			"from_time": t1,
+			"to_time": t2,
+			"hours": 1.0,
+		})
+		sj.save()
+
+		order.sync_status_from_jobs_and_parts()
+		order.reload()
+		self.assertEqual(order.jobs[0].status, "In Progress")
+		self.assertEqual(order.jobs[0].actual_hours, 1.0)
+
+
 
 
 

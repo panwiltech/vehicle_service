@@ -54,7 +54,7 @@
   "sb_corrections",
   "corrections",
   "tab_jobs",
-  "jobs_html",
+  "jobs",
   "tab_parts",
   "parts",
   "tab_qc",
@@ -390,9 +390,10 @@
    "label": "Jobs"
   },
   {
-   "fieldname": "jobs_html",
-   "fieldtype": "HTML",
-   "label": "Jobs"
+   "fieldname": "jobs",
+   "fieldtype": "Table",
+   "label": "Jobs",
+   "options": "Service Order Job"
   },
   {
    "fieldname": "tab_parts",
