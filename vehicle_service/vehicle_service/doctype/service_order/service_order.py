@@ -1,4 +1,4 @@
-# Copyright (c) 2026, Azazel and contributors
+ # Copyright (c) 2026, Azazel and contributors
 # For license information, please see license.txt
 
 import json
@@ -1094,6 +1094,18 @@ def sync_quotation_to_service_order(doc, method=None):
 							job_modified = True
 					if job_modified:
 						job.save(ignore_permissions=True)
+
+					# Keep Service Order jobs child table in sync
+					for j_row in order.get("jobs", []):
+						if j_row.service_job == item.vs_job:
+							if flt(j_row.estimated_hours) != flt(item.qty):
+								j_row.estimated_hours = flt(item.qty)
+								order_modified = True
+							if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
+								if j_row.status != item.vs_approval and j_row.status not in ["In Progress", "Completed"]:
+									j_row.status = item.vs_approval
+									order_modified = True
+							break
 
 			# 3. New item added directly on Quotation (neither vs_part_row nor vs_job yet)
 			else:
