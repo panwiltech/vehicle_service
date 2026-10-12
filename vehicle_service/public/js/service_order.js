@@ -443,9 +443,7 @@ frappe.ui.form.on("Service Order", {
 	setup_parts_tab_actions(frm) {
 		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const grid = frm.fields_dict.parts.grid;
-			grid.add_custom_button(__("+ Add Part"), () => {
-				frm.trigger("show_add_part_dialog");
-			});
+			// Parts are added directly via standard grid rows like in Quotation
 			grid.add_custom_button(__("Substitute Part"), () => {
 				frm.trigger("show_part_substitution_dialog");
 			});
@@ -656,11 +654,24 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	show_parts_issue_dialog(frm, selected_rows = null) {
-		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0))) > 0);
-		if (!approvedParts.length) {
-			frappe.msgprint(__("No pending approved parts to issue for this order."));
+		if (frm.is_new()) {
+			frappe.msgprint(__("Please save the Service Order before issuing parts."));
 			return;
 		}
+
+		if (frm.is_dirty()) {
+			frappe.confirm(
+				__("You have unsaved changes. Would you like to save the Service Order first and proceed to issue parts?"),
+				() => {
+					frm.save().then(() => {
+						frm.trigger("show_parts_issue_dialog");
+					});
+				}
+			);
+			return;
+		}
+
+		let approvedParts = (frm.doc.parts || []).filter(p => p.approval_status === "Approved" && (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0))) > 0);
 
 		if (!selected_rows && frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const gridSelected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
@@ -671,10 +682,22 @@ frappe.ui.form.on("Service Order", {
 
 		if (selected_rows && selected_rows.length > 0) {
 			const selectedNames = new Set(selected_rows.map(r => r.name));
-			const filtered = approvedParts.filter(p => selectedNames.has(p.name));
-			if (filtered.length > 0) {
-				approvedParts = filtered;
+			const unapproved = (frm.doc.parts || []).filter(p => selectedNames.has(p.name) && p.approval_status !== "Approved");
+			if (unapproved.length > 0 && unapproved.length === selected_rows.length) {
+				frappe.msgprint(__("The selected part(s) are not approved for workshop issuance."));
+				return;
 			}
+			const filtered = approvedParts.filter(p => selectedNames.has(p.name));
+			if (!filtered.length) {
+				frappe.msgprint(__("The selected part(s) have no pending quantities to issue."));
+				return;
+			}
+			approvedParts = filtered;
+		}
+
+		if (!approvedParts.length) {
+			frappe.msgprint(__("No pending approved parts to issue for this order."));
+			return;
 		}
 
 		let fields = [];
@@ -711,7 +734,8 @@ frappe.ui.form.on("Service Order", {
 				let payload = [];
 				approvedParts.forEach((p, idx) => {
 					let isChecked = vals[`check_${idx}`] !== undefined ? vals[`check_${idx}`] : 1;
-					let qty = vals[`qty_${idx}`] !== undefined ? flt(vals[`qty_${idx}`]) : (flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0)));
+					let max = flt(p.qty_required) - (flt(p.qty_issued) - flt(p.qty_returned || 0));
+					let qty = vals[`qty_${idx}`] !== undefined ? flt(vals[`qty_${idx}`]) : max;
 					if (isChecked && qty > 0) {
 						payload.push({ part_row: p.name, qty: qty });
 					}
@@ -751,48 +775,112 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	show_parts_return_dialog(frm) {
-		const issuedParts = (frm.doc.parts || []).filter(p => (p.qty_issued - (p.qty_returned || 0)) > 0);
+		if (frm.is_new()) {
+			frappe.msgprint(__("Please save the Service Order before returning parts."));
+			return;
+		}
+
+		if (frm.is_dirty()) {
+			frappe.confirm(
+				__("You have unsaved changes. Would you like to save the Service Order first and proceed to return parts?"),
+				() => {
+					frm.save().then(() => {
+						frm.trigger("show_parts_return_dialog");
+					});
+				}
+			);
+			return;
+		}
+
+		let issuedParts = (frm.doc.parts || []).filter(p => (flt(p.qty_issued) - flt(p.qty_returned || 0)) > 0);
 		if (!issuedParts.length) {
 			frappe.msgprint(__("No parts currently issued on vehicle to return."));
 			return;
 		}
 
-		let fields = issuedParts.map((p) => {
-			let onVeh = (p.qty_issued - (p.qty_returned || 0));
-			return {
-				fieldname: `part_${p.name}`,
-				label: `${p.item_name || p.item_code} (Currently in WIP: ${onVeh})`,
+		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
+			const gridSelected = frm.fields_dict.parts.grid.get_selected_children ? frm.fields_dict.parts.grid.get_selected_children() : [];
+			if (gridSelected && gridSelected.length > 0) {
+				const selectedNames = new Set(gridSelected.map(r => r.name));
+				const filtered = issuedParts.filter(p => selectedNames.has(p.name));
+				if (filtered.length > 0) {
+					issuedParts = filtered;
+				}
+			}
+		}
+
+		let fields = [];
+		issuedParts.forEach((p, idx) => {
+			let onVeh = flt(p.qty_issued) - flt(p.qty_returned || 0);
+			fields.push({
+				fieldname: `check_${idx}`,
+				label: `${p.item_name || p.item_code} (${p.item_code})`,
+				fieldtype: "Check",
+				default: 1
+			});
+			fields.push({
+				fieldname: `col_${idx}`,
+				fieldtype: "Column Break"
+			});
+			fields.push({
+				fieldname: `qty_${idx}`,
+				label: __("Qty to Return (In WIP: {0})", [onVeh]),
 				fieldtype: "Float",
-				default: 0
-			};
+				default: onVeh
+			});
+			fields.push({
+				fieldname: `sec_${idx}`,
+				fieldtype: "Section Break"
+			});
 		});
 
 		const d = new frappe.ui.Dialog({
 			title: __("Return Parts from Workshop to Store"),
 			fields: fields,
 			primary_action_label: __("Return Parts"),
-			primary_action: (vals) => {
+			primary_action: () => {
+				const vals = d.get_values() || {};
 				let payload = [];
-				issuedParts.forEach(p => {
-					let qty = vals[`part_${p.name}`];
-					if (qty && qty > 0) {
+				issuedParts.forEach((p, idx) => {
+					let isChecked = vals[`check_${idx}`] !== undefined ? vals[`check_${idx}`] : 1;
+					let onVeh = flt(p.qty_issued) - flt(p.qty_returned || 0);
+					let qty = vals[`qty_${idx}`] !== undefined ? flt(vals[`qty_${idx}`]) : onVeh;
+					if (isChecked && qty > 0) {
 						payload.push({ part_row: p.name, qty: qty });
 					}
 				});
-				if (!payload.length) return;
+
+				if (!payload.length) {
+					frappe.msgprint(__("Please select at least one part with quantity > 0 to return."));
+					return;
+				}
 
 				frappe.call({
 					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.return_parts_from_workshop",
 					args: { order_name: frm.doc.name, items_json: JSON.stringify(payload) },
 					freeze: true,
-					callback: () => {
-						d.hide();
-						frm.reload_doc();
+					freeze_message: __("Returning Parts to Store..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({
+								message: __("Parts returned successfully via Stock Entry {0}", [r.message.stock_entry]),
+								indicator: "green"
+							});
+							frm.reload_doc();
+						}
 					}
 				});
 			}
 		});
+
 		d.show();
+
+		issuedParts.forEach((p, idx) => {
+			let onVeh = flt(p.qty_issued) - flt(p.qty_returned || 0);
+			d.set_value(`check_${idx}`, 1);
+			d.set_value(`qty_${idx}`, onVeh);
+		});
 	},
 
 	show_delivery_dialog(frm) {
@@ -1135,5 +1223,52 @@ frappe.ui.form.on("Service Order", {
 			}
 		});
 		d.show();
+	}
+});
+
+frappe.ui.form.on("Service Order Part", {
+	parts_add(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		row.qty_required = 1.0;
+		row.category = "Essential";
+		row.source = frm.doc.quotation ? "Additional Part" : "Manually Added";
+		row.approval_status = "Approved";
+		row.part_status = "Required";
+		frm.refresh_field("parts");
+	},
+
+	item_code(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.item_code) return;
+
+		row.qty_required = row.qty_required || 1.0;
+		row.category = row.category || "Essential";
+		row.source = row.source || (frm.doc.quotation ? "Additional Part" : "Manually Added");
+		row.approval_status = "Approved";
+		row.part_status = "Required";
+
+		frappe.db.get_value("Item", row.item_code, ["item_name", "valuation_rate", "is_stock_item"])
+			.then(r => {
+				if (r && r.message) {
+					if (!r.message.is_stock_item) {
+						frappe.msgprint(__("Item {0} is not a stock item.", [row.item_code]));
+						frappe.model.set_value(cdt, cdn, "item_code", "");
+						return;
+					}
+					frappe.model.set_value(cdt, cdn, "item_name", r.message.item_name || row.item_code);
+
+					// Fetch standard selling price list rate
+					frappe.db.get_value("Item Price", {
+						item_code: row.item_code,
+						price_list: "Standard Selling"
+					}, "price_list_rate").then(pr => {
+						const rate = (pr && pr.message && pr.message.price_list_rate) ? pr.message.price_list_rate : (r.message.valuation_rate || 0);
+						frappe.model.set_value(cdt, cdn, "rate", rate);
+						frappe.model.set_value(cdt, cdn, "approval_status", "Approved");
+						frappe.model.set_value(cdt, cdn, "part_status", "Required");
+						frappe.model.set_value(cdt, cdn, "source", frm.doc.quotation ? "Additional Part" : "Manually Added");
+					});
+				}
+			});
 	}
 });

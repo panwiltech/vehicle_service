@@ -46,7 +46,28 @@ class ServiceOrder(Document):
 		self.validate_open_orders()
 		self.fetch_vehicle_and_company_defaults()
 		self.validate_intake_frozen()
+		self.validate_parts_defaults()
 		self.recalculate_parts_summary()
+
+	def validate_parts_defaults(self):
+		has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": self.name, "docstatus": 1}))
+		for row in self.get("parts", []):
+			# If part was manually added on order (outside quotation sync), it has no quotation_item
+			if not row.quotation_item:
+				if not row.source or row.source == "From Quotation":
+					row.source = "Additional Part" if has_quote else "Manually Added"
+				if not row.approval_status or row.approval_status == "Pending":
+					row.approval_status = "Approved"
+
+			if row.approval_status == "Approved" and (not row.part_status or row.part_status in ("Pending Approval", "Pending")):
+				row.part_status = PART_REQUIRED
+
+			if not row.item_name and row.item_code:
+				row.item_name = frappe.db.get_value("Item", row.item_code, "item_name") or row.item_code
+
+			if (row.rate is None or flt(row.rate) <= 0) and row.item_code:
+				std_price = frappe.db.get_value("Item Price", {"item_code": row.item_code, "price_list": "Standard Selling"}, "price_list_rate")
+				row.rate = flt(std_price) if std_price else flt(frappe.db.get_value("Item", row.item_code, "valuation_rate") or 0)
 
 	def validate_open_orders(self):
 		if self.is_new() or self.has_value_changed("vehicle"):

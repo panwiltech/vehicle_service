@@ -844,6 +844,49 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(part.qty_issued, 2.0)
 		self.assertEqual(part.part_status, "Issued")
 
+	def test_direct_table_row_part_addition_and_issuance(self):
+		import json
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+		order = self.create_clean_order("TST-GRID-ADD-01")
+		settings = frappe.get_cached_doc("Vehicle Service Settings")
+
+		# Ensure stock exists in stores warehouse
+		make_stock_entry(
+			item_code="BRAKE-PAD-TEST",
+			to_warehouse=settings.parts_warehouse,
+			qty=10.0,
+			rate=50.0,
+			purpose="Material Receipt",
+			company=order.company,
+		)
+
+		# Simulate adding a row directly into the child table (like in Quotation)
+		row = order.append("parts", {
+			"item_code": "BRAKE-PAD-TEST",
+			"qty_required": 3.0,
+			"rate": 100.0,
+		})
+		order.save()
+
+		order.reload()
+		part = next(p for p in order.parts if p.item_code == "BRAKE-PAD-TEST")
+		self.assertEqual(part.approval_status, "Approved")
+		self.assertEqual(part.part_status, "Required")
+		self.assertEqual(part.source, "Manually Added")
+		self.assertGreater(part.rate, 0)
+
+		# Issue the part via Stock Entry
+		issue_res = issue_parts_to_workshop(
+			order_name=order.name,
+			items_json=json.dumps([{"part_row": part.name, "qty": 3.0}]),
+		)
+		self.assertEqual(issue_res["status"], "success")
+
+		order.reload()
+		part = next(p for p in order.parts if p.item_code == "BRAKE-PAD-TEST")
+		self.assertEqual(part.qty_issued, 3.0)
+		self.assertEqual(part.part_status, "Issued")
+
 
 
 
