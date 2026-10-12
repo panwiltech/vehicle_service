@@ -53,13 +53,22 @@ class ServiceOrder(Document):
 
 	def validate_jobs_defaults(self):
 		has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": self.name, "docstatus": 1}))
+		settings = frappe.get_cached_doc("Vehicle Service Settings")
+		default_rate = flt(settings.labour_rate) or 50.0
+		default_item = settings.labour_item or "LABOUR"
+
 		for row in self.get("jobs", []):
+			if not row.service_item:
+				row.service_item = default_item
 			if not row.category:
 				row.category = "Essential"
 			if not row.priority:
 				row.priority = "Medium"
 			if not row.estimated_hours or flt(row.estimated_hours) <= 0:
 				row.estimated_hours = 1.0
+			if row.rate is None or flt(row.rate) == 0:
+				row.rate = default_rate
+			row.amount = round(flt(row.estimated_hours) * flt(row.rate), 2)
 			if not row.status:
 				row.status = "Approved"
 			if not row.source or row.source == "From Quotation":
@@ -82,6 +91,12 @@ class ServiceOrder(Document):
 				"priority",
 				"estimated_hours",
 				"actual_hours",
+				"service_item",
+				"rate",
+				"amount",
+				"supplier",
+				"supplier_cost",
+				"supplier_invoice_ref",
 				"status",
 				"technician",
 				"technician_name",
@@ -106,6 +121,12 @@ class ServiceOrder(Document):
 						"priority": sj.priority or "Medium",
 						"estimated_hours": flt(sj.estimated_hours or 1.0),
 						"actual_hours": flt(sj.actual_hours or 0.0),
+						"service_item": sj.service_item or "LABOUR",
+						"rate": flt(sj.rate or 50.0),
+						"amount": flt(sj.amount or (flt(sj.estimated_hours or 1.0) * flt(sj.rate or 50.0))),
+						"supplier": sj.supplier,
+						"supplier_cost": flt(sj.supplier_cost or 0.0),
+						"supplier_invoice_ref": sj.supplier_invoice_ref,
 						"status": sj.status or "Approved",
 						"technician": sj.technician,
 						"technician_name": sj.technician_name,
@@ -130,6 +151,12 @@ class ServiceOrder(Document):
 				sj.category = row.category or "Essential"
 				sj.priority = row.priority or "Medium"
 				sj.estimated_hours = flt(row.estimated_hours or 1.0)
+				sj.service_item = row.service_item or "LABOUR"
+				sj.rate = flt(row.rate or 50.0)
+				sj.amount = flt(row.amount or (flt(sj.estimated_hours) * flt(sj.rate)))
+				sj.supplier = row.supplier
+				sj.supplier_cost = flt(row.supplier_cost or 0.0)
+				sj.supplier_invoice_ref = row.supplier_invoice_ref
 				sj.status = row.status or "Approved"
 				sj.technician = row.technician
 				if row.technician:
@@ -157,6 +184,21 @@ class ServiceOrder(Document):
 						fields_to_update["priority"] = row.priority
 					if flt(row.estimated_hours) != flt(sj.estimated_hours):
 						fields_to_update["estimated_hours"] = flt(row.estimated_hours)
+					if row.service_item != sj.service_item:
+						fields_to_update["service_item"] = row.service_item
+					if flt(row.rate) != flt(sj.rate):
+						fields_to_update["rate"] = flt(row.rate)
+					calc_amount = round(flt(row.estimated_hours) * flt(row.rate), 2)
+					if flt(row.amount) != calc_amount:
+						row.amount = calc_amount
+					if flt(sj.amount) != calc_amount:
+						fields_to_update["amount"] = calc_amount
+					if row.supplier != sj.supplier:
+						fields_to_update["supplier"] = row.supplier
+					if flt(row.supplier_cost) != flt(sj.supplier_cost):
+						fields_to_update["supplier_cost"] = flt(row.supplier_cost)
+					if row.supplier_invoice_ref != sj.supplier_invoice_ref:
+						fields_to_update["supplier_invoice_ref"] = row.supplier_invoice_ref
 					if row.technician != sj.technician:
 						fields_to_update["technician"] = row.technician
 						fields_to_update["technician_user"] = frappe.db.get_value("Employee", row.technician, "user_id") if row.technician else None
@@ -413,6 +455,11 @@ def add_ad_hoc_job(
 	technician: str | None = None,
 	bay: str | None = None,
 	reason: str | None = None,
+	service_item: str | None = None,
+	rate: float | None = None,
+	supplier: str | None = None,
+	supplier_cost: float | None = None,
+	supplier_invoice_ref: str | None = None,
 ):
 	order = frappe.get_doc("Service Order", service_order)
 	if order.status in (DELIVERED, CANCELLED):
@@ -420,12 +467,22 @@ def add_ad_hoc_job(
 
 	has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": order.name, "docstatus": 1}))
 	source = "Additional Work" if has_quote else "Manually Added"
+	settings = frappe.get_cached_doc("Vehicle Service Settings")
+	srv_item = service_item or settings.labour_item or "LABOUR"
+	srv_rate = flt(rate) if rate is not None and flt(rate) > 0 else (flt(settings.labour_rate) or 50.0)
+	calc_amount = round((flt(estimated_hours) or 1.0) * srv_rate, 2)
 
 	job = frappe.new_doc("Service Job")
 	job.service_order = order.name
 	job.job_title = job_title
 	job.category = category
+	job.service_item = srv_item
 	job.estimated_hours = flt(estimated_hours) or 1.0
+	job.rate = srv_rate
+	job.amount = calc_amount
+	job.supplier = supplier
+	job.supplier_cost = flt(supplier_cost or 0.0)
+	job.supplier_invoice_ref = supplier_invoice_ref
 	job.priority = priority or "Medium"
 	job.description = description
 	job.reason_for_adding = reason
@@ -447,10 +504,16 @@ def add_ad_hoc_job(
 	order.append(
 		"jobs",
 		{
+			"service_item": srv_item,
 			"job_title": job_title,
 			"category": category,
 			"priority": priority or "Medium",
 			"estimated_hours": flt(estimated_hours) or 1.0,
+			"rate": srv_rate,
+			"amount": calc_amount,
+			"supplier": supplier,
+			"supplier_cost": flt(supplier_cost or 0.0),
+			"supplier_invoice_ref": supplier_invoice_ref,
 			"status": job.status,
 			"technician": technician,
 			"technician_name": emp.employee_name if technician else None,
@@ -694,22 +757,27 @@ def make_service_quotation(order_name: str):
 	jobs = frappe.get_all(
 		"Service Job",
 		filters={"service_order": order.name, "quotation": ["in", ["", None]], "status": "Pending Approval"},
-		fields=["name", "job_title", "category", "estimated_hours"],
+		fields=["name", "job_title", "category", "estimated_hours", "service_item", "rate", "supplier", "supplier_invoice_ref"],
 	)
 	parts = [p for p in order.parts if not p.quotation and p.approval_status == "Pending"]
 
-	labour_item = settings.labour_item
+	labour_item = settings.labour_item or "LABOUR"
 	labour_rate = flt(settings.labour_rate) or 50.0
 
 	for j in jobs:
+		item_code = j.service_item or labour_item
+		j_rate = flt(j.rate) or labour_rate
+		desc = f"{item_code}: {j.job_title}" if j.job_title else item_code
+		if item_code == "SUBLET" and getattr(j, "supplier", None):
+			desc += f" (Sublet by {j.supplier} - Ref: {getattr(j, 'supplier_invoice_ref', '') or 'N/A'})"
 		quotation.append(
 			"items",
 			{
-				"item_code": labour_item or "Labour",
+				"item_code": item_code,
 				"item_name": j.job_title,
-				"description": f"Labour for job: {j.job_title}",
+				"description": desc,
 				"qty": flt(j.estimated_hours) or 1.0,
-				"rate": labour_rate,
+				"rate": j_rate,
 				"vs_job": j.name,
 				"vs_category": j.category or "Maintenance",
 				"vs_approval": "Pending",
@@ -1362,7 +1430,7 @@ def create_sales_invoice_from_order(order_name: str):
 
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
 	wip_wh = settings.wip_warehouse
-	labour_item = settings.labour_item or "Labour"
+	labour_item = settings.labour_item or "LABOUR"
 	labour_rate = flt(settings.labour_rate) or 50.0
 
 	si = frappe.new_doc("Sales Invoice")
@@ -1376,20 +1444,25 @@ def create_sales_invoice_from_order(order_name: str):
 	jobs = frappe.get_all(
 		"Service Job",
 		filters={"service_order": order.name, "status": ["in", [JOB_DONE, "Completed", "Passed"]]},
-		fields=["name", "job_title", "sales_order", "so_detail", "estimated_hours", "actual_hours"],
+		fields=["name", "job_title", "sales_order", "so_detail", "estimated_hours", "actual_hours", "service_item", "rate", "supplier", "supplier_invoice_ref"],
 	)
 
 	for j in jobs:
 		billable_hours = billable_labour_hours(j.estimated_hours, j.actual_hours, settings.labour_billing_basis)
 		if billable_hours > 0:
+			item_code = j.service_item or labour_item
+			j_rate = flt(j.rate) or labour_rate
+			desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
+			if item_code == "SUBLET" and getattr(j, "supplier", None):
+				desc += f" (Sublet by {j.supplier} - Ref: {getattr(j, 'supplier_invoice_ref', '') or 'N/A'})"
 			si.append(
 				"items",
 				{
-					"item_code": labour_item,
+					"item_code": item_code,
 					"item_name": j.job_title,
-					"description": f"Labour for job: {j.job_title} ({billable_hours} hrs)",
+					"description": desc,
 					"qty": billable_hours,
-					"rate": labour_rate,
+					"rate": j_rate,
 					"sales_order": j.sales_order,
 					"so_detail": j.so_detail,
 					"vs_job": j.name,

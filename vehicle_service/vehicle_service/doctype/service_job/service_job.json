@@ -35,9 +35,15 @@
   "qc_fail_reason",
   "time_logs",
   "sb_commercial",
+  "service_item",
+  "rate",
+  "amount",
   "quotation",
   "quotation_item",
   "cb_commercial",
+  "supplier",
+  "supplier_cost",
+  "supplier_invoice_ref",
   "sales_order",
   "so_detail"
  ],
@@ -247,6 +253,24 @@
    "label": "Commercial Link"
   },
   {
+   "default": "LABOUR",
+   "fieldname": "service_item",
+   "fieldtype": "Link",
+   "label": "Service Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "read_only": 1
+  },
+  {
    "fieldname": "quotation",
    "fieldtype": "Link",
    "label": "Quotation",
@@ -263,6 +287,22 @@
   {
    "fieldname": "cb_commercial",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Sublet Supplier",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "supplier_cost",
+   "fieldtype": "Currency",
+   "label": "Supplier Cost"
+  },
+  {
+   "fieldname": "supplier_invoice_ref",
+   "fieldtype": "Data",
+   "label": "Supplier Invoice Ref"
   },
   {
    "fieldname": "sales_order",

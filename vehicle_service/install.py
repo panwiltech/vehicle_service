@@ -196,6 +196,7 @@ def after_install():
 	setup_custom_fields()
 	setup_default_locations()
 	setup_default_qc_template()
+	setup_default_service_items()
 	setup_default_settings()
 
 
@@ -204,6 +205,7 @@ def after_migrate():
 	setup_custom_fields()
 	setup_default_locations()
 	setup_default_qc_template()
+	setup_default_service_items()
 	setup_default_settings()
 
 
@@ -243,6 +245,70 @@ def setup_default_qc_template():
 	frappe.db.commit()
 
 
+DEFAULT_SERVICE_ITEMS = [
+	{
+		"item_code": "LABOUR",
+		"item_name": "Workshop Labour",
+		"item_group": "Services",
+		"stock_uom": "Hour",
+		"is_stock_item": 0,
+		"is_sales_item": 1,
+		"is_purchase_item": 0,
+		"description": "General workshop, mechanical and electrical labour",
+	},
+	{
+		"item_code": "WHEEL-ALIGN",
+		"item_name": "Wheel Alignment",
+		"item_group": "Services",
+		"stock_uom": "Job",
+		"is_stock_item": 0,
+		"is_sales_item": 1,
+		"is_purchase_item": 0,
+		"description": "Vehicle computerized wheel alignment service",
+	},
+	{
+		"item_code": "REGAS",
+		"item_name": "A/C Regas",
+		"item_group": "Services",
+		"stock_uom": "Job",
+		"is_stock_item": 0,
+		"is_sales_item": 1,
+		"is_purchase_item": 0,
+		"description": "Air conditioning system evac, vacuum test and regas",
+	},
+	{
+		"item_code": "SUBLET",
+		"item_name": "Sublet Outside Service",
+		"item_group": "Services",
+		"stock_uom": "Job",
+		"is_stock_item": 0,
+		"is_sales_item": 1,
+		"is_purchase_item": 1,
+		"description": "Outside specialist sublet work (engineering, auto glass, upholstery)",
+	},
+]
+
+
+def setup_default_service_items():
+	if not frappe.db.exists("UOM", "Job"):
+		uom = frappe.new_doc("UOM")
+		uom.uom_name = "Job"
+		uom.save(ignore_permissions=True)
+
+	if not frappe.db.exists("Item Group", "Services"):
+		ig = frappe.new_doc("Item Group")
+		ig.item_group_name = "Services"
+		ig.parent_item_group = "All Item Groups"
+		ig.save(ignore_permissions=True)
+
+	for itm in DEFAULT_SERVICE_ITEMS:
+		if not frappe.db.exists("Item", itm["item_code"]):
+			item = frappe.new_doc("Item")
+			item.update(itm)
+			item.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
 def setup_default_settings():
 	settings = frappe.get_single("Vehicle Service Settings")
 	changed = False
@@ -261,6 +327,13 @@ def setup_default_settings():
 	if not settings.collection_location and frappe.db.exists("Workshop Location", "Collection Area"):
 		settings.collection_location = "Collection Area"
 		changed = True
+	if not settings.labour_item and frappe.db.exists("Item", "LABOUR"):
+		settings.labour_item = "LABOUR"
+		changed = True
+	if not settings.labour_rate:
+		settings.labour_rate = 50.0
+		changed = True
 	if changed:
 		settings.save(ignore_permissions=True)
 		frappe.db.commit()
+

@@ -5,48 +5,46 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "service_item",
   "job_title",
-  "category",
-  "priority",
   "estimated_hours",
+  "rate",
+  "amount",
   "actual_hours",
   "status",
   "technician",
   "technician_name",
   "bay",
+  "category",
+  "priority",
   "cb_1",
   "source",
   "service_job",
   "quotation",
   "quotation_item",
-  "reason_for_adding"
+  "reason_for_adding",
+  "sb_sublet",
+  "supplier",
+  "supplier_cost",
+  "supplier_invoice_ref"
  ],
  "fields": [
+  {
+   "columns": 2,
+   "default": "LABOUR",
+   "fieldname": "service_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Service Item",
+   "options": "Item"
+  },
   {
    "columns": 3,
    "fieldname": "job_title",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Job",
+   "label": "Job Description",
    "reqd": 1
-  },
-  {
-   "columns": 1,
-   "default": "Essential",
-   "fieldname": "category",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Category",
-   "options": "Essential\nRecommended\nOptional"
-  },
-  {
-   "columns": 1,
-   "default": "Medium",
-   "fieldname": "priority",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Priority",
-   "options": "Low\nMedium\nHigh\nUrgent"
   },
   {
    "columns": 1,
@@ -54,7 +52,23 @@
    "fieldname": "estimated_hours",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Est Hours"
+   "label": "Labour Qty (Hrs)"
+  },
+  {
+   "columns": 1,
+   "default": "50.0",
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate"
+  },
+  {
+   "columns": 1,
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "read_only": 1
   },
   {
    "columns": 1,
@@ -66,7 +80,7 @@
    "read_only": 1
   },
   {
-   "columns": 2,
+   "columns": 1,
    "default": "Approved",
    "fieldname": "status",
    "fieldtype": "Select",
@@ -75,7 +89,7 @@
    "options": "Pending Approval\nApproved\nAssigned\nIn Progress\nPaused\nCompleted\nQC Failed\nPassed\nDeclined\nCancelled"
   },
   {
-   "columns": 2,
+   "columns": 1,
    "fieldname": "technician",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -96,6 +110,20 @@
    "in_list_view": 1,
    "label": "Bay",
    "options": "Workshop Location"
+  },
+  {
+   "default": "Essential",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "Category",
+   "options": "Essential\nRecommended\nOptional"
+  },
+  {
+   "default": "Medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "label": "Priority",
+   "options": "Low\nMedium\nHigh\nUrgent"
   },
   {
    "fieldname": "cb_1",
@@ -132,12 +160,33 @@
    "fieldname": "reason_for_adding",
    "fieldtype": "Small Text",
    "label": "Reason for Adding"
+  },
+  {
+   "fieldname": "sb_sublet",
+   "fieldtype": "Section Break",
+   "label": "Sublet / Outside Service"
+  },
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Sublet Supplier",
+   "options": "Supplier"
+  },
+  {
+   "fieldname": "supplier_cost",
+   "fieldtype": "Currency",
+   "label": "Supplier Cost"
+  },
+  {
+   "fieldname": "supplier_invoice_ref",
+   "fieldtype": "Data",
+   "label": "Supplier Invoice Ref"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-12 12:00:00.000000",
+ "modified": "2026-10-12 15:15:00.000000",
  "modified_by": "Administrator",
  "module": "Vehicle Service",
  "name": "Service Order Job",

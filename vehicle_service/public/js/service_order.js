@@ -1043,6 +1043,14 @@ frappe.ui.form.on("Service Order", {
 		if (frm.fields_dict.jobs && frm.fields_dict.jobs.grid) {
 			const grid = frm.fields_dict.jobs.grid;
 
+			frm.set_query("service_item", "jobs", () => {
+				return {
+					filters: {
+						is_stock_item: 0
+					}
+				};
+			});
+
 			// Add custom action buttons to the jobs grid
 			grid.add_custom_button(__("Assign Technician"), () => {
 				frm.trigger("show_assign_job_dialog");
@@ -1217,15 +1225,39 @@ frappe.ui.form.on("Service Order", {
 		const d = new frappe.ui.Dialog({
 			title: __("Add Workshop Job"),
 			fields: [
-				{ fieldname: "job_title", label: __("Job Title"), fieldtype: "Data", reqd: 1 },
-				{ fieldname: "priority", label: __("Priority"), fieldtype: "Select", options: "Low\nMedium\nHigh\nUrgent", default: "Medium", reqd: 1 },
-				{ fieldname: "category", label: __("Category"), fieldtype: "Select", options: "Essential\nRecommended\nOptional", default: "Essential", reqd: 1 },
-				{ fieldname: "estimated_hours", label: __("Estimated Hours"), fieldtype: "Float", default: 1.0, reqd: 1 },
+				{
+					fieldname: "service_item",
+					label: __("Service Item"),
+					fieldtype: "Link",
+					options: "Item",
+					default: "LABOUR",
+					reqd: 1,
+					get_query: () => ({ filters: { is_stock_item: 0 } }),
+					onchange: () => {
+						const itm = d.get_value("service_item");
+						if (itm) {
+							frappe.db.get_value("Item", itm, "item_name").then(r => {
+								if (r && r.message && r.message.item_name && !d.get_value("job_title")) {
+									d.set_value("job_title", r.message.item_name);
+								}
+							});
+						}
+					}
+				},
+				{ fieldname: "job_title", label: __("Job Description"), fieldtype: "Data", reqd: 1 },
+				{ fieldname: "estimated_hours", label: __("Labour Qty (Hours)"), fieldtype: "Float", default: 1.0, reqd: 1 },
+				{ fieldname: "rate", label: __("Rate / Unit Price"), fieldtype: "Currency", default: 50.0 },
 				{ fieldname: "col_brk_1", fieldtype: "Column Break" },
+				{ fieldname: "category", label: __("Category"), fieldtype: "Select", options: "Essential\nRecommended\nOptional", default: "Essential", reqd: 1 },
+				{ fieldname: "priority", label: __("Priority"), fieldtype: "Select", options: "Low\nMedium\nHigh\nUrgent", default: "Medium", reqd: 1 },
 				{ fieldname: "technician", label: __("Assign Technician"), fieldtype: "Link", options: "Employee" },
 				{ fieldname: "bay", label: __("Workshop Bay"), fieldtype: "Link", options: "Workshop Location" },
 				{ fieldname: "reason_for_adding", label: __("Reason for Adding"), fieldtype: "Small Text", description: __("Explanation for adding job directly") },
-				{ fieldname: "description", label: __("Description"), fieldtype: "Small Text" }
+				{ fieldname: "sec_sublet", label: __("Sublet Details (If Outsourced)"), fieldtype: "Section Break" },
+				{ fieldname: "supplier", label: __("Sublet Supplier"), fieldtype: "Link", options: "Supplier" },
+				{ fieldname: "supplier_cost", label: __("Supplier Cost"), fieldtype: "Currency" },
+				{ fieldname: "supplier_invoice_ref", label: __("Supplier Invoice Ref"), fieldtype: "Data" },
+				{ fieldname: "description", label: __("Detailed Scope / Notes"), fieldtype: "Small Text" }
 			],
 			primary_action_label: __("Create Job"),
 			primary_action: (vals) => {
@@ -1234,13 +1266,18 @@ frappe.ui.form.on("Service Order", {
 					args: {
 						service_order: frm.doc.name,
 						job_title: vals.job_title,
+						service_item: vals.service_item,
 						category: vals.category,
 						estimated_hours: vals.estimated_hours,
+						rate: vals.rate,
 						description: vals.description,
 						technician: vals.technician,
 						bay: vals.bay,
 						priority: vals.priority,
-						reason: vals.reason_for_adding
+						reason: vals.reason_for_adding,
+						supplier: vals.supplier,
+						supplier_cost: vals.supplier_cost,
+						supplier_invoice_ref: vals.supplier_invoice_ref
 					},
 					freeze: true,
 					freeze_message: __("Creating Job..."),
@@ -1349,13 +1386,53 @@ frappe.ui.form.on("Service Order Part", {
 frappe.ui.form.on("Service Order Job", {
 	jobs_add(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
+		row.service_item = "LABOUR";
 		row.category = "Essential";
 		row.priority = "Medium";
 		row.status = "Approved";
 		row.source = "Manually Added";
 		row.estimated_hours = 1.0;
+		row.rate = 50.0;
+		row.amount = 50.0;
 		row.actual_hours = 0.0;
 		frm.refresh_field("jobs");
+	},
+
+	service_item(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.service_item) return;
+
+		frappe.db.get_value("Item", row.service_item, ["item_name", "is_stock_item"]).then(r => {
+			if (r && r.message) {
+				if (r.message.is_stock_item) {
+					frappe.msgprint(__("Item {0} is a stock inventory item. Workshop jobs must be non-stock service items.", [row.service_item]));
+					frappe.model.set_value(cdt, cdn, "service_item", "LABOUR");
+					return;
+				}
+				if (!row.job_title || row.job_title === "LABOUR") {
+					frappe.model.set_value(cdt, cdn, "job_title", r.message.item_name || row.service_item);
+				}
+			}
+		});
+
+		frappe.db.get_value("Item Price", { item_code: row.service_item, price_list: "Standard Selling" }, "price_list_rate").then(pr => {
+			if (pr && pr.message && pr.message.price_list_rate) {
+				frappe.model.set_value(cdt, cdn, "rate", pr.message.price_list_rate);
+				frappe.model.set_value(cdt, cdn, "amount", round((flt(row.estimated_hours) || 1.0) * pr.message.price_list_rate, 2));
+			}
+		});
+	},
+
+	estimated_hours(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		const amt = round((flt(row.estimated_hours) || 0) * (flt(row.rate) || 0), 2);
+		frappe.model.set_value(cdt, cdn, "amount", amt);
+	},
+
+	rate(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		const amt = round((flt(row.estimated_hours) || 0) * (flt(row.rate) || 0), 2);
+		frappe.model.set_value(cdt, cdn, "amount", amt);
 	},
 
 	technician(frm, cdt, cdn) {

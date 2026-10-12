@@ -928,6 +928,27 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		order.reload()
 		self.assertEqual(order.jobs[0].status, "In Progress")
 		self.assertEqual(order.jobs[0].actual_hours, 1.0)
+		self.assertEqual(order.jobs[0].service_item, "LABOUR")
+		self.assertEqual(order.jobs[0].rate, 50.0)
+		self.assertEqual(order.jobs[0].amount, 75.0)
+
+		# 4. Add Sublet job row directly
+		order.append("jobs", {
+			"service_item": "SUBLET",
+			"job_title": "Windscreen Replacement Outside",
+			"estimated_hours": 1.0,
+			"rate": 180.0,
+			"supplier_cost": 120.0,
+			"supplier_invoice_ref": "INV-SUB-001",
+		})
+		order.save()
+		order.reload()
+		self.assertEqual(len(order.jobs), 2)
+		sublet_j = next(j for j in order.jobs if j.service_item == "SUBLET")
+		self.assertEqual(sublet_j.rate, 180.0)
+		self.assertEqual(sublet_j.amount, 180.0)
+		self.assertEqual(sublet_j.supplier_cost, 120.0)
+		self.assertEqual(sublet_j.supplier_invoice_ref, "INV-SUB-001")
 
 
 
