@@ -1,0 +1,18 @@
+{
+ "creation": "2026-10-13 10:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Number Card",
+ "document_type": "Service Order",
+ "dynamic_filters_json": "[]",
+ "filters_json": "[[\"Service Order\",\"board_status\",\"=\",\"Open\",false]]",
+ "function": "Count",
+ "is_public": 1,
+ "is_standard": 1,
+ "label": "Open Service Orders",
+ "module": "Vehicle Service",
+ "name": "Open Service Orders",
+ "color": "Blue",
+ "owner": "Administrator",
+ "show_percentage_stats": 0,
+ "type": "Document Type"
+}

@@ -235,3 +235,12 @@ class TestJobControl(FrappeTestCase):
 		for row in so.jobs:
 			if row.service_job == job_name:
 				self.assertEqual(flt(row.estimated_hours), 2.5)
+
+	def test_role_and_test_user_setup(self):
+		self.assertTrue(frappe.db.exists("Role", "Job Controller"))
+		self.assertTrue(frappe.db.exists("Workspace", "Job Control Board"))
+		self.assertTrue(frappe.db.exists("User", "jobcontroller.test@example.com"))
+
+		roles = frappe.get_roles("jobcontroller.test@example.com")
+		self.assertIn("Job Controller", roles)
+		self.assertNotIn("System Manager", roles)

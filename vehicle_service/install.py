@@ -10,6 +10,7 @@ ROLES = [
 	"QC Inspector",
 	"Service Accounts",
 	"Service Manager",
+	"Job Controller",
 ]
 
 DEFAULT_LOCATIONS = [
@@ -198,6 +199,7 @@ def after_install():
 	setup_default_qc_template()
 	setup_default_service_items()
 	setup_default_settings()
+	setup_job_controller_permissions()
 
 
 def after_migrate():
@@ -207,6 +209,7 @@ def after_migrate():
 	setup_default_qc_template()
 	setup_default_service_items()
 	setup_default_settings()
+	setup_job_controller_permissions()
 
 
 def setup_roles():
@@ -216,6 +219,27 @@ def setup_roles():
 			r.role_name = role
 			r.desk_access = 1
 			r.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def setup_job_controller_permissions():
+	"""Ensures Custom DocPerm records exist for Job Controller on supporting DocTypes."""
+	core_doctypes = ["Employee", "Customer", "Item", "Service Vehicle", "Workshop Location"]
+	for dt in core_doctypes:
+		if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": "Job Controller"}):
+			try:
+				cdp = frappe.new_doc("Custom DocPerm")
+				cdp.parent = dt
+				cdp.parenttype = "DocType"
+				cdp.parentfield = "permissions"
+				cdp.role = "Job Controller"
+				cdp.read = 1
+				cdp.report = 1
+				cdp.export = 1
+				cdp.print = 1
+				cdp.insert(ignore_permissions=True)
+			except Exception:
+				pass
 	frappe.db.commit()
 
 
