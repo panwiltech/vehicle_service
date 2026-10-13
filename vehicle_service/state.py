@@ -104,6 +104,33 @@ _VEHICLE_STATUS = {
 }
 
 
+# States where workshop jobs are completed and order is in billing/delivery stages
+COMPLETED_STATES = frozenset({READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION, DELIVERED})
+
+_BOARD_STATUS = {
+	DRAFT: "Open",
+	CHECKED_IN: "Open",
+	AWAITING_APPROVAL: "Open",
+	APPROVED: "Open",
+	WAITING_FOR_PARTS: "Open",
+	READY_FOR_WORK: "Open",
+	IN_PROGRESS: "In Progress",
+	QC: "In Progress",
+	PAUSED: "Paused",
+	READY_FOR_BILLING: "Completed",
+	INVOICED: "Completed",
+	READY_FOR_COLLECTION: "Completed",
+	DELIVERED: "Completed",
+}
+
+
+def board_status_for(status: str | None) -> str | None:
+	"""Derives the 4-state board status (Open, In Progress, Paused, Completed) for Job Control Board."""
+	if not status:
+		return None
+	return _BOARD_STATUS.get(status)
+
+
 def _get(row: Any, key: str, default=None):
 	if isinstance(row, dict):
 		return row.get(key, default)
@@ -121,7 +148,7 @@ def compute_operational_status(jobs: Iterable[Any], parts: Iterable[Any]) -> str
 	"""Derive the Service Order status while work is authorised (design §3.1).
 
 	Priority order:
-	1. every approved job done (and nothing awaiting approval) -> QC
+	1. every approved job done (and nothing awaiting approval) -> Ready for Billing (QC removed)
 	2. any job being worked, paused, or returned from QC -> In Progress
 	3. an approved part is waiting for stock -> Waiting for Parts
 	4. any approved job has a technician -> Ready for Work
@@ -133,7 +160,7 @@ def compute_operational_status(jobs: Iterable[Any], parts: Iterable[Any]) -> str
 	pending = any(_get(j, "status") == JOB_PENDING for j in jobs)
 
 	if active and all(_get(j, "status") in JOB_DONE for j in active):
-		return IN_PROGRESS if pending else QC
+		return IN_PROGRESS if pending else READY_FOR_BILLING
 	if any(_get(j, "status") in JOB_WORKING | {JOB_QC_FAILED} for j in active):
 		return IN_PROGRESS
 	if any(
