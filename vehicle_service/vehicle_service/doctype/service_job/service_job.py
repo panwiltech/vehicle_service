@@ -7,6 +7,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, now_datetime, time_diff_in_hours
 from vehicle_service.state import (
+	COMPLETED_STATES,
 	JOB_ASSIGNED,
 	JOB_COMPLETED,
 	JOB_IN_PROGRESS,
@@ -18,7 +19,21 @@ from vehicle_service.state import (
 
 class ServiceJob(Document):
 	def validate(self):
+		self.validate_order_lock()
 		self.calculate_actual_hours()
+
+	def validate_order_lock(self):
+		if self.is_new() or getattr(self.flags, "ignore_job_lock", False) or getattr(self.flags, "ignore_invoice_lock", False):
+			return
+		if not self.service_order:
+			return
+		order_status = frappe.db.get_value("Service Order", self.service_order, "status")
+		if order_status in COMPLETED_STATES:
+			frappe.throw(
+				_("Cannot modify Job {0}: Service Order {1} is Completed ({2}) and jobs are locked.").format(
+					self.name, self.service_order, order_status
+				)
+			)
 
 	def calculate_actual_hours(self):
 		total_hours = 0.0

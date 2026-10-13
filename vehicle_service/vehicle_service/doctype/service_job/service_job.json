@@ -411,6 +411,18 @@
    "role": "Service Accounts",
    "share": 0,
    "write": 0
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Job Controller",
+   "share": 1,
+   "write": 1
   }
  ],
  "row_format": "Dynamic",

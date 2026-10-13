@@ -17,12 +17,14 @@ from vehicle_service.state import (
 	AWAITING_APPROVAL,
 	CANCELLED,
 	CHECKED_IN,
+	COMPLETED_STATES,
 	DELIVERED,
 	DRAFT,
 	IN_PROGRESS,
 	INVOICED,
 	JOB_DONE,
 	JOB_INACTIVE,
+	JOB_PASSED,
 	OPERATIONAL,
 	ORDER_FLOW,
 	PART_REQUIRED,
@@ -33,6 +35,7 @@ from vehicle_service.state import (
 	READY_FOR_BILLING,
 	READY_FOR_COLLECTION,
 	billable_labour_hours,
+	board_status_for,
 	compute_operational_status,
 	compute_part_status,
 	qty_on_vehicle,
@@ -43,6 +46,8 @@ from vehicle_service.state import (
 
 class ServiceOrder(Document):
 	def validate(self):
+		self.validate_completed_job_lock()
+		self.validate_invoice_lock()
 		self.validate_open_orders()
 		self.fetch_vehicle_and_company_defaults()
 		self.validate_intake_frozen()
@@ -50,6 +55,108 @@ class ServiceOrder(Document):
 		self.validate_jobs_defaults()
 		self.sync_jobs_with_service_job_docs()
 		self.recalculate_parts_summary()
+		self.update_board_fields()
+
+	def update_board_fields(self):
+		self.board_status = board_status_for(self.status)
+		if not self.order_date:
+			self.order_date = self.creation.date() if self.creation else nowdate()
+		active_jobs = [j for j in self.get("jobs", []) if j.status not in ("Cancelled", "Declined")]
+		self.job_count = len([j for j in self.get("jobs", []) if j.status != "Cancelled"])
+		tech_names = []
+		for j in active_jobs:
+			t = j.technician_name or j.technician
+			if t and t not in tech_names:
+				tech_names.append(t)
+		self.technicians = ", ".join(tech_names) if tech_names else None
+
+	def validate_completed_job_lock(self):
+		if self.is_new() or getattr(self.flags, "ignore_job_lock", False) or getattr(self.flags, "ignore_invoice_lock", False):
+			return
+		if self.status not in COMPLETED_STATES:
+			return
+		old_doc = self.get_doc_before_save()
+		if not old_doc:
+			old_doc = frappe.get_doc(self.doctype, self.name)
+		old_jobs = [
+			(j.name, j.service_item, j.job_title, flt(j.estimated_hours), flt(j.rate), j.status, j.technician)
+			for j in old_doc.get("jobs", [])
+		]
+		new_jobs = [
+			(j.name, j.service_item, j.job_title, flt(j.estimated_hours), flt(j.rate), j.status, j.technician)
+			for j in self.get("jobs", [])
+		]
+		if old_jobs != new_jobs:
+			frappe.throw(
+				_("Cannot modify jobs on Service Order {0}: Order is Completed ({1}) and jobs are locked.").format(
+					self.name, self.status
+				)
+			)
+
+	def is_locked_by_invoice(self) -> bool:
+		"""Returns True if a submitted Sales Invoice is linked and has no submitted Credit Note against it."""
+		if not self.sales_invoice:
+			return False
+		inv_status = frappe.db.get_value("Sales Invoice", self.sales_invoice, "docstatus")
+		if inv_status != 1:
+			return False
+		has_credit_note = frappe.db.exists(
+			"Sales Invoice",
+			{"return_against": self.sales_invoice, "is_return": 1, "docstatus": 1},
+		)
+		return not bool(has_credit_note)
+
+	def validate_invoice_lock(self):
+		if self.is_new() or getattr(self.flags, "ignore_invoice_lock", False):
+			return
+
+		if not self.is_locked_by_invoice():
+			return
+
+		old_doc = self.get_doc_before_save()
+		if not old_doc:
+			old_doc = frappe.get_doc(self.doctype, self.name)
+
+		# Check if jobs changed
+		old_jobs = [
+			(j.name, j.service_item, j.job_title, flt(j.estimated_hours), flt(j.rate), j.status)
+			for j in old_doc.get("jobs", [])
+		]
+		new_jobs = [
+			(j.name, j.service_item, j.job_title, flt(j.estimated_hours), flt(j.rate), j.status)
+			for j in self.get("jobs", [])
+		]
+		if old_jobs != new_jobs:
+			frappe.throw(
+				_("Cannot modify jobs on Service Order {0} because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before changes can be made.").format(
+					self.name, self.sales_invoice
+				)
+			)
+
+		# Check if parts changed
+		old_parts = [
+			(p.name, p.item_code, flt(p.qty_required), flt(p.rate), p.approval_status)
+			for p in old_doc.get("parts", [])
+		]
+		new_parts = [
+			(p.name, p.item_code, flt(p.qty_required), flt(p.rate), p.approval_status)
+			for p in self.get("parts", [])
+		]
+		if old_parts != new_parts:
+			frappe.throw(
+				_("Cannot modify parts on Service Order {0} because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before changes can be made.").format(
+					self.name, self.sales_invoice
+				)
+			)
+
+		# Check core editable fields
+		for field in ("vehicle", "customer", "customer_complaint", "company"):
+			if getattr(self, field, None) != getattr(old_doc, field, None):
+				frappe.throw(
+					_("Cannot modify '{0}' on Service Order {1} because Sales Invoice {2} is submitted. A Credit Note must be raised against the invoice before changes can be made.").format(
+						field, self.name, self.sales_invoice
+					)
+				)
 
 	def validate_jobs_defaults(self):
 		has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": self.name, "docstatus": 1}))
@@ -462,6 +569,12 @@ def add_ad_hoc_job(
 	supplier_invoice_ref: str | None = None,
 ):
 	order = frappe.get_doc("Service Order", service_order)
+	if order.is_locked_by_invoice():
+		frappe.throw(
+			_("Cannot add job: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
+				order.name, order.sales_invoice
+			)
+		)
 	if order.status in (DELIVERED, CANCELLED):
 		frappe.throw(_("Cannot add job to order in status '{0}'.").format(order.status))
 
@@ -544,6 +657,12 @@ def add_manual_part(
 	reason: str | None = None,
 ):
 	order = frappe.get_doc("Service Order", service_order)
+	if order.is_locked_by_invoice():
+		frappe.throw(
+			_("Cannot add parts: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
+				order.name, order.sales_invoice
+			)
+		)
 	if order.status in (DELIVERED, CANCELLED):
 		frappe.throw(_("Cannot add parts to order in status '{0}'.").format(order.status))
 
@@ -1259,6 +1378,12 @@ def assign_job(job_name: str, technician: str, bay: str | None = None):
 def issue_parts_to_workshop(order_name: str, items_json: str | list):
 	"""Issues approved parts from Parts Store Warehouse to Workshop WIP Warehouse via Stock Entry."""
 	order = frappe.get_doc("Service Order", order_name)
+	if order.is_locked_by_invoice():
+		frappe.throw(
+			_("Cannot issue parts: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
+				order.name, order.sales_invoice
+			)
+		)
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
 
 	stores_wh = settings.parts_warehouse
@@ -1339,6 +1464,12 @@ def issue_parts_to_workshop(order_name: str, items_json: str | list):
 def return_parts_from_workshop(order_name: str, items_json: str | list):
 	"""Returns unconsumed parts from Workshop WIP Warehouse back to Parts Store Warehouse."""
 	order = frappe.get_doc("Service Order", order_name)
+	if order.is_locked_by_invoice():
+		frappe.throw(
+			_("Cannot return parts: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
+				order.name, order.sales_invoice
+			)
+		)
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
 
 	stores_wh = settings.parts_warehouse
@@ -1420,6 +1551,60 @@ def recalculate_order_parts_from_stock(order_name: str):
 
 
 @frappe.whitelist()
+def complete_and_ready_for_billing(order_name: str, notes: str | None = None):
+	"""Marks all uncompleted workshop jobs as Completed/Passed, verifies parts, and transitions
+	the Service Order directly to 'Ready for Billing' (bypassing full separate QC document for quick jobs).
+	"""
+	order = frappe.get_doc("Service Order", order_name)
+	if order.is_locked_by_invoice():
+		frappe.throw(
+			_("Cannot complete: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
+				order.name, order.sales_invoice
+			)
+		)
+	if order.status in (DELIVERED, CANCELLED):
+		frappe.throw(_("Cannot complete an order in status '{0}'.").format(order.status))
+
+	# 1. Mark uncompleted jobs as Completed / Passed
+	jobs = frappe.get_all(
+		"Service Job",
+		filters={"service_order": order.name},
+		fields=["name", "status"],
+	)
+	for j in jobs:
+		if j.status not in (JOB_PASSED, "Completed", "Passed", "Cancelled", "Declined"):
+			frappe.db.set_value("Service Job", j.name, "status", JOB_PASSED, update_modified=False)
+
+	# 2. Sync child table order.jobs
+	for row in order.get("jobs", []):
+		if row.status not in ("Completed", "Passed", "Cancelled", "Declined"):
+			row.status = "Completed"
+
+	# 3. Transition order to Ready for Billing
+	order.status = READY_FOR_BILLING
+	if notes:
+		order.add_comment("Comment", _("Quick Completion Note: {0}").format(notes))
+
+	# Move vehicle to parking / finished bay if configured
+	settings = frappe.get_cached_doc("Vehicle Service Settings")
+	if settings.parking_location and order.vehicle:
+		vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
+		vehicle.move_location(settings.parking_location, _("Workshop jobs completed. Vehicle ready for billing."), order.name)
+
+	order.save(ignore_permissions=True)
+	return {"status": "success", "order_status": order.status}
+
+
+@frappe.whitelist()
+def complete_and_create_invoice(order_name: str, notes: str | None = None):
+	"""Shortcut for quick services: completes all jobs, sets Ready for Billing,
+	and immediately creates the linked Sales Invoice in one operation.
+	"""
+	complete_and_ready_for_billing(order_name, notes)
+	return create_sales_invoice_from_order(order_name)
+
+
+@frappe.whitelist()
 def create_sales_invoice_from_order(order_name: str):
 	order = frappe.get_doc("Service Order", order_name)
 	if order.status != READY_FOR_BILLING:
@@ -1443,7 +1628,7 @@ def create_sales_invoice_from_order(order_name: str):
 	# Jobs Labour billing
 	jobs = frappe.get_all(
 		"Service Job",
-		filters={"service_order": order.name, "status": ["in", [JOB_DONE, "Completed", "Passed"]]},
+		filters={"service_order": order.name, "status": ["in", list(JOB_DONE)]},
 		fields=["name", "job_title", "sales_order", "so_detail", "estimated_hours", "actual_hours", "service_item", "rate", "supplier", "supplier_invoice_ref"],
 	)
 
@@ -1534,6 +1719,7 @@ def deliver_vehicle(
 	order.delivery_signature = delivery_signature
 	order.delivered_on = now_datetime()
 	order.status = DELIVERED
+	order.flags.ignore_invoice_lock = True
 	order.save(ignore_permissions=True)
 
 	# Update Vehicle lifetime history
