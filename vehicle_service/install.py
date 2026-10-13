@@ -240,7 +240,12 @@ def setup_job_controller_permissions():
 				cdp.insert(ignore_permissions=True)
 			except Exception:
 				pass
+	try:
+		frappe.reload_doc("vehicle_service", "workspace", "job_control_board", force=True)
+	except Exception:
+		pass
 	frappe.db.commit()
+
 
 
 def setup_custom_fields():

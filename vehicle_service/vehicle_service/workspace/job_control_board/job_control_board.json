@@ -1,7 +1,7 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[{\"id\": \"hdr_jcb\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Job Control Board</b></span>\", \"col\": 12}}, {\"id\": \"nc_open\", \"type\": \"number_card\", \"data\": {\"card_name\": \"Open Service Orders\", \"col\": 3}}, {\"id\": \"nc_prog\", \"type\": \"number_card\", \"data\": {\"card_name\": \"In Progress Orders\", \"col\": 3}}, {\"id\": \"nc_pause\", \"type\": \"number_card\", \"data\": {\"card_name\": \"Paused Orders\", \"col\": 3}}, {\"id\": \"nc_comp\", \"type\": \"number_card\", \"data\": {\"card_name\": \"Completed Orders\", \"col\": 3}}, {\"id\": \"sc_jcb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shortcuts\", \"col\": 12}}]",
+ "content": "[{\"id\": \"hdr_jcb\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Job Control Board</b></span>\", \"col\": 12}}, {\"id\": \"nc_open\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Open Service Orders\", \"col\": 3}}, {\"id\": \"nc_prog\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"In Progress Orders\", \"col\": 3}}, {\"id\": \"nc_pause\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Paused Orders\", \"col\": 3}}, {\"id\": \"nc_comp\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Completed Orders\", \"col\": 3}}, {\"id\": \"sc_jcb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shortcuts\", \"col\": 12}}]",
  "creation": "2026-10-13 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -14,6 +14,24 @@
  "label": "Job Control Board",
  "module": "Vehicle Service",
  "name": "Job Control Board",
+ "number_cards": [
+  {
+   "label": "Open Service Orders",
+   "number_card_name": "Open Service Orders"
+  },
+  {
+   "label": "In Progress Orders",
+   "number_card_name": "In Progress Orders"
+  },
+  {
+   "label": "Paused Orders",
+   "number_card_name": "Paused Orders"
+  },
+  {
+   "label": "Completed Orders",
+   "number_card_name": "Completed Orders"
+  }
+ ],
  "public": 1,
  "roles": [
   {
@@ -90,5 +108,7 @@
    "link_to": "Technician Performance",
    "type": "Report"
   }
- ]
+ ],
+ "title": "Job Control Board",
+ "type": "Workspace"
 }

@@ -2,7 +2,6 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.utils import random_string
 
 
 def create_test_user(email="jobcontroller.test@example.com", password=None):
@@ -28,7 +27,6 @@ def create_test_user(email="jobcontroller.test@example.com", password=None):
 		user.new_password = password
 		user.default_workspace = "Job Control Board"
 		user.insert(ignore_permissions=True)
-		print(f"Created user {email} with password: {password}")
 	else:
 		user = frappe.get_doc("User", email)
 		user.enabled = 1
@@ -38,7 +36,13 @@ def create_test_user(email="jobcontroller.test@example.com", password=None):
 		user.new_password = password
 		user.default_workspace = "Job Control Board"
 		user.save(ignore_permissions=True)
-		print(f"Updated user {email} with password: {password}")
 
 	frappe.db.commit()
 	return {"email": email, "password": password}
+
+
+def sync_job_control_workspace():
+	"""Ensures the Job Control Board workspace is reloaded from disk with valid title and number cards."""
+	frappe.reload_doc("vehicle_service", "workspace", "job_control_board", force=True)
+	frappe.db.commit()
+	return True

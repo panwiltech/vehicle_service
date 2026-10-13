@@ -241,6 +241,11 @@ class TestJobControl(FrappeTestCase):
 		self.assertTrue(frappe.db.exists("Workspace", "Job Control Board"))
 		self.assertTrue(frappe.db.exists("User", "jobcontroller.test@example.com"))
 
+		ws = frappe.get_doc("Workspace", "Job Control Board")
+		self.assertEqual(ws.title, "Job Control Board")
+		self.assertEqual(len(ws.number_cards), 4)
+
 		roles = frappe.get_roles("jobcontroller.test@example.com")
 		self.assertIn("Job Controller", roles)
 		self.assertNotIn("System Manager", roles)
+
