@@ -48,43 +48,7 @@ frappe.ui.form.on("Service Order", {
 			return;
 		}
 
-		const steps = [
-			"Draft",
-			"In Progress",
-			"QC",
-			"Ready for Billing",
-			"Invoiced",
-			"Ready for Collection",
-			"Delivered"
-		];
-
-		const current = frm.doc.status;
-		let currentIndex = steps.indexOf(current);
-		if (["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "Paused"].includes(current)) {
-			currentIndex = steps.indexOf("In Progress");
-		}
-
-		let html = `<div class="status-stepper-container" style="display:flex; overflow-x:auto; padding:10px 0; margin-bottom:15px; border-bottom:1px solid var(--border-color);">`;
-		steps.forEach((step, idx) => {
-			let isCompleted = idx < currentIndex || current === "Delivered";
-			let isCurrent = idx === currentIndex && current !== "Delivered";
-			let badgeColor = isCurrent ? "var(--primary)" : (isCompleted ? "var(--green-500)" : "var(--text-muted)");
-			let bgColor = isCurrent ? "var(--primary-light, #ebf5ff)" : (isCompleted ? "var(--green-50, #f0fdf4)" : "var(--subtle-fg, #f8f9fa)");
-			let fontWeight = isCurrent ? "700" : "500";
-
-			html += `
-				<div style="display:flex; align-items:center; margin-right:8px; white-space:nowrap;">
-					<span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${badgeColor}; color:#fff; font-size:11px; margin-right:5px;">
-						${isCompleted ? "✓" : (idx + 1)}
-					</span>
-					<span style="font-size:12px; font-weight:${fontWeight}; color:${isCurrent ? 'var(--text-color)' : 'var(--text-muted)'}; background:${bgColor}; padding:2px 8px; border-radius:12px;">
-						${step}
-					</span>
-					${idx < steps.length - 1 ? '<span style="margin-left:8px; color:var(--border-color);">→</span>' : ''}
-				</div>
-			`;
-		});
-		html += `</div>`;
+		let html = "";
 
 		if (frm.doc.status === "Paused") {
 			html += `<div class="alert alert-warning" style="margin-bottom:15px;"><strong>⏸ PAUSED:</strong> ${frappe.utils.escape_html(frm.doc.pause_reason || 'Awaiting Approval')}</div>`;
@@ -97,10 +61,111 @@ frappe.ui.form.on("Service Order", {
 		}
 
 		frm.set_df_property("status_html", "options", html);
+
+		if (frm.doc.sales_invoice) {
+			frappe.db.get_value("Sales Invoice", frm.doc.sales_invoice, ["grand_total", "outstanding_amount", "docstatus", "status"]).then(r => {
+				if (r && r.message) {
+					const inv = r.message;
+					const isPaid = flt(inv.outstanding_amount) <= 0 && inv.docstatus === 1;
+					const invBadge = isPaid ? "alert-success" : (inv.docstatus === 1 ? "alert-info" : "alert-warning");
+					const statusText = inv.docstatus === 0 ? __("Draft") : (isPaid ? __("Paid in Full") : __("Unpaid (Outstanding: {0})", [format_currency(inv.outstanding_amount)]));
+					const banner = `
+						<div class="alert ${invBadge} d-flex justify-content-between align-items-center" style="margin-bottom:12px; padding:8px 12px; border-radius:6px;">
+							<div>
+								<strong><i class="fa fa-file-text-o"></i> ${__("Sales Invoice")}:</strong>
+								<a href="/app/sales-invoice/${frm.doc.sales_invoice}" style="font-weight:700; text-decoration:underline; margin-left:4px;">${frm.doc.sales_invoice}</a>
+								<span style="margin-left:12px;">• Total: <strong>${format_currency(inv.grand_total)}</strong></span>
+								<span style="margin-left:12px;">• Status: <strong>${statusText}</strong></span>
+							</div>
+							<a href="/app/sales-invoice/${frm.doc.sales_invoice}" class="btn btn-xs btn-default">${__("Open Invoice")} →</a>
+						</div>
+					`;
+					if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
+						frm.fields_dict.status_html.$wrapper.find(".invoice-banner").remove();
+						frm.fields_dict.status_html.$wrapper.append(`<div class="invoice-banner">${banner}</div>`);
+					}
+
+					if (inv.docstatus === 1) {
+						frappe.db.get_value("Sales Invoice", {
+							return_against: frm.doc.sales_invoice,
+							is_return: 1,
+							docstatus: 1
+						}, "name").then(cnRes => {
+							const hasCreditNote = cnRes && cnRes.message && cnRes.message.name;
+							if (!hasCreditNote) {
+								frm.disable_save();
+								frm.set_read_only();
+								const lockBanner = `
+									<div class="alert alert-warning d-flex align-items-center" style="margin-bottom:12px; padding:8px 12px; border-radius:6px;">
+										<i class="fa fa-lock" style="font-size:16px; margin-right:8px;"></i>
+										<div>
+											<strong>${__("Order Locked")}:</strong>
+											${__("Sales Invoice {0} is submitted. No changes can be made to this Service Order unless a Credit Note is raised against the invoice in Accounts.", [frm.doc.sales_invoice])}
+										</div>
+									</div>
+								`;
+								if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
+									frm.fields_dict.status_html.$wrapper.find(".invoice-lock-banner").remove();
+									frm.fields_dict.status_html.$wrapper.append(`<div class="invoice-lock-banner">${lockBanner}</div>`);
+								}
+							}
+						});
+					}
+				}
+			});
+		}
 	},
 
 	setup_custom_buttons(frm) {
 		if (frm.is_new()) return;
+
+		const userRoles = frappe.user_roles || [];
+		const isJobController = userRoles.includes("Job Controller") || userRoles.includes("System Manager");
+		const isCompleted = ["Ready for Billing", "Invoiced", "Ready for Collection", "Delivered"].includes(frm.doc.status) || frm.doc.board_status === "Completed";
+
+		// If order is completed and user is Job Controller (and not System Manager), disable form
+		if (isCompleted && userRoles.includes("Job Controller") && !userRoles.includes("System Manager")) {
+			frm.disable_form();
+		}
+
+		// Job Control button group for Job Controller
+		if (isJobController && !isCompleted && frm.doc.status !== "Cancelled") {
+			frm.add_custom_button(__("Add Job"), () => {
+				frm.trigger("show_add_job_dialog");
+			}, __("Job Control"));
+
+			frm.add_custom_button(__("Assign Technician"), () => {
+				frm.trigger("show_assign_job_dialog");
+			}, __("Job Control"));
+
+			frm.add_custom_button(__("Start Clock"), () => {
+				frm.trigger("start_selected_job");
+			}, __("Job Control"));
+
+			frm.add_custom_button(__("Pause Clock"), () => {
+				frm.trigger("pause_selected_job");
+			}, __("Job Control"));
+
+			frm.add_custom_button(__("Complete Job"), () => {
+				frappe.confirm(
+					__("Mark all workshop jobs as completed and move this Service Order to Ready for Billing?"),
+					() => {
+						frappe.call({
+							method: "vehicle_service.job_control.complete_service_order",
+							args: { order_name: frm.doc.name },
+							freeze: true,
+							freeze_message: __("Completing Service Order..."),
+							callback: (r) => {
+								if (!r.exc) {
+									frappe.show_alert({ message: __("Service Order marked Completed (Ready for Billing)"), indicator: "green" });
+									frm.reload_doc();
+								}
+							}
+						});
+					}
+				);
+			}, __("Job Control")).addClass("btn-primary");
+		}
 
 		// 1. Check-in Button (if Draft)
 		if (frm.doc.status === "Draft") {
@@ -182,7 +247,46 @@ frappe.ui.form.on("Service Order", {
 			}, __("Parts Control"));
 		}
 
-		// 6. Start QC (if QC status)
+		// 6. Workshop Completion & QC actions
+		if (["Approved", "Waiting for Parts", "Ready for Work", "In Progress", "QC"].includes(frm.doc.status)) {
+			frm.add_custom_button(__("Complete & Create Invoice"), () => {
+				frappe.confirm(
+					__("Complete all workshop jobs and generate the Sales Invoice directly?"),
+					() => {
+						frappe.call({
+							method: "vehicle_service.vehicle_service.doctype.service_order.service_order.complete_and_create_invoice",
+							args: { order_name: frm.doc.name },
+							freeze: true,
+							freeze_message: __("Completing Workshop & Generating Sales Invoice..."),
+							callback: (r) => {
+								if (!r.exc && r.message && r.message.sales_invoice) {
+									frappe.show_alert({ message: __("Sales Invoice {0} created", [r.message.sales_invoice]), indicator: "green" });
+									frappe.set_route("Form", "Sales Invoice", r.message.sales_invoice);
+								} else {
+									frm.reload_doc();
+								}
+							}
+						});
+					}
+				);
+			}).addClass("btn-primary");
+
+			frm.add_custom_button(__("Complete Workshop (Ready for Billing)"), () => {
+				frappe.call({
+					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.complete_and_ready_for_billing",
+					args: { order_name: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Marking Workshop Completed..."),
+					callback: (r) => {
+						if (!r.exc) {
+							frappe.show_alert({ message: __("Service Order marked Ready for Billing"), indicator: "green" });
+							frm.reload_doc();
+						}
+					}
+				});
+			}, __("Actions"));
+		}
+
 		if (frm.doc.status === "QC") {
 			frm.add_custom_button(__("Start QC Inspection"), () => {
 				frappe.call({
@@ -194,8 +298,8 @@ frappe.ui.form.on("Service Order", {
 							frappe.set_route("Form", "Service QC", r.message.qc_name);
 						}
 					}
-				}).addClass("btn-primary");
-			});
+				});
+			}, __("Actions"));
 		}
 
 		// 7. Create Sales Invoice (if Ready for Billing)
@@ -213,6 +317,12 @@ frappe.ui.form.on("Service Order", {
 					}
 				});
 			}).addClass("btn-primary");
+		}
+
+		if (frm.doc.sales_invoice) {
+			frm.add_custom_button(__("View Sales Invoice"), () => {
+				frappe.set_route("Form", "Sales Invoice", frm.doc.sales_invoice);
+			});
 		}
 
 		// 8. Release on Credit (if Invoiced)

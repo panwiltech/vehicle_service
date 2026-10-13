@@ -57,6 +57,7 @@ def _mirror_job_to_order(job, order=None):
 			row.technician_name = job.technician_name
 			row.bay = job.bay
 			row.source = job.source
+			row.reason_for_adding = job.reason_for_adding
 			found = True
 			break
 
@@ -78,6 +79,7 @@ def _mirror_job_to_order(job, order=None):
 				"technician_name": job.technician_name,
 				"bay": job.bay,
 				"source": job.source,
+				"reason_for_adding": job.reason_for_adding,
 			},
 		)
 

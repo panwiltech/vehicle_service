@@ -21,6 +21,8 @@ from vehicle_service.vehicle_service.doctype.service_order.service_order import 
 	add_manual_part,
 	assign_job,
 	check_in_vehicle,
+	complete_and_create_invoice,
+	complete_and_ready_for_billing,
 	correct_intake,
 	create_estimate,
 	deliver_vehicle,
@@ -116,7 +118,7 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(compute_operational_status(jobs, parts), "In Progress")
 
 		jobs = [{"status": "Completed"}]
-		self.assertEqual(compute_operational_status(jobs, parts), "QC")
+		self.assertEqual(compute_operational_status(jobs, parts), "Ready for Billing")
 
 	def test_end_to_end_workshop_flow(self):
 		# 1. Create Vehicle
@@ -210,6 +212,7 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertTrue(order.status in ("Approved", "Ready for Work"))
 
 		# 8. Start & Complete Job
+		job1.technician = self.emp_name
 		job1.status = "Assigned"
 		job1.save(ignore_permissions=True)
 
@@ -222,20 +225,9 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(job1.status, "Completed")
 
 		order.reload()
-		self.assertEqual(order.status, "QC")
-
-		# 9. QC Inspection
-		qc_res = create_qc_inspection(order.name)
-		qc_doc = frappe.get_doc("Service QC", qc_res["qc_name"])
-		for item in qc_doc.checklist:
-			item.passed = 1
-		qc_doc.result = "Pass"
-		qc_doc.submit()
-
-		order.reload()
 		self.assertEqual(order.status, "Ready for Billing")
 
-		# 10. Deliver
+		# 9. Deliver
 		order.status = "Ready for Collection"
 		order.save(ignore_permissions=True)
 
@@ -949,6 +941,194 @@ class TestVehicleServiceFlow(FrappeTestCase):
 		self.assertEqual(sublet_j.amount, 180.0)
 		self.assertEqual(sublet_j.supplier_cost, 120.0)
 		self.assertEqual(sublet_j.supplier_invoice_ref, "INV-SUB-001")
+
+	def test_quick_complete_and_create_invoice_workflow(self):
+		import json
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import release_on_credit
+
+		order = self.create_clean_order("TST-QUICK-INV-01")
+		check_in_vehicle(order.name, odometer_in=48000, fuel_level="1/2", customer_complaint="Quick lube & check")
+		order.reload()
+
+		# 1. Add Labour Job and Part
+		order.append("jobs", {
+			"job_title": "Express Oil & Filter Change",
+			"service_item": "LABOUR",
+			"estimated_hours": 1.5,
+			"rate": 50.0,
+			"amount": 75.0,
+		})
+		order.save()
+
+		settings = frappe.get_cached_doc("Vehicle Service Settings")
+		make_stock_entry(
+			item_code="BRAKE-PAD-TEST",
+			to_warehouse=settings.parts_warehouse,
+			qty=5.0,
+			rate=50.0,
+			purpose="Material Receipt",
+			company=order.company,
+		)
+
+		part_row = order.append("parts", {
+			"item_code": "BRAKE-PAD-TEST",
+			"qty_required": 1.0,
+			"rate": 65.0,
+		})
+		order.save()
+
+		# Issue the part so it has qty_used / qty_issued in workshop WIP
+		issue_parts_to_workshop(
+			order_name=order.name,
+			items_json=json.dumps([{"part_row": part_row.name, "qty": 1.0}]),
+		)
+
+		# Mark part used on vehicle
+		order.reload()
+		p = next(p for p in order.parts if p.item_code == "BRAKE-PAD-TEST")
+		p.qty_used = 1.0
+		p.save()
+
+		# 2. Call complete_and_create_invoice shortcut
+		res = complete_and_create_invoice(order.name, notes="Direct express service complete")
+		self.assertEqual(res["status"], "success")
+		self.assertTrue(res.get("sales_invoice"))
+		si_name = res["sales_invoice"]
+
+		order.reload()
+		self.assertEqual(order.status, "Ready for Billing")
+		self.assertEqual(order.sales_invoice, si_name)
+		self.assertIn(order.jobs[0].status, ["Completed", "Passed"])
+
+		# 3. Verify Sales Invoice lines (Labour with estimated_hours as qty, Part)
+		si = frappe.get_doc("Sales Invoice", si_name)
+		self.assertEqual(si.customer, order.customer)
+		self.assertEqual(len(si.items), 2)
+
+		labour_item = next(it for it in si.items if it.item_code == "LABOUR")
+		self.assertEqual(labour_item.qty, 1.5)
+		self.assertEqual(labour_item.rate, 50.0)
+		self.assertEqual(labour_item.amount, 75.0)
+
+		part_item = next(it for it in si.items if it.item_code == "BRAKE-PAD-TEST")
+		self.assertEqual(part_item.qty, 1.0)
+		self.assertEqual(part_item.rate, 65.0)
+
+		# 4. Submit Sales Invoice -> triggers billing_events
+		si.submit()
+		order.reload()
+		self.assertIn(order.status, ["Invoiced", "Ready for Collection"])
+
+		# If Invoiced, authorise release on credit to make it Ready for Collection
+		if order.status == "Invoiced":
+			release_on_credit(order.name, "Approved for quick delivery")
+			order.reload()
+
+		self.assertEqual(order.status, "Ready for Collection")
+
+		# 5. Deliver vehicle
+		deliv_res = deliver_vehicle(
+			order_name=order.name,
+			odometer_out=48010,
+			collected_by="John Owner",
+			delivery_notes="Customer collected vehicle in good condition",
+		)
+		self.assertEqual(deliv_res["status"], "success")
+
+		order.reload()
+		self.assertEqual(order.status, "Delivered")
+		self.assertEqual(order.odometer_out, 48010)
+
+		# Verify vehicle status is Outside Workshop
+		veh = frappe.get_doc("Service Vehicle", order.vehicle)
+		self.assertEqual(veh.vehicle_status, "Outside Workshop")
+		self.assertIsNone(veh.current_service_order)
+
+	def test_invoice_lock_and_credit_note_reopen_workflow(self):
+		from frappe.utils import nowdate
+		from erpnext.controllers.sales_and_purchase_return import make_return_doc
+
+		order = self.create_clean_order("TST-LOCK-CN-01")
+		check_in_vehicle(order.name, odometer_in=45000, fuel_level="1/2", customer_complaint="Lock test")
+		order.reload()
+
+		order.append("jobs", {
+			"job_title": "Brake Inspection",
+			"service_item": "LABOUR",
+			"estimated_hours": 1.0,
+			"rate": 50.0,
+			"amount": 50.0,
+		})
+		order.save()
+
+		# Quick complete and raise invoice
+		res = complete_and_create_invoice(order.name)
+		self.assertEqual(res["status"], "success")
+		si_name = res["sales_invoice"]
+
+		# Submit the sales invoice
+		si = frappe.get_doc("Sales Invoice", si_name)
+		si.submit()
+
+		order.reload()
+		# Order is now locked!
+		self.assertTrue(order.is_locked_by_invoice())
+
+		# 1. Verify adding ad-hoc job throws ValidationError
+		with self.assertRaises(frappe.ValidationError):
+			add_ad_hoc_job(
+				service_order=order.name,
+				job_title="Should Fail Job",
+				category="Essential",
+			)
+
+		# 2. Verify adding parts throws ValidationError
+		with self.assertRaises(frappe.ValidationError):
+			add_manual_part(
+				service_order=order.name,
+				item_code="BRAKE-PAD-TEST",
+				qty_required=1.0,
+			)
+
+		# 3. Verify modifying child table directly and saving throws ValidationError
+		order.append("jobs", {
+			"job_title": "Direct Edit Should Fail",
+			"service_item": "LABOUR",
+			"estimated_hours": 1.0,
+		})
+		with self.assertRaises(frappe.ValidationError):
+			order.save()
+
+		order.reload()
+
+		# 4. Now create and submit a Credit Note against the Sales Invoice
+		cn = make_return_doc("Sales Invoice", si.name)
+		cn.posting_date = nowdate()
+		cn.insert(ignore_permissions=True)
+		cn.submit()
+
+		# 5. Verify Service Order has automatically unlocked!
+		order.reload()
+		self.assertFalse(order.is_locked_by_invoice())
+		self.assertEqual(order.status, "In Progress")
+		self.assertIsNone(order.sales_invoice)
+
+		# 6. Verify vehicle is marked In Workshop
+		veh = frappe.get_doc("Service Vehicle", order.vehicle)
+		self.assertEqual(veh.vehicle_status, "In Workshop")
+
+		# 7. Verify modifications now succeed on the unlocked order
+		new_job = add_ad_hoc_job(
+			service_order=order.name,
+			job_title="Added After Credit Note",
+			category="Essential",
+			estimated_hours=1.2,
+		)
+		self.assertEqual(new_job["status"], "success")
+
+		order.reload()
+		self.assertEqual(len(order.jobs), 2)
 
 
 
