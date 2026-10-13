@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import flt
 from vehicle_service.state import (
 	board_status_for,
 	compute_operational_status,
@@ -185,3 +186,52 @@ class TestJobControl(FrappeTestCase):
 
 		# 10. Permission hook check
 		self.assertFalse(order_has_permission(so, ptype="write", user="test_jc_user"))
+
+	def test_sales_invoice_labour_hours_sync(self):
+		from vehicle_service.job_control import add_job, complete_service_order
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import create_sales_invoice_from_order
+
+		veh_id = "TST-INV-01"
+		if not frappe.db.exists("Service Vehicle", veh_id):
+			v = frappe.new_doc("Service Vehicle")
+			v.registration_no = veh_id
+			v.customer = "Test Customer"
+			v.vin = "VIN-TST-INV-01"
+			v.make = "Toyota"
+			v.model = "Hilux"
+			v.insert(ignore_permissions=True)
+
+		so = frappe.new_doc("Service Order")
+		so.vehicle = veh_id
+		so.customer = "Test Customer"
+		so.insert(ignore_permissions=True)
+
+		res_add = add_job(so.name, job_title="Engine Diagnostics", estimated_hours=1.0)
+		job_name = res_add["job"]
+
+		# Complete order to ready for billing
+		complete_service_order(so.name)
+
+		# Create Sales Invoice
+		res_inv = create_sales_invoice_from_order(so.name)
+		inv = frappe.get_doc("Sales Invoice", res_inv["sales_invoice"])
+
+		# Service advisor modifies labour quantity from 1.0 to 2.5 hours on the invoice
+		found_job_item = False
+		for item in inv.items:
+			if getattr(item, "vs_job", None) == job_name:
+				item.qty = 2.5
+				found_job_item = True
+		self.assertTrue(found_job_item)
+
+		inv.save(ignore_permissions=True)
+		inv.submit()
+
+		# Verify that the Service Job estimated_hours and row on order updated to 2.5
+		job = frappe.get_doc("Service Job", job_name)
+		self.assertEqual(flt(job.estimated_hours), 2.5)
+
+		so.reload()
+		for row in so.jobs:
+			if row.service_job == job_name:
+				self.assertEqual(flt(row.estimated_hours), 2.5)
