@@ -568,82 +568,17 @@ def add_ad_hoc_job(
 	supplier_cost: float | None = None,
 	supplier_invoice_ref: str | None = None,
 ):
-	order = frappe.get_doc("Service Order", service_order)
-	if order.is_locked_by_invoice():
-		frappe.throw(
-			_("Cannot add job: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
-				order.name, order.sales_invoice
-			)
-		)
-	if order.status in (DELIVERED, CANCELLED):
-		frappe.throw(_("Cannot add job to order in status '{0}'.").format(order.status))
-
-	has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": order.name, "docstatus": 1}))
-	source = "Additional Work" if has_quote else "Manually Added"
-	settings = frappe.get_cached_doc("Vehicle Service Settings")
-	srv_item = service_item or settings.labour_item or "LABOUR"
-	srv_rate = flt(rate) if rate is not None and flt(rate) > 0 else (flt(settings.labour_rate) or 50.0)
-	calc_amount = round((flt(estimated_hours) or 1.0) * srv_rate, 2)
-
-	job = frappe.new_doc("Service Job")
-	job.service_order = order.name
-	job.job_title = job_title
-	job.category = category
-	job.service_item = srv_item
-	job.estimated_hours = flt(estimated_hours) or 1.0
-	job.rate = srv_rate
-	job.amount = calc_amount
-	job.supplier = supplier
-	job.supplier_cost = flt(supplier_cost or 0.0)
-	job.supplier_invoice_ref = supplier_invoice_ref
-	job.priority = priority or "Medium"
-	job.description = description
-	job.reason_for_adding = reason
-	job.source = source
-	job.raised_by = frappe.session.user
-	job.status = "Pending Approval"
-
-	if technician:
-		emp = frappe.get_doc("Employee", technician)
-		job.technician = emp.name
-		job.technician_user = emp.user_id
-		job.status = "Assigned"
-
-	if bay:
-		job.bay = bay
-
-	job.insert(ignore_permissions=True)
-
-	order.append(
-		"jobs",
-		{
-			"service_item": srv_item,
-			"job_title": job_title,
-			"category": category,
-			"priority": priority or "Medium",
-			"estimated_hours": flt(estimated_hours) or 1.0,
-			"rate": srv_rate,
-			"amount": calc_amount,
-			"supplier": supplier,
-			"supplier_cost": flt(supplier_cost or 0.0),
-			"supplier_invoice_ref": supplier_invoice_ref,
-			"status": job.status,
-			"technician": technician,
-			"technician_name": emp.employee_name if technician else None,
-			"bay": bay,
-			"source": source,
-			"service_job": job.name,
-			"reason_for_adding": reason,
-		},
+	from vehicle_service.job_control import add_job
+	return add_job(
+		service_order=service_order,
+		job_title=job_title,
+		description=description,
+		estimated_hours=estimated_hours,
+		category=category,
+		priority=priority,
+		technician=technician,
+		reason=reason,
 	)
-	order.save(ignore_permissions=True)
-
-	if bay and order.vehicle:
-		vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
-		vehicle.move_location(bay, _("Assigned to bay {0}").format(bay), order.name)
-
-	order.sync_status_from_jobs_and_parts()
-	return {"status": "success", "job": job.name}
 
 
 @frappe.whitelist()
@@ -1351,27 +1286,8 @@ def sync_quotation_to_service_order(doc, method=None):
 
 @frappe.whitelist()
 def assign_job(job_name: str, technician: str, bay: str | None = None):
-	job = frappe.get_doc("Service Job", job_name)
-	emp = frappe.get_doc("Employee", technician)
-
-	job.technician = emp.name
-	job.technician_user = emp.user_id
-	if bay:
-		job.bay = bay
-	job.status = "Assigned"
-	job.save(ignore_permissions=True)
-
-	order = frappe.get_doc("Service Order", job.service_order)
-	if bay:
-		vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
-		vehicle.move_location(bay, _("Assigned to bay {0}").format(bay), order.name)
-		if not vehicle.custodian and emp.user_id:
-			vehicle.custodian = emp.user_id
-			vehicle.save(ignore_permissions=True)
-
-	order.sync_status_from_jobs_and_parts()
-
-	return {"status": "success", "job_status": job.status, "order_status": order.status}
+	from vehicle_service.job_control import assign_technician
+	return assign_technician(job_name, technician, bay)
 
 
 @frappe.whitelist()
@@ -1552,47 +1468,12 @@ def recalculate_order_parts_from_stock(order_name: str):
 
 @frappe.whitelist()
 def complete_and_ready_for_billing(order_name: str, notes: str | None = None):
-	"""Marks all uncompleted workshop jobs as Completed/Passed, verifies parts, and transitions
-	the Service Order directly to 'Ready for Billing' (bypassing full separate QC document for quick jobs).
-	"""
-	order = frappe.get_doc("Service Order", order_name)
-	if order.is_locked_by_invoice():
-		frappe.throw(
-			_("Cannot complete: Service Order {0} is locked because Sales Invoice {1} is submitted. A Credit Note must be raised against the invoice before modifications can be made.").format(
-				order.name, order.sales_invoice
-			)
-		)
-	if order.status in (DELIVERED, CANCELLED):
-		frappe.throw(_("Cannot complete an order in status '{0}'.").format(order.status))
-
-	# 1. Mark uncompleted jobs as Completed / Passed
-	jobs = frappe.get_all(
-		"Service Job",
-		filters={"service_order": order.name},
-		fields=["name", "status"],
-	)
-	for j in jobs:
-		if j.status not in (JOB_PASSED, "Completed", "Passed", "Cancelled", "Declined"):
-			frappe.db.set_value("Service Job", j.name, "status", JOB_PASSED, update_modified=False)
-
-	# 2. Sync child table order.jobs
-	for row in order.get("jobs", []):
-		if row.status not in ("Completed", "Passed", "Cancelled", "Declined"):
-			row.status = "Completed"
-
-	# 3. Transition order to Ready for Billing
-	order.status = READY_FOR_BILLING
+	from vehicle_service.job_control import complete_service_order
+	res = complete_service_order(order_name)
 	if notes:
-		order.add_comment("Comment", _("Quick Completion Note: {0}").format(notes))
-
-	# Move vehicle to parking / finished bay if configured
-	settings = frappe.get_cached_doc("Vehicle Service Settings")
-	if settings.parking_location and order.vehicle:
-		vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
-		vehicle.move_location(settings.parking_location, _("Workshop jobs completed. Vehicle ready for billing."), order.name)
-
-	order.save(ignore_permissions=True)
-	return {"status": "success", "order_status": order.status}
+		order = frappe.get_doc("Service Order", order_name)
+		order.add_comment("Comment", _("Completion Note: {0}").format(notes))
+	return res
 
 
 @frappe.whitelist()

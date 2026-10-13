@@ -31,6 +31,10 @@ doc_events = {
 	},
 }
 
+has_permission = {
+	"Service Order": "vehicle_service.job_control.order_has_permission",
+}
+
 # Scheduled Tasks
 scheduler_events = {
 	"daily": [

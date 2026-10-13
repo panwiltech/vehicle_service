@@ -87,3 +87,101 @@ class TestJobControl(FrappeTestCase):
 		sj = frappe.get_doc("Service Job", sj_name)
 		sj.job_title = "Modified Title directly"
 		self.assertRaises(frappe.ValidationError, sj.save)
+
+	def test_job_control_actions_workflow(self):
+		from vehicle_service.job_control import (
+			add_job,
+			assign_technician,
+			start_clock,
+			pause_clock,
+			complete_service_order,
+			order_has_permission,
+		)
+
+		veh_id = "TST-JC-01"
+		if not frappe.db.exists("Service Vehicle", veh_id):
+			v = frappe.new_doc("Service Vehicle")
+			v.registration_no = veh_id
+			v.customer = "Test Customer"
+			v.vin = "VIN-TST-JC-01"
+			v.make = "Toyota"
+			v.model = "Hilux"
+			v.insert(ignore_permissions=True)
+
+		# Ensure test employee exists
+		emp_name = frappe.db.get_value("Employee", {"first_name": "Alex", "last_name": "Tech"})
+		if not emp_name:
+			company = frappe.db.get_single_value("Global Defaults", "default_company") or frappe.get_all("Company")[0].name
+			emp = frappe.new_doc("Employee")
+			emp.first_name = "Alex"
+			emp.last_name = "Tech"
+			emp.gender = "Male"
+			emp.company = company
+			emp.date_of_birth = "1990-01-01"
+			emp.date_of_joining = "2020-01-01"
+			emp.status = "Active"
+			emp.insert(ignore_permissions=True)
+			emp_id = emp.name
+		else:
+			emp_id = emp_name
+
+		so = frappe.new_doc("Service Order")
+		so.vehicle = veh_id
+		so.customer = "Test Customer"
+		so.insert(ignore_permissions=True)
+
+		# 1. Add Job
+		res_add = add_job(so.name, job_title="Brake Service", estimated_hours=2.0)
+		job_name = res_add["job"]
+		job = frappe.get_doc("Service Job", job_name)
+		self.assertEqual(job.status, "Approved")
+		so.reload()
+		self.assertEqual(len(so.jobs), 1)
+
+		# 2. Start Clock without technician should fail
+		self.assertRaises(frappe.ValidationError, start_clock, job_name)
+
+		# 3. Assign Technician
+		assign_technician(job_name, emp_id)
+		job.reload()
+		self.assertEqual(job.technician, emp_id)
+		self.assertEqual(job.status, "Assigned")
+
+		# 4. Start Clock
+		start_clock(job_name)
+		job.reload()
+		self.assertEqual(job.status, "In Progress")
+		self.assertEqual(len(job.time_logs), 1)
+		self.assertIsNone(job.time_logs[0].to_time)
+
+		# 5. Starting a second clock for same technician on another job must fail
+		res_add2 = add_job(so.name, job_title="Tyre Rotation", technician=emp_id)
+		self.assertRaises(frappe.ValidationError, start_clock, res_add2["job"])
+
+		# 6. Pause Clock
+		pause_clock(job_name, reason="Lunch break")
+		job.reload()
+		self.assertEqual(job.status, "Paused")
+		self.assertIsNotNone(job.time_logs[0].to_time)
+
+		# 7. Resume Clock
+		start_clock(job_name)
+		job.reload()
+		self.assertEqual(job.status, "In Progress")
+		self.assertEqual(len(job.time_logs), 2)
+
+		# 8. Complete Service Order
+		complete_service_order(so.name)
+		so.reload()
+		job.reload()
+		self.assertEqual(so.status, "Ready for Billing")
+		self.assertEqual(so.board_status, "Completed")
+		self.assertEqual(job.status, "Completed")
+		self.assertIsNotNone(job.time_logs[1].to_time)
+
+		# 9. Actions on completed order should be rejected
+		self.assertRaises(frappe.ValidationError, add_job, so.name, "New Job")
+		self.assertRaises(frappe.ValidationError, start_clock, job_name)
+
+		# 10. Permission hook check
+		self.assertFalse(order_has_permission(so, ptype="write", user="test_jc_user"))
