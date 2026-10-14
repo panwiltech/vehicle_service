@@ -64,7 +64,6 @@ class JobControlBoardUI {
 			this.render_tabs();
 			await this.load_cards();
 		} catch (e) {
-			// Permission or connection error
 			console.warn("Job Control Board could not load tabs:", e);
 		}
 	}
@@ -104,7 +103,7 @@ class JobControlBoardUI {
 				method: "vehicle_service.job_board.get_board_orders",
 				args: { tab },
 			});
-			if (tab !== this.active) return; // user switched tabs while loading
+			if (tab !== this.active) return;
 			this.render_cards(r.message || []);
 		} catch (e) {
 			console.warn("Job Control Board could not load orders:", e);
@@ -168,43 +167,111 @@ class JobControlBoardUI {
 frappe.provide("frappe.vehicle_service");
 frappe.vehicle_service.JobControlBoardUI = JobControlBoardUI;
 
-// Auto-mount into Workspace "Job Control Board"
-function try_mount_jcb_in_workspace() {
-	const route = frappe.get_route ? frappe.get_route() : [];
-	const is_jcb_workspace = (
-		(route[0] === "Workspaces" && (route[1] === "Job Control Board" || route[1] === "job-control-board")) ||
-		(route[0] === "job-control-board")
-	);
+// Robust check whether current view is the Job Control Board workspace
+function is_on_jcb_workspace() {
+	const path = (window.location.pathname || "").toLowerCase();
+	if (path.includes("job-control-board")) return true;
 
-	if (!is_jcb_workspace) {
+	const hash = (window.location.hash || "").toLowerCase();
+	if (hash.includes("job-control-board")) return true;
+
+	if (window.frappe) {
+		if (frappe.get_route_str) {
+			const r = (frappe.get_route_str() || "").toLowerCase();
+			if (r.includes("job-control-board") || r.includes("job control board")) return true;
+		}
+		if (frappe.get_route) {
+			const route = frappe.get_route();
+			if (Array.isArray(route)) {
+				const joined = route.map(s => String(s).toLowerCase()).join("/");
+				if (joined.includes("job-control-board") || joined.includes("job control board")) return true;
+			}
+		}
+		if (frappe.workspace && frappe.workspace.page) {
+			const p = (frappe.workspace.page.name || "").toLowerCase();
+			if (p.includes("job-control-board") || p.includes("job control board")) return true;
+		}
+	}
+	return false;
+}
+
+// Auto-mount into Workspace "Job Control Board"
+function check_and_mount_jcb() {
+	if (!is_on_jcb_workspace()) {
 		$("#jcb-workspace-mount").remove();
 		return;
 	}
 
-	const $main = $(".layout-main-section");
-	if (!$main.length) {
-		setTimeout(try_mount_jcb_in_workspace, 150);
+	let $container = null;
+	const $ws_page = $('.page-container[data-page-route="Workspaces"]:visible');
+	if ($ws_page.length) {
+		const $main = $ws_page.find(".layout-main-section");
+		if ($main.length) $container = $main;
+	}
+	if (!$container && frappe.workspace && frappe.workspace.body && frappe.workspace.body.is(":visible")) {
+		$container = frappe.workspace.body;
+	}
+	if (!$container) {
+		const $vis = $(".layout-main-section:visible");
+		if ($vis.length) $container = $vis;
+	}
+	if (!$container) {
+		const $any_main = $(".layout-main-section");
+		if ($any_main.length) $container = $any_main;
+	}
+
+	if (!$container || !$container.length) return;
+
+	// Already mounted inside this container
+	if ($container.find("#jcb-workspace-mount").length) {
 		return;
 	}
 
-	if (!$("#jcb-workspace-mount").length) {
-		const $mount = $(`
-			<div id="jcb-workspace-mount" style="margin-bottom: var(--margin-lg, 24px); padding-bottom: var(--margin-md, 16px); border-bottom: 1px solid var(--border-color);"></div>
-		`);
-		// Prepend to main section so it appears right above the workspace widgets
-		$main.prepend($mount);
-		new JobControlBoardUI($mount);
+	// Remove any misplaced mount
+	$("#jcb-workspace-mount").remove();
+
+	const $mount = $(`
+		<div id="jcb-workspace-mount" style="margin-bottom: var(--margin-lg, 24px); padding-bottom: var(--margin-md, 16px); border-bottom: 1px solid var(--border-color);"></div>
+	`);
+
+	const $editor = $container.find(".editor-js-container");
+	if ($editor.length) {
+		$mount.insertBefore($editor);
+	} else {
+		$container.prepend($mount);
 	}
+
+	new JobControlBoardUI($mount);
 }
 
-// Hook into route changes & page load
+// Hook into router changes, desk page change, ajax calls, and heartbeat
+if (window.frappe && frappe.router) {
+	frappe.router.on("change", () => {
+		setTimeout(check_and_mount_jcb, 50);
+		setTimeout(check_and_mount_jcb, 250);
+		setTimeout(check_and_mount_jcb, 600);
+	});
+}
+
+$(document).on("page-change", () => {
+	setTimeout(check_and_mount_jcb, 50);
+	setTimeout(check_and_mount_jcb, 250);
+});
+
+$(document).ajaxComplete(() => {
+	setTimeout(check_and_mount_jcb, 100);
+});
+
+if (!window._jcb_mount_interval) {
+	window._jcb_mount_interval = setInterval(check_and_mount_jcb, 400);
+}
+
 $(document).ready(() => {
-	if (frappe.router) {
-		frappe.router.on("change", () => {
-			setTimeout(try_mount_jcb_in_workspace, 100);
-		});
-	}
-	setTimeout(try_mount_jcb_in_workspace, 200);
+	check_and_mount_jcb();
+	setTimeout(check_and_mount_jcb, 100);
+	setTimeout(check_and_mount_jcb, 300);
+	setTimeout(check_and_mount_jcb, 800);
+	setTimeout(check_and_mount_jcb, 1500);
 });
 
 // Standalone page definition for /app/job-board
