@@ -34,9 +34,15 @@ class TestJobBoardTabs(FrappeTestCase):
 
 
 class TestJobBoardMatching(FrappeTestCase):
-	def setUp(self):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		# Seeding commits, so do it once before any test data exists; per-test data stays rollback-able.
 		frappe.set_user("Administrator")
 		setup_default_board_tabs()
+
+	def setUp(self):
+		frappe.set_user("Administrator")
 		if not frappe.db.exists("Customer", "Test Customer"):
 			c = frappe.new_doc("Customer")
 			c.customer_name = "Test Customer"
