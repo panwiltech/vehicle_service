@@ -200,6 +200,7 @@ def after_install():
 	setup_default_service_items()
 	setup_default_settings()
 	setup_job_controller_permissions()
+	setup_default_board_tabs()
 
 
 def after_migrate():
@@ -210,6 +211,7 @@ def after_migrate():
 	setup_default_service_items()
 	setup_default_settings()
 	setup_job_controller_permissions()
+	setup_default_board_tabs()
 
 
 def setup_roles():
@@ -335,6 +337,32 @@ def setup_default_service_items():
 			item = frappe.new_doc("Item")
 			item.update(itm)
 			item.save(ignore_permissions=True)
+	frappe.db.commit()
+
+
+DEFAULT_BOARD_TABS = [
+	# (label, sequence, include_if_any_job_in_progress, order statuses)
+	("In Progress", 1, 1, ["In Progress"]),
+	("Awaiting Parts", 2, 0, ["Waiting for Parts"]),
+	("Quality Control", 3, 0, ["QC"]),
+	("Paused", 4, 0, ["Paused"]),
+	("Ready to Start", 5, 0, ["Checked In", "Approved", "Ready for Work"]),
+]
+
+
+def setup_default_board_tabs():
+	"""Seeds the default Job Control Board tabs. Idempotent: existing tabs are left untouched."""
+	for label, sequence, job_driven, statuses in DEFAULT_BOARD_TABS:
+		if frappe.db.exists("Job Board Tab", label):
+			continue
+		tab = frappe.new_doc("Job Board Tab")
+		tab.tab_label = label
+		tab.sequence = sequence
+		tab.enabled = 1
+		tab.include_if_any_job_in_progress = job_driven
+		for status in statuses:
+			tab.append("order_statuses", {"status": status})
+		tab.insert(ignore_permissions=True)
 	frappe.db.commit()
 
 

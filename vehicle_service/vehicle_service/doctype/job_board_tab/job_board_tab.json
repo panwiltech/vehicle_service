@@ -1,0 +1,81 @@
+{
+ "actions": [],
+ "autoname": "field:tab_label",
+ "creation": "2026-10-14 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tab_label",
+  "sequence",
+  "enabled",
+  "include_if_any_job_in_progress",
+  "order_statuses"
+ ],
+ "fields": [
+  {
+   "fieldname": "tab_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tab Label",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "sequence",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sequence"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "default": "0",
+   "description": "Also show orders that have at least one job In Progress.",
+   "fieldname": "include_if_any_job_in_progress",
+   "fieldtype": "Check",
+   "label": "Include if Any Job In Progress"
+  },
+  {
+   "fieldname": "order_statuses",
+   "fieldtype": "Table",
+   "label": "Service Order Statuses",
+   "options": "Job Board Tab Status"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-14 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Job Board Tab",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Job Controller"
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "sequence",
+ "sort_order": "ASC",
+ "states": []
+}
