@@ -17,13 +17,15 @@ class JobControlBoardUI {
 		this.$container.empty();
 		this.$body = $(`
 			<div class="jcb">
-				<div class="jcb-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-					<h4 style="margin: 0; font-weight: 700;">Job Control Board</h4>
+				<div class="jcb-header d-flex justify-content-between align-items-center mb-3">
+					<h5 class="jcb-title">${__("Job Control Board")}</h5>
 					<button class="btn btn-default btn-xs jcb-refresh-btn" type="button">
-						<svg class="icon icon-xs" style="margin-right: 4px;"><use href="#icon-refresh"></use></svg>Refresh
+						<svg class="icon icon-xs" style="margin-right: 4px;"><use href="#icon-refresh"></use></svg>${__("Refresh")}
 					</button>
 				</div>
-				<div class="jcb-tabs" role="tablist"></div>
+				<div class="jcb-tabs-wrap">
+					<ul class="nav nav-tabs form-tabs jcb-tabs" role="tablist"></ul>
+				</div>
 				<div class="jcb-cards"></div>
 			</div>
 		`).appendTo(this.$container);
@@ -71,13 +73,18 @@ class JobControlBoardUI {
 		const esc = frappe.utils.escape_html;
 		this.$tabs.empty();
 		this.tabs.forEach((tab) => {
+			const is_active = tab.name === this.active;
 			const $t = $(`
-				<button class="jcb-tab ${tab.name === this.active ? "active" : ""}"
-					id="jcb-tab-${frappe.scrub(tab.name)}" role="tab" type="button">
-					<span class="jcb-tab-label">${esc(tab.label)}</span>
-					<span class="jcb-badge">${tab.count}</span>
-				</button>`);
-			$t.on("click", () => {
+				<li class="nav-item jcb-tab-item">
+					<button class="nav-link ${is_active ? "active" : ""}"
+						id="jcb-tab-${frappe.scrub(tab.name)}" role="tab" type="button">
+						<span>${esc(tab.label)}</span>
+						<span class="jcb-tab-count">${tab.count}</span>
+					</button>
+				</li>
+			`);
+			$t.find(".nav-link").on("click", (e) => {
+				e.preventDefault();
 				this.active = tab.name;
 				this.render_tabs();
 				this.load_cards();
@@ -104,6 +111,16 @@ class JobControlBoardUI {
 		}
 	}
 
+	get_status_indicator_class(status) {
+		const s = (status || "").toLowerCase();
+		if (s === "in progress" || s === "completed" || s === "closed") return "green";
+		if (s === "waiting for parts" || s === "on hold" || s === "paused") return "orange";
+		if (s === "ready for work" || s === "approved" || s === "checked in") return "blue";
+		if (s === "qc" || s === "quality control") return "purple";
+		if (s === "cancelled") return "red";
+		return "gray";
+	}
+
 	render_cards(orders) {
 		const esc = frappe.utils.escape_html;
 		if (!orders.length) {
@@ -113,24 +130,34 @@ class JobControlBoardUI {
 		this.$cards.empty();
 		orders.forEach((o) => {
 			const pct = o.job_count ? Math.round((o.jobs_completed / o.job_count) * 100) : 0;
+			const ind_color = this.get_status_indicator_class(o.status);
 			const $c = $(`
 				<article class="jcb-card" tabindex="0" id="jcb-card-${esc(o.name)}">
-					<header class="jcb-card-head">
-						<span class="jcb-order">${esc(o.name)}</span>
-						${o.has_running_clock ? `<span class="jcb-clock" title="${__("Clock running")}"></span>` : ""}
-					</header>
-					<div class="jcb-customer">${esc(o.customer_name || "")}</div>
-					<div class="jcb-vehicle">${esc(o.vehicle || "")}</div>
-					<div class="jcb-tech">${esc(o.technicians || __("Unassigned"))}</div>
-					<div class="jcb-progress"><span style="width:${pct}%"></span></div>
-					<footer class="jcb-card-foot">
-						<span>${o.jobs_completed}/${o.job_count} ${__("jobs done")}</span>
-						<span class="jcb-status">${esc(o.status)}</span>
-					</footer>
+					<div>
+						<header class="jcb-card-head">
+							<a class="jcb-order-link" href="/app/service-order/${encodeURIComponent(o.name)}">${esc(o.name)}</a>
+							${o.has_running_clock ? `<span class="indicator green blink" title="${__("Active clock running")}"></span>` : ""}
+						</header>
+						<div class="jcb-customer-name">${esc(o.customer_name || "")}</div>
+						<div class="jcb-meta-text">${esc(o.vehicle || "")}</div>
+						<div class="jcb-meta-text">${esc(o.technicians || __("Unassigned"))}</div>
+					</div>
+					<div>
+						<div class="jcb-progress-bar">
+							<div class="jcb-progress-fill" style="width: ${pct}%"></div>
+						</div>
+						<footer class="jcb-card-footer">
+							<span class="jobs-done">${o.jobs_completed}/${o.job_count} ${__("jobs done")}</span>
+							<span class="indicator-pill ${ind_color}">${esc(o.status)}</span>
+						</footer>
+					</div>
 				</article>`);
-			const open = () => frappe.set_route("Form", "Service Order", o.name);
+			const open = (e) => {
+				if ($(e.target).closest("a").length) return;
+				frappe.set_route("Form", "Service Order", o.name);
+			};
 			$c.on("click", open).on("keydown", (e) => {
-				if (e.key === "Enter") open();
+				if (e.key === "Enter") frappe.set_route("Form", "Service Order", o.name);
 			});
 			this.$cards.append($c);
 		});
@@ -162,7 +189,7 @@ function try_mount_jcb_in_workspace() {
 
 	if (!$("#jcb-workspace-mount").length) {
 		const $mount = $(`
-			<div id="jcb-workspace-mount" style="margin-bottom: 24px; padding-bottom: 12px; border-bottom: 2px solid var(--border-color);"></div>
+			<div id="jcb-workspace-mount" style="margin-bottom: var(--margin-lg, 24px); padding-bottom: var(--margin-md, 16px); border-bottom: 1px solid var(--border-color);"></div>
 		`);
 		// Prepend to main section so it appears right above the workspace widgets
 		$main.prepend($mount);
