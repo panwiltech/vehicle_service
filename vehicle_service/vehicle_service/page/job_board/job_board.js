@@ -1,4 +1,4 @@
-frappe.pages["job-control-board"].on_page_load = function (wrapper) {
+frappe.pages["job-board"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: __("Job Control Board"),
@@ -7,7 +7,7 @@ frappe.pages["job-control-board"].on_page_load = function (wrapper) {
 	frappe.job_control_board = new JobControlBoard(page);
 };
 
-frappe.pages["job-control-board"].on_page_show = function () {
+frappe.pages["job-board"].on_page_show = function () {
 	if (frappe.job_control_board) frappe.job_control_board.refresh();
 };
 

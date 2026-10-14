@@ -144,7 +144,7 @@ class TestJobBoardMatching(FrappeTestCase):
 
 class TestJobBoardPage(FrappeTestCase):
 	def test_page_exists_with_roles(self):
-		page = frappe.get_doc("Page", "job-control-board")
+		page = frappe.get_doc("Page", "job-board")
 		self.assertEqual(sorted(r.role for r in page.roles), ["Job Controller", "System Manager"])
 
 	def test_publish_board_update_emits(self):
