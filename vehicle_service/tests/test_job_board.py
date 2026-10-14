@@ -134,3 +134,18 @@ class TestJobBoardMatching(FrappeTestCase):
 			get_board_tabs()
 		with self.assertRaises(frappe.PermissionError):
 			get_board_orders("In Progress")
+
+
+class TestJobBoardPage(FrappeTestCase):
+	def test_page_exists_with_roles(self):
+		page = frappe.get_doc("Page", "job-control-board")
+		self.assertEqual(sorted(r.role for r in page.roles), ["Job Controller", "System Manager"])
+
+	def test_publish_board_update_emits(self):
+		from unittest.mock import patch
+		from vehicle_service.job_board import publish_board_update
+
+		with patch("frappe.publish_realtime") as publish:
+			publish_board_update(frappe._dict(name="X"))
+		publish.assert_called_once()
+		self.assertEqual(publish.call_args.args[0], "job_board_update")

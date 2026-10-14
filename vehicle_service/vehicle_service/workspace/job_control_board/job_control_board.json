@@ -43,6 +43,12 @@
  ],
  "shortcuts": [
   {
+   "color": "Orange",
+   "label": "Tabbed Job Board",
+   "link_to": "job-control-board",
+   "type": "Page"
+  },
+  {
    "color": "Blue",
    "doc_view": "List",
    "label": "All Service Orders",

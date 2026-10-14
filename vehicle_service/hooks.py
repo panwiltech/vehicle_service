@@ -13,6 +13,12 @@ after_migrate = "vehicle_service.install.after_migrate"
 
 # Document Events
 doc_events = {
+	"Service Order": {
+		"on_update": "vehicle_service.job_board.publish_board_update",
+	},
+	"Service Job": {
+		"on_update": "vehicle_service.job_board.publish_board_update",
+	},
 	"Quotation": {
 		"on_update": "vehicle_service.vehicle_service.doctype.service_order.service_order.sync_quotation_to_service_order",
 		"on_submit": "vehicle_service.vehicle_service.doctype.service_order.service_order.on_quotation_submit",

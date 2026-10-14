@@ -114,3 +114,9 @@ def get_board_orders(tab: str) -> list[dict]:
 			}
 		)
 	return cards
+
+
+def publish_board_update(doc, method=None) -> None:
+	"""Doc-event hook: tell open boards that a Service Order / Service Job changed."""
+	frappe.publish_realtime("job_board_update", {"doctype": doc.doctype, "name": doc.name}, after_commit=True)
+
