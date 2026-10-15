@@ -29,6 +29,9 @@ class JobControlBoardUI {
 					<!-- Top Custom Action Buttons matching Jobs tab -->
 					<div class="grid-custom-buttons d-flex justify-content-between align-items-center mb-2">
 						<div class="btn-group" role="group">
+							<button class="btn btn-xs btn-default btn-add-job" type="button">
+								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-add"></use></svg>${__("Add Job")}
+							</button>
 							<button class="btn btn-xs btn-default btn-assign-tech" type="button">
 								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-user"></use></svg>${__("Assign Technician")}
 							</button>
@@ -89,7 +92,7 @@ class JobControlBoardUI {
 										<div class="grid-static-col col text-center" style="flex: 0.6 1 70px; justify-content: center;" data-fieldname="clock">
 											<span>${__("Clock")}</span>
 										</div>
-										<div class="grid-static-col col text-right" style="flex: 0 0 80px; max-width: 80px; justify-content: flex-end;" data-fieldname="actions">
+										<div class="grid-static-col col text-right" style="flex: 0 0 115px; max-width: 115px; justify-content: flex-end;" data-fieldname="actions">
 											<span>${__("Actions")}</span>
 										</div>
 									</div>
@@ -117,6 +120,7 @@ class JobControlBoardUI {
 		this.$body.find(".btn-refresh-board").on("click", () => this.refresh());
 		this.$body.find(".btn-new-order").on("click", () => frappe.new_doc("Service Order"));
 
+		this.$body.find(".btn-add-job").on("click", () => this.trigger_add_job());
 		this.$body.find(".btn-assign-tech").on("click", () => this.trigger_assign_technician());
 		this.$body.find(".btn-start-clock").on("click", () => this.trigger_start_clock());
 		this.$body.find(".btn-pause-clock").on("click", () => this.trigger_pause_clock());
@@ -141,6 +145,14 @@ class JobControlBoardUI {
 			frappe.realtime.on("job_board_update", () => {
 				if (window._current_jcb_instance) {
 					window._current_jcb_instance.schedule_refresh();
+				}
+			});
+		}
+		if (!window._jcb_dropdown_listener_bound) {
+			window._jcb_dropdown_listener_bound = true;
+			$(document).on("click", (e) => {
+				if (!$(e.target).closest(".jcb-action-btn-group").length) {
+					$(".jcb-actions-dropdown").hide();
 				}
 			});
 		}
@@ -300,14 +312,71 @@ class JobControlBoardUI {
 						<div class="grid-static-col col text-center" style="flex: 0.6 1 70px; justify-content: center;" data-fieldname="clock">
 							${clock_badge}
 						</div>
-						<div class="grid-static-col col text-right" style="flex: 0 0 80px; max-width: 80px; justify-content: flex-end;" data-fieldname="actions">
-							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="btn btn-default btn-xs" title="${__("Open Order")}">
-								${__("Open")} <i class="fa fa-angle-right"></i>
-							</a>
+						<div class="grid-static-col col text-right" style="flex: 0 0 115px; max-width: 115px; justify-content: flex-end;" data-fieldname="actions">
+							<div class="btn-group jcb-action-btn-group" role="group">
+								<a href="/app/service-order/${encodeURIComponent(o.name)}" class="btn btn-default btn-xs" title="${__("Open Order")}">
+									${__("Open")}
+								</a>
+								<button type="button" class="btn btn-default btn-xs dropdown-toggle dropdown-toggle-split jcb-btn-actions-toggle" title="${__("More Actions")}">
+									<span class="caret"></span>
+								</button>
+								<div class="dropdown-menu dropdown-menu-right shadow-sm jcb-actions-dropdown" style="display: none;">
+									<a class="dropdown-item jcb-action-add-job" href="#"><i class="fa fa-plus text-primary"></i> ${__("Add Job")}</a>
+									<a class="dropdown-item jcb-action-start-clock" href="#"><i class="fa fa-play text-success"></i> ${__("Start Clock")}</a>
+									<a class="dropdown-item jcb-action-pause-clock" href="#"><i class="fa fa-pause text-warning"></i> ${__("Pause Job")}</a>
+									<a class="dropdown-item jcb-action-assign-tech" href="#"><i class="fa fa-user text-info"></i> ${__("Assign Technician")}</a>
+									<div class="dropdown-divider"></div>
+									<a class="dropdown-item jcb-action-complete-order" href="#"><i class="fa fa-check text-success"></i> ${__("Complete Job")}</a>
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
 			`);
+
+			// Bind Row Actions Dropdown & Items
+			$row.find(".jcb-btn-actions-toggle").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				const $menu = $(e.currentTarget).siblings(".jcb-actions-dropdown");
+				$(".jcb-actions-dropdown").not($menu).hide();
+				$menu.toggle();
+			});
+
+			$row.find(".jcb-action-add-job").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				$(".jcb-actions-dropdown").hide();
+				this.trigger_add_job(o.name);
+			});
+
+			$row.find(".jcb-action-start-clock").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				$(".jcb-actions-dropdown").hide();
+				this.trigger_start_clock(o.name);
+			});
+
+			$row.find(".jcb-action-pause-clock").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				$(".jcb-actions-dropdown").hide();
+				this.trigger_pause_clock(o.name);
+			});
+
+			$row.find(".jcb-action-assign-tech").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				$(".jcb-actions-dropdown").hide();
+				this.trigger_assign_technician(o.name);
+			});
+
+			$row.find(".jcb-action-complete-order").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				$(".jcb-actions-dropdown").hide();
+				this.trigger_complete_order(o.name);
+			});
 
 			// Row click navigation (excluding direct checkbox/link/button clicks)
 			$row.on("click", (e) => {
@@ -323,14 +392,105 @@ class JobControlBoardUI {
 		});
 	}
 
-	// Action: Assign Technician
-	trigger_assign_technician() {
-		const selected = this.get_selected_orders();
-		if (!selected.length) {
-			frappe.msgprint(__("Please select a Service Order row first."));
-			return;
+	// Action: Add Job
+	trigger_add_job(order_name) {
+		if (!order_name) {
+			const selected = this.get_selected_orders();
+			if (!selected.length) {
+				frappe.msgprint(__("Please select a Service Order row first."));
+				return;
+			}
+			order_name = selected[0];
 		}
-		const order_name = selected[0];
+
+		const d = new frappe.ui.Dialog({
+			title: __("Add Workshop Job ({0})", [order_name]),
+			fields: [
+				{
+					fieldname: "job_title",
+					label: __("Job Description / Title"),
+					fieldtype: "Data",
+					reqd: 1,
+				},
+				{
+					fieldname: "estimated_hours",
+					label: __("Labour Qty (Hours)"),
+					fieldtype: "Float",
+					default: 1.0,
+					reqd: 1,
+				},
+				{
+					fieldname: "category",
+					label: __("Category"),
+					fieldtype: "Select",
+					options: "Essential\nRecommended\nOptional",
+					default: "Essential",
+					reqd: 1,
+				},
+				{
+					fieldname: "priority",
+					label: __("Priority"),
+					fieldtype: "Select",
+					options: "Low\nMedium\nHigh\nUrgent",
+					default: "Medium",
+					reqd: 1,
+				},
+				{
+					fieldname: "technician",
+					label: __("Assign Technician (Optional)"),
+					fieldtype: "Link",
+					options: "Employee",
+				},
+				{
+					fieldname: "description",
+					label: __("Detailed Scope / Instructions"),
+					fieldtype: "Small Text",
+				},
+				{
+					fieldname: "reason",
+					label: __("Reason for Adding"),
+					fieldtype: "Small Text",
+				},
+			],
+			primary_action_label: __("Add Job"),
+			primary_action: (vals) => {
+				frappe.call({
+					method: "vehicle_service.job_control.add_job",
+					args: {
+						service_order: order_name,
+						job_title: vals.job_title,
+						estimated_hours: vals.estimated_hours,
+						category: vals.category,
+						priority: vals.priority,
+						technician: vals.technician,
+						description: vals.description,
+						reason: vals.reason,
+					},
+					freeze: true,
+					freeze_message: __("Adding Job..."),
+					callback: (r) => {
+						if (!r.exc) {
+							d.hide();
+							frappe.show_alert({ message: __("Job added to {0}", [order_name]), indicator: "green" });
+							this.refresh();
+						}
+					},
+				});
+			},
+		});
+		d.show();
+	}
+
+	// Action: Assign Technician
+	trigger_assign_technician(order_name) {
+		if (!order_name) {
+			const selected = this.get_selected_orders();
+			if (!selected.length) {
+				frappe.msgprint(__("Please select a Service Order row first."));
+				return;
+			}
+			order_name = selected[0];
+		}
 
 		frappe.db.get_doc("Service Order", order_name).then((so) => {
 			const job_options = (so.jobs || []).map((j) => ({
@@ -393,25 +553,26 @@ class JobControlBoardUI {
 	}
 
 	// Action: Start Clock
-	trigger_start_clock() {
-		const selected = this.get_selected_orders();
-		if (!selected.length) {
-			frappe.msgprint(__("Please select a Service Order row to start clock."));
-			return;
+	trigger_start_clock(order_name) {
+		if (!order_name) {
+			const selected = this.get_selected_orders();
+			if (!selected.length) {
+				frappe.msgprint(__("Please select a Service Order row to start clock."));
+				return;
+			}
+			order_name = selected[0];
 		}
-		const order_name = selected[0];
 
 		frappe.db.get_doc("Service Order", order_name).then((so) => {
-			const running_jobs = (so.jobs || []).filter((j) => j.status === "In Progress");
-			const eligible_jobs = (so.jobs || []).filter((j) => j.status !== "Completed" && j.assigned_technician);
+			const eligible_jobs = (so.jobs || []).filter((j) => j.status !== "Completed");
 
 			if (!eligible_jobs.length) {
-				frappe.msgprint(__("No assigned, uncompleted jobs available on {0} to start clock.", [order_name]));
+				frappe.msgprint(__("No uncompleted jobs available on {0} to start clock.", [order_name]));
 				return;
 			}
 
 			const job_options = eligible_jobs.map((j) => ({
-				label: `${j.job_title} — ${j.technician_name || j.assigned_technician}`,
+				label: `${j.job_title} — ${j.technician_name || j.assigned_technician || __("Unassigned")}`,
 				value: j.service_job,
 			}));
 
@@ -448,13 +609,15 @@ class JobControlBoardUI {
 	}
 
 	// Action: Pause Clock
-	trigger_pause_clock() {
-		const selected = this.get_selected_orders();
-		if (!selected.length) {
-			frappe.msgprint(__("Please select a Service Order row to pause clock."));
-			return;
+	trigger_pause_clock(order_name) {
+		if (!order_name) {
+			const selected = this.get_selected_orders();
+			if (!selected.length) {
+				frappe.msgprint(__("Please select a Service Order row to pause clock."));
+				return;
+			}
+			order_name = selected[0];
 		}
-		const order_name = selected[0];
 
 		frappe.db.get_doc("Service Order", order_name).then((so) => {
 			const active_jobs = (so.jobs || []).filter((j) => j.status === "In Progress");
@@ -485,6 +648,7 @@ class JobControlBoardUI {
 						fieldtype: "Select",
 						options: "Awaiting Parts\nAwaiting Approval\nShift End / Break\nOther",
 						default: "Shift End / Break",
+						reqd: 1,
 					},
 				],
 				primary_action_label: __("Pause Clock"),
@@ -508,13 +672,15 @@ class JobControlBoardUI {
 	}
 
 	// Action: Complete Order
-	trigger_complete_order() {
-		const selected = this.get_selected_orders();
-		if (!selected.length) {
-			frappe.msgprint(__("Please select a Service Order row to complete."));
-			return;
+	trigger_complete_order(order_name) {
+		if (!order_name) {
+			const selected = this.get_selected_orders();
+			if (!selected.length) {
+				frappe.msgprint(__("Please select a Service Order row to complete."));
+				return;
+			}
+			order_name = selected[0];
 		}
-		const order_name = selected[0];
 
 		frappe.confirm(
 			__("Complete all jobs on Service Order {0} and mark Ready for Billing?", [order_name]),
