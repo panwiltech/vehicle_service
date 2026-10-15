@@ -577,7 +577,13 @@ def add_ad_hoc_job(
 		category=category,
 		priority=priority,
 		technician=technician,
+		bay=bay,
 		reason=reason,
+		service_item=service_item,
+		rate=rate,
+		supplier=supplier,
+		supplier_cost=supplier_cost,
+		supplier_invoice_ref=supplier_invoice_ref,
 	)
 
 

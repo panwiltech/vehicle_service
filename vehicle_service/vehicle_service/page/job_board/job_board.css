@@ -1,8 +1,11 @@
 /* Job Control Board - Pure ERPNext / Frappe Desk Form Grid & Tabs Theme */
 
-/* Make Job Control Board workspace and page full width */
+/* Make Job Control Board workspace and page 100% full width */
 body[data-route*="job-control-board"] .page-container[data-page-route="Workspaces"] .layout-main,
 body[data-route*="job-control-board"] [data-page-route="Workspaces"] .layout-main,
+body:has(#jcb-workspace-mount) .layout-main,
+body:has(#jcb-workspace-mount) .layout-main-section,
+body:has(#jcb-workspace-mount) .layout-main-section-wrapper,
 .page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .layout-main,
 .page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .layout-main-section,
 .page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .layout-main-section-wrapper,
@@ -10,6 +13,8 @@ body[data-route*="job-board"] .layout-main,
 body[data-route*="job-board"] .layout-main-section {
 	max-width: 100% !important;
 	width: 100% !important;
+	margin-left: 0 !important;
+	margin-right: 0 !important;
 	padding-left: var(--padding-md, 16px) !important;
 	padding-right: var(--padding-md, 16px) !important;
 }
@@ -61,13 +66,17 @@ body[data-route*="job-board"] .layout-main-section {
 	width: 100% !important;
 	max-width: 100% !important;
 	overflow: visible !important;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .jcb-wrapper .grid-heading-row {
-	background-color: var(--subtle-fg, var(--bg-color, #fafbfc));
+	background-color: var(--subtle-fg, var(--bg-color, #f8f9fa));
 	border-bottom: 1px solid var(--table-border-color, var(--border-color, #d1d8dd));
-	font-weight: 500;
-	color: var(--text-muted, #6c7680);
+	font-weight: 600;
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-muted, #64748b);
 	width: 100% !important;
 	max-width: 100% !important;
 }
@@ -75,24 +84,29 @@ body[data-route*="job-board"] .layout-main-section {
 .jcb-wrapper .grid-heading-row .grid-static-col,
 .jcb-wrapper .grid-heading-row .row-check,
 .jcb-wrapper .grid-heading-row .row-index {
-	height: 34px;
+	height: 38px;
 	display: flex;
 	align-items: center;
-	font-size: var(--text-xs, 12px);
-	padding: 4px 8px;
+	padding: 6px 12px;
+	border-right: 1px solid var(--table-border-color, var(--border-color, #e2e8f0));
+}
+
+.jcb-wrapper .grid-heading-row .col:last-child {
+	border-right: none;
 }
 
 .jcb-wrapper .grid-body {
 	width: 100% !important;
 	max-width: 100% !important;
 	overflow: visible !important;
+	background-color: var(--card-bg, #ffffff);
 }
 
 .jcb-wrapper .grid-row {
 	width: 100% !important;
 	max-width: 100% !important;
 	border-bottom: 1px solid var(--table-border-color, var(--border-color, #ebeff2));
-	transition: background-color 0.1s ease;
+	transition: background-color 0.15s ease;
 	cursor: pointer;
 	overflow: visible !important;
 }
@@ -103,7 +117,7 @@ body[data-route*="job-board"] .layout-main-section {
 
 .jcb-wrapper .grid-row:hover,
 .jcb-wrapper .grid-row:focus {
-	background-color: var(--table-hover-bg, var(--subtle-fg, #f7f9fa));
+	background-color: var(--table-hover-bg, var(--subtle-fg, #f8fafc));
 	outline: none;
 }
 
@@ -111,7 +125,7 @@ body[data-route*="job-board"] .layout-main-section {
 	width: 100% !important;
 	max-width: 100% !important;
 	margin: 0 !important;
-	min-height: 42px;
+	min-height: 44px;
 	align-items: center;
 	overflow: visible !important;
 }
@@ -123,7 +137,12 @@ body[data-route*="job-board"] .layout-main-section {
 	align-items: center;
 	font-size: var(--text-sm, 13px);
 	color: var(--text-color, #171717);
-	padding: 6px 8px;
+	padding: 8px 12px;
+	border-right: 1px solid var(--table-border-color, var(--border-color, #ebeff2));
+}
+
+.jcb-wrapper .grid-row .col:last-child {
+	border-right: none;
 }
 
 .jcb-wrapper .grid-row-check {
@@ -138,13 +157,13 @@ body[data-route*="job-board"] .layout-main-section {
 }
 
 .jcb-wrapper .jcb-order-link:hover {
-	color: var(--primary-color, var(--text-color, #171717));
+	color: var(--primary-color, #2490ef);
 	text-decoration: underline;
 }
 
 .jcb-wrapper .grid-empty {
-	padding: 40px 16px;
-	color: var(--text-muted, #6c7680);
+	padding: 48px 16px;
+	color: var(--text-muted, #64748b);
 	font-size: var(--text-sm, 13px);
 	background-color: var(--card-bg, #ffffff);
 	width: 100%;

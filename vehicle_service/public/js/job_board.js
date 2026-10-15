@@ -65,34 +65,34 @@ class JobControlBoardUI {
 							<div class="grid-heading-row">
 								<div class="grid-row">
 									<div class="data-row row m-0">
-										<div class="row-check sortable-handle col" style="flex: 0 0 32px; max-width: 32px; text-align: center;">
+										<div class="row-check sortable-handle col" style="flex: 0 0 38px; max-width: 38px; text-align: center; justify-content: center;">
 											<input type="checkbox" class="grid-row-check jcb-check-all" title="${__("Select All")}">
 										</div>
-										<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 38px; max-width: 38px; text-align: center;">
+										<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 44px; max-width: 44px; text-align: center; justify-content: center;">
 											<span>${__("No.")}</span>
 										</div>
-										<div class="grid-static-col col bold" style="flex: 1.2 1 120px; min-width: 110px;" data-fieldname="service_order">
+										<div class="grid-static-col col bold" style="flex: 1.2 1 140px; min-width: 130px;" data-fieldname="service_order">
 											<span>${__("Service Order")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.6 1 130px; min-width: 120px;" data-fieldname="customer">
+										<div class="grid-static-col col" style="flex: 1.6 1 160px; min-width: 140px;" data-fieldname="customer">
 											<span>${__("Customer")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.3 1 120px; min-width: 110px;" data-fieldname="vehicle">
+										<div class="grid-static-col col" style="flex: 1.3 1 130px; min-width: 120px;" data-fieldname="vehicle">
 											<span>${__("Vehicle")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.0 1 110px; min-width: 95px;" data-fieldname="status">
+										<div class="grid-static-col col" style="flex: 1.1 1 120px; min-width: 110px;" data-fieldname="status">
 											<span>${__("Status")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.4 1 130px; min-width: 110px;" data-fieldname="technicians">
+										<div class="grid-static-col col" style="flex: 1.6 1 150px; min-width: 130px;" data-fieldname="technicians">
 											<span>${__("Technician(s)")}</span>
 										</div>
-										<div class="grid-static-col col text-center" style="flex: 0.7 1 75px; min-width: 70px; justify-content: center;" data-fieldname="jobs">
+										<div class="grid-static-col col text-center" style="flex: 0.8 1 90px; min-width: 80px; justify-content: center;" data-fieldname="jobs">
 											<span>${__("Jobs Done")}</span>
 										</div>
-										<div class="grid-static-col col text-center" style="flex: 0.5 1 50px; min-width: 45px; justify-content: center;" data-fieldname="clock">
+										<div class="grid-static-col col text-center" style="flex: 0.6 1 65px; min-width: 55px; justify-content: center;" data-fieldname="clock">
 											<span>${__("Clock")}</span>
 										</div>
-										<div class="grid-static-col col text-right" style="flex: 0 0 85px; max-width: 85px; justify-content: flex-end;" data-fieldname="actions">
+										<div class="grid-static-col col text-center" style="flex: 0 0 95px; max-width: 95px; justify-content: center;" data-fieldname="actions">
 											<span>${__("Actions")}</span>
 										</div>
 									</div>
@@ -283,36 +283,36 @@ class JobControlBoardUI {
 			const $row = $(`
 				<div class="grid-row" data-name="${esc(o.name)}" tabindex="0">
 					<div class="data-row row m-0">
-						<div class="row-check sortable-handle col" style="flex: 0 0 32px; max-width: 32px; text-align: center;">
+						<div class="row-check sortable-handle col" style="flex: 0 0 38px; max-width: 38px; text-align: center; justify-content: center;">
 							<input type="checkbox" class="grid-row-check">
 						</div>
-						<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 38px; max-width: 38px; text-align: center;">
+						<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 44px; max-width: 44px; text-align: center; justify-content: center;">
 							<span>${index + 1}</span>
 						</div>
-						<div class="grid-static-col col bold ellipsis" style="flex: 1.2 1 120px; min-width: 110px;" data-fieldname="service_order">
+						<div class="grid-static-col col bold ellipsis" style="flex: 1.2 1 140px; min-width: 130px;" data-fieldname="service_order">
 							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="jcb-order-link">${esc(o.name)}</a>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1.6 1 130px; min-width: 120px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
+						<div class="grid-static-col col ellipsis" style="flex: 1.6 1 160px; min-width: 140px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
 							<span>${esc(o.customer_name || "—")}</span>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1.3 1 120px; min-width: 110px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
+						<div class="grid-static-col col ellipsis" style="flex: 1.3 1 130px; min-width: 120px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
 							<span>${esc(o.vehicle || "—")}</span>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1.0 1 110px; min-width: 95px;" data-fieldname="status">
+						<div class="grid-static-col col ellipsis" style="flex: 1.1 1 120px; min-width: 110px;" data-fieldname="status">
 							<span class="indicator-pill ${ind_color}">${esc(o.status)}</span>
 						</div>
-						<div class="grid-static-col col ellipsis text-muted" style="flex: 1.4 1 130px; min-width: 110px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
+						<div class="grid-static-col col ellipsis text-muted" style="flex: 1.6 1 150px; min-width: 130px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
 							<span>${esc(o.technicians || __("Unassigned"))}</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0.7 1 75px; min-width: 70px; justify-content: center;" data-fieldname="jobs">
+						<div class="grid-static-col col text-center" style="flex: 0.8 1 90px; min-width: 80px; justify-content: center;" data-fieldname="jobs">
 							<span class="badge ${o.jobs_completed === o.job_count && o.job_count > 0 ? "badge-success" : "badge-light"}">
 								${o.jobs_completed} / ${o.job_count}
 							</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0.5 1 50px; min-width: 45px; justify-content: center;" data-fieldname="clock">
+						<div class="grid-static-col col text-center" style="flex: 0.6 1 65px; min-width: 55px; justify-content: center;" data-fieldname="clock">
 							${clock_badge}
 						</div>
-						<div class="grid-static-col col text-right" style="flex: 0 0 85px; max-width: 85px; justify-content: flex-end;" data-fieldname="actions">
+						<div class="grid-static-col col text-center" style="flex: 0 0 95px; max-width: 95px; justify-content: center;" data-fieldname="actions">
 							<button type="button" class="btn btn-default btn-xs jcb-btn-row-action" title="${__("Order Actions")}">
 								${__("Actions")} <i class="fa fa-caret-down" style="margin-left: 2px;"></i>
 							</button>
@@ -404,82 +404,103 @@ class JobControlBoardUI {
 	trigger_add_job(order_name) {
 		if (!order_name) {
 			const selected = this.get_selected_orders();
-			if (!selected.length) {
-				frappe.msgprint(__("Please select a Service Order row first."));
-				return;
+			if (selected.length) {
+				order_name = selected[0];
 			}
-			order_name = selected[0];
 		}
 
+		const fields = [];
+		if (!order_name) {
+			fields.push({
+				fieldname: "service_order",
+				label: __("Service Order"),
+				fieldtype: "Link",
+				options: "Service Order",
+				reqd: 1,
+				get_query: () => ({
+					filters: {
+						docstatus: ["!=", 2],
+						status: ["not in", ["Cancelled", "Delivered", "Ready for Billing"]]
+					}
+				})
+			});
+		}
+
+		fields.push(
+			{
+				fieldname: "service_item",
+				label: __("Service Item"),
+				fieldtype: "Link",
+				options: "Item",
+				default: "LABOUR",
+				reqd: 1,
+				get_query: () => ({ filters: { is_stock_item: 0 } }),
+				onchange: () => {
+					const itm = d.get_value("service_item");
+					if (itm) {
+						frappe.db.get_value("Item", itm, "item_name").then((r) => {
+							if (r && r.message && r.message.item_name && !d.get_value("job_title")) {
+								d.set_value("job_title", r.message.item_name);
+							}
+						});
+						frappe.db.get_value("Item Price", { item_code: itm, price_list: "Standard Selling" }, "price_list_rate").then((pr) => {
+							if (pr && pr.message && pr.message.price_list_rate) {
+								d.set_value("rate", pr.message.price_list_rate);
+							}
+						});
+					}
+				},
+			},
+			{ fieldname: "job_title", label: __("Job Description"), fieldtype: "Data", reqd: 1 },
+			{ fieldname: "estimated_hours", label: __("Labour Qty (Hours)"), fieldtype: "Float", default: 1.0, reqd: 1 },
+			{ fieldname: "rate", label: __("Rate / Unit Price"), fieldtype: "Currency", default: 50.0 },
+			{ fieldname: "col_brk_1", fieldtype: "Column Break" },
+			{ fieldname: "category", label: __("Category"), fieldtype: "Select", options: "Essential\nRecommended\nOptional", default: "Essential", reqd: 1 },
+			{ fieldname: "priority", label: __("Priority"), fieldtype: "Select", options: "Low\nMedium\nHigh\nUrgent", default: "Medium", reqd: 1 },
+			{ fieldname: "technician", label: __("Assign Technician"), fieldtype: "Link", options: "Employee" },
+			{ fieldname: "bay", label: __("Workshop Bay"), fieldtype: "Link", options: "Workshop Location" },
+			{ fieldname: "reason_for_adding", label: __("Reason for Adding"), fieldtype: "Small Text", description: __("Explanation for adding job directly") },
+			{ fieldname: "sec_sublet", label: __("Sublet Details (If Outsourced)"), fieldtype: "Section Break" },
+			{ fieldname: "supplier", label: __("Sublet Supplier"), fieldtype: "Link", options: "Supplier" },
+			{ fieldname: "supplier_cost", label: __("Supplier Cost"), fieldtype: "Currency" },
+			{ fieldname: "supplier_invoice_ref", label: __("Supplier Invoice Ref"), fieldtype: "Data" },
+			{ fieldname: "description", label: __("Detailed Scope / Notes"), fieldtype: "Small Text" }
+		);
+
 		const d = new frappe.ui.Dialog({
-			title: __("Add Workshop Job ({0})", [order_name]),
-			fields: [
-				{
-					fieldname: "job_title",
-					label: __("Job Description / Title"),
-					fieldtype: "Data",
-					reqd: 1,
-				},
-				{
-					fieldname: "estimated_hours",
-					label: __("Labour Qty (Hours)"),
-					fieldtype: "Float",
-					default: 1.0,
-					reqd: 1,
-				},
-				{
-					fieldname: "category",
-					label: __("Category"),
-					fieldtype: "Select",
-					options: "Essential\nRecommended\nOptional",
-					default: "Essential",
-					reqd: 1,
-				},
-				{
-					fieldname: "priority",
-					label: __("Priority"),
-					fieldtype: "Select",
-					options: "Low\nMedium\nHigh\nUrgent",
-					default: "Medium",
-					reqd: 1,
-				},
-				{
-					fieldname: "technician",
-					label: __("Assign Technician (Optional)"),
-					fieldtype: "Link",
-					options: "Employee",
-				},
-				{
-					fieldname: "description",
-					label: __("Detailed Scope / Instructions"),
-					fieldtype: "Small Text",
-				},
-				{
-					fieldname: "reason",
-					label: __("Reason for Adding"),
-					fieldtype: "Small Text",
-				},
-			],
-			primary_action_label: __("Add Job"),
+			title: order_name ? __("Add Workshop Job ({0})", [order_name]) : __("Add Workshop Job"),
+			fields: fields,
+			primary_action_label: __("Create Job"),
 			primary_action: (vals) => {
+				const target_order = order_name || vals.service_order;
+				if (!target_order) {
+					frappe.msgprint(__("Please select a Service Order."));
+					return;
+				}
 				frappe.call({
 					method: "vehicle_service.job_control.add_job",
 					args: {
-						service_order: order_name,
+						service_order: target_order,
 						job_title: vals.job_title,
-						estimated_hours: vals.estimated_hours,
+						service_item: vals.service_item,
 						category: vals.category,
-						priority: vals.priority,
-						technician: vals.technician,
+						estimated_hours: vals.estimated_hours,
+						rate: vals.rate,
 						description: vals.description,
-						reason: vals.reason,
+						technician: vals.technician,
+						bay: vals.bay,
+						priority: vals.priority,
+						reason: vals.reason_for_adding,
+						supplier: vals.supplier,
+						supplier_cost: vals.supplier_cost,
+						supplier_invoice_ref: vals.supplier_invoice_ref,
 					},
 					freeze: true,
-					freeze_message: __("Adding Job..."),
+					freeze_message: __("Creating Job..."),
 					callback: (r) => {
 						if (!r.exc) {
 							d.hide();
-							frappe.show_alert({ message: __("Job added to {0}", [order_name]), indicator: "green" });
+							frappe.show_alert({ message: __("Job created on {0}", [target_order]), indicator: "green" });
 							this.refresh();
 						}
 					},
@@ -792,12 +813,21 @@ function check_and_mount_jcb() {
 	}
 
 	// Expand workspace page layout to full width
+	$("body").addClass("full-width");
 	if ($ws_page && $ws_page.length) {
 		$ws_page.find(".layout-main, .layout-main-section, .layout-main-section-wrapper").css({
 			"max-width": "100%",
-			"width": "100%"
+			"width": "100%",
+			"margin-left": "0",
+			"margin-right": "0"
 		});
 	}
+	$(".page-container:visible .layout-main, .page-container:visible .layout-main-section").css({
+		"max-width": "100%",
+		"width": "100%",
+		"margin-left": "0",
+		"margin-right": "0"
+	});
 
 	new JobControlBoardUI($mount);
 }

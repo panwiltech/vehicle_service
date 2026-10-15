@@ -99,14 +99,20 @@ def add_job(
 	priority: str = "Medium",
 	technician: str | None = None,
 	reason: str | None = None,
+	service_item: str | None = None,
+	rate: float | None = None,
+	bay: str | None = None,
+	supplier: str | None = None,
+	supplier_cost: float | None = None,
+	supplier_invoice_ref: str | None = None,
 ):
 	_require_job_controller()
 	order = frappe.get_doc("Service Order", service_order)
 	_assert_jobs_editable(order)
 
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
-	srv_item = settings.labour_item or "LABOUR"
-	srv_rate = flt(settings.labour_rate) or 50.0
+	srv_item = service_item or settings.labour_item or "LABOUR"
+	srv_rate = flt(rate) if rate is not None and flt(rate) > 0 else (flt(settings.labour_rate) or 50.0)
 	calc_amount = round(flt(estimated_hours or 1.0) * srv_rate, 2)
 	has_quote = bool(frappe.db.exists("Quotation", {"vs_service_order": order.name, "docstatus": 1}))
 	source = "Additional Work" if has_quote else "Manually Added"
@@ -133,6 +139,13 @@ def add_job(
 		job.technician_name = emp.employee_name
 		job.technician_user = emp.user_id
 		job.status = "Assigned"
+
+	if bay:
+		job.bay = bay
+	if supplier:
+		job.supplier = supplier
+		job.supplier_cost = flt(supplier_cost or 0)
+		job.supplier_invoice_ref = supplier_invoice_ref
 
 	job.flags.ignore_job_lock = True
 	job.insert(ignore_permissions=True)
