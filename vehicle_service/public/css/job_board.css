@@ -1,18 +1,11 @@
-/* Job Control Board - Frappe Desk Uniform UI */
+/* Job Control Board - Frappe Desk Native UI */
 
-.jcb {
+.jcb-container {
 	padding: var(--padding-xs, 4px) 0 var(--padding-lg, 20px);
 }
 
-.jcb-header {
+.jcb-top-bar {
 	margin-bottom: var(--margin-md, 15px);
-}
-
-.jcb-title {
-	font-size: var(--text-lg, 16px);
-	font-weight: var(--weight-bold, 600);
-	color: var(--text-color);
-	margin: 0;
 }
 
 /* Tabs list using native Frappe form-tabs styling */
@@ -31,7 +24,7 @@
 .jcb-tab-item .nav-link {
 	border: 0;
 	background: transparent;
-	color: var(--text-light);
+	color: var(--text-light, var(--text-muted));
 	padding: 10px 14px;
 	margin-right: var(--margin-xs, 6px);
 	display: inline-flex;
@@ -50,116 +43,89 @@
 
 .jcb-tab-item .nav-link.active {
 	color: var(--text-color);
-	border-bottom: 2px solid var(--text-color);
+	border-bottom: 2px solid var(--primary-color, var(--text-color));
 	font-weight: 600;
 }
 
 .jcb-tab-count {
 	font-size: 11px;
 	font-weight: 500;
-	padding: 1px 7px;
+	padding: 2px 7px;
 	border-radius: var(--radius-full, 999px);
-	background: var(--control-bg);
-	color: var(--text-muted);
 }
 
-.jcb-tab-item .nav-link.active .jcb-tab-count {
-	background: var(--bg-gray, var(--control-bg));
+/* Table Card & Layout */
+.jcb-table-card {
+	background-color: var(--card-bg, #fff);
+	border: 1px solid var(--border-color);
+	border-radius: var(--radius-md, 8px);
+	overflow: hidden;
+}
+
+.jcb-table {
+	border-collapse: separate;
+	border-spacing: 0;
+	margin-bottom: 0;
+}
+
+.jcb-table thead tr th {
+	background-color: var(--bg-color, #fafbfc);
+	border-bottom: 1px solid var(--border-color);
+	border-top: none;
+	font-size: var(--text-xs, 12px);
+	font-weight: 600;
+	color: var(--text-muted);
+	padding: 10px 14px;
+	vertical-align: middle;
+	white-space: nowrap;
+}
+
+.jcb-table tbody tr td {
+	padding: 10px 14px;
+	vertical-align: middle;
+	border-top: 1px solid var(--border-color);
+	font-size: var(--text-sm, 13px);
 	color: var(--text-color);
 }
 
-/* Cards grid */
-.jcb-cards {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-	gap: var(--margin-md, 16px);
-}
-
-.jcb-card {
-	background-color: var(--card-bg);
-	border: 1px solid var(--border-color);
-	border-radius: var(--radius-md, 8px);
-	padding: var(--padding-md, 14px);
+.jcb-table tbody tr.jcb-row {
 	cursor: pointer;
-	box-shadow: var(--card-shadow, var(--shadow-xs));
-	transition: box-shadow 0.15s ease, border-color 0.15s ease;
-	display: flex;
-	flex-direction: column;
-	justify-content: space-between;
+	transition: background-color 0.12s ease;
 }
 
-.jcb-card:hover,
-.jcb-card:focus-visible {
-	box-shadow: var(--shadow-sm);
-	border-color: var(--gray-400);
-	outline: none;
+.jcb-table tbody tr.jcb-row:hover {
+	background-color: var(--table-hover-bg, var(--bg-light-gray, #f9fafb));
 }
 
-.jcb-card-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 6px;
+.jcb-table tbody tr.jcb-row:focus-visible {
+	outline: 2px solid var(--primary-color);
+	outline-offset: -2px;
 }
 
 .jcb-order-link {
 	font-weight: 600;
-	font-size: var(--text-base, 14px);
-	color: var(--text-color);
+	color: var(--primary-color, #171717);
 	text-decoration: none;
 }
 
 .jcb-order-link:hover {
-	color: var(--primary);
 	text-decoration: underline;
 }
 
-.jcb-customer-name {
-	font-weight: 500;
-	font-size: var(--text-sm, 13px);
-	color: var(--text-color);
-}
-
-.jcb-meta-text {
-	font-size: var(--text-xs, 12px);
-	color: var(--text-muted);
-	margin-top: 2px;
-}
-
-.jcb-progress-bar {
-	height: 5px;
-	margin: 12px 0 8px;
-	background-color: var(--control-bg);
-	border-radius: var(--radius-full, 999px);
+.jcb-cell-truncate {
+	display: inline-block;
+	max-width: 100%;
 	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
 }
 
-.jcb-progress-fill {
-	height: 100%;
-	background-color: var(--primary);
-	border-radius: var(--radius-full, 999px);
-	transition: width 0.3s ease;
-}
-
-.jcb-card-footer {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	font-size: var(--text-xs, 12px);
-	margin-top: 6px;
-}
-
-.jcb-card-footer .jobs-done {
-	color: var(--text-muted);
-}
-
-.jcb-empty {
-	grid-column: 1 / -1;
-	padding: 40px 16px;
-	text-align: center;
-	color: var(--text-muted);
-	background-color: var(--control-bg);
+/* Empty State */
+.jcb-empty-state {
+	padding: 48px 16px;
+	background-color: var(--card-bg, #fff);
 	border: 1px dashed var(--border-color);
 	border-radius: var(--radius-md, 8px);
-	font-size: var(--text-sm, 13px);
+	font-size: var(--text-base, 14px);
 }
