@@ -140,14 +140,15 @@ class JobControlBoardUI {
 	}
 
 	bind_events() {
-		if (!window._jcb_realtime_bound) {
-			window._jcb_realtime_bound = true;
+		if (frappe.realtime) {
+			frappe.realtime.off("job_board_update");
 			frappe.realtime.on("job_board_update", () => {
 				if (window._current_jcb_instance) {
 					window._current_jcb_instance.schedule_refresh();
 				}
 			});
 		}
+
 		if (!window._jcb_floating_listener_bound) {
 			window._jcb_floating_listener_bound = true;
 			$(document).on("click scroll", (e) => {
@@ -157,11 +158,21 @@ class JobControlBoardUI {
 			});
 		}
 		window._current_jcb_instance = this;
+
+		// Heartbeat sync every 10 seconds to ensure all viewers remain in perfect sync
+		if (this.sync_poll_interval) {
+			clearInterval(this.sync_poll_interval);
+		}
+		this.sync_poll_interval = setInterval(() => {
+			if (window._current_jcb_instance === this && this.$container && this.$container.is(":visible")) {
+				this.load_orders(true);
+			}
+		}, 10000);
 	}
 
 	schedule_refresh() {
 		clearTimeout(this.refresh_timer);
-		this.refresh_timer = setTimeout(() => this.refresh(), 800);
+		this.refresh_timer = setTimeout(() => this.refresh(), 500);
 	}
 
 	async refresh() {
@@ -203,7 +214,7 @@ class JobControlBoardUI {
 		});
 	}
 
-	async load_orders() {
+	async load_orders(silent = false) {
 		if (!this.active) {
 			this.current_orders = [];
 			this.filter_and_render_table();
@@ -216,7 +227,12 @@ class JobControlBoardUI {
 				args: { tab },
 			});
 			if (tab !== this.active) return;
-			this.current_orders = r.message || [];
+			const new_orders = r.message || [];
+			if (silent && JSON.stringify(new_orders.map(o => [o.name, o.status, o.jobs_completed, o.has_running_clock, o.technicians])) ===
+				JSON.stringify(this.current_orders.map(o => [o.name, o.status, o.jobs_completed, o.has_running_clock, o.technicians]))) {
+				return;
+			}
+			this.current_orders = new_orders;
 			this.filter_and_render_table();
 		} catch (e) {
 			console.warn("Job Control Board could not load orders:", e);
@@ -278,12 +294,14 @@ class JobControlBoardUI {
 
 			let clock_cell = `<span class="text-muted text-xs">—</span>`;
 			if (o.has_running_clock) {
-				const base_sec = o.actual_seconds || 0;
+				const total_sec = (o.total_seconds !== undefined && o.total_seconds !== null)
+					? o.total_seconds
+					: ((o.actual_seconds || 0) + (o.running_seconds || 0));
 				clock_cell = `
 					<div class="d-flex align-items-center justify-content-center" style="gap: 5px;" title="${__("Active Clock Running")}">
 						<span class="indicator green blink" style="margin: 0;"></span>
-						<span class="jcb-timer-display font-weight-bold text-success" style="font-size: 12px; font-variant-numeric: tabular-nums; font-family: monospace;" data-start-ms="${o.clock_start_ms || ""}" data-base-sec="${base_sec}">
-							${this.format_time_hhmmss(base_sec)}
+						<span class="jcb-timer-display font-weight-bold text-success font-monospace" style="font-size: 12px; font-variant-numeric: tabular-nums;" data-base-sec="${total_sec}">
+							${this.format_time_hhmmss(total_sec)}
 						</span>
 					</div>
 				`;
@@ -291,7 +309,7 @@ class JobControlBoardUI {
 				clock_cell = `
 					<div class="d-flex align-items-center justify-content-center text-muted" style="gap: 4px;" title="${__("Total Logged: {0} hrs", [o.actual_hours || 0])}">
 						<i class="fa fa-clock-o text-muted" style="font-size: 11px;"></i>
-						<span class="text-muted" style="font-size: 12px; font-variant-numeric: tabular-nums; font-family: monospace;">
+						<span class="text-muted font-monospace" style="font-size: 12px; font-variant-numeric: tabular-nums;">
 							${this.format_time_hhmmss(o.actual_seconds)}
 						</span>
 					</div>
@@ -435,17 +453,14 @@ class JobControlBoardUI {
 			this.clock_ticker_interval = null;
 		}
 
+		const ticker_started_at = performance.now();
+
 		const update_all_clocks = () => {
-			const now = Date.now();
+			const elapsed_seconds = Math.floor((performance.now() - ticker_started_at) / 1000);
 			this.$rows_container.find(".jcb-timer-display").each((_, el) => {
 				const $el = $(el);
-				const start_ms = parseInt($el.attr("data-start-ms"), 10);
 				const base_sec = parseInt($el.attr("data-base-sec"), 10) || 0;
-				let current_sec = base_sec;
-				if (start_ms && !isNaN(start_ms) && now >= start_ms) {
-					current_sec += Math.floor((now - start_ms) / 1000);
-				}
-				$el.text(this.format_time_hhmmss(current_sec));
+				$el.text(this.format_time_hhmmss(base_sec + elapsed_seconds));
 			});
 		};
 

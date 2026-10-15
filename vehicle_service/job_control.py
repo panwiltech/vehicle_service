@@ -152,6 +152,7 @@ def add_job(
 
 	_mirror_job_to_order(job, order)
 	order.add_comment("Comment", _("Job added: {0} ({1} hrs) by {2}").format(job_title, estimated_hours, frappe.session.user))
+	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "add_job"}, after_commit=True)
 
 	return {"status": "success", "job": job.name}
 
@@ -183,6 +184,7 @@ def assign_technician(job_name: str, technician: str, bay: str | None = None):
 		veh.move_location(bay, _("Assigned to bay {0}").format(bay), order.name)
 
 	order.add_comment("Comment", _("Technician {0} assigned to Job {1}").format(emp.employee_name or emp.name, job.job_title))
+	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "assign_technician"}, after_commit=True)
 	return {"status": "success", "job_status": job.status, "order_status": order.status}
 
 
@@ -244,6 +246,7 @@ def start_clock(job_name: str):
 
 	_mirror_job_to_order(job, order)
 	order.add_comment("Comment", _("Clock started on Job {0} by {1}").format(job.job_title, user))
+	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "start_clock"}, after_commit=True)
 
 	return {"status": "success", "job_status": job.status, "order_status": order.status}
 
@@ -282,6 +285,7 @@ def pause_clock(job_name: str, reason: str | None = None):
 
 	_mirror_job_to_order(job, order)
 	order.add_comment("Comment", _("Clock paused on Job {0} ({1})").format(job.job_title, reason or "Paused"))
+	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "pause_clock"}, after_commit=True)
 
 	return {"status": "success", "job_status": job.status, "actual_hours": job.actual_hours}
 
@@ -340,6 +344,7 @@ def complete_service_order(order_name: str):
 
 	order.save(ignore_permissions=True)
 	order.add_comment("Comment", _("Service Order completed by {0}. All jobs marked Completed and transitioned to Ready for Billing.").format(frappe.session.user))
+	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "complete_service_order"}, after_commit=True)
 
 	return {"status": "success", "order_status": order.status, "board_status": order.board_status}
 

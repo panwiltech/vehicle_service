@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_datetime
+from frappe.utils import flt, get_datetime, now_datetime, time_diff_in_seconds
 from vehicle_service.job_control import _require_job_controller
 from vehicle_service.state import JOB_COMPLETED, JOB_IN_PROGRESS
 
@@ -137,6 +137,7 @@ def get_board_orders(tab: str) -> list[dict]:
 		except Exception:
 			return None
 
+	now = now_datetime()
 	cards = []
 	for name in names:
 		order = by_name.get(name)
@@ -146,6 +147,14 @@ def get_board_orders(tab: str) -> list[dict]:
 		actual_s = int(round(actual_h * 3600))
 		is_running = name in running
 		cs_dt = clock_starts.get(name) if is_running else None
+		running_sec = 0
+		if is_running and cs_dt:
+			try:
+				running_sec = max(0, int(round(time_diff_in_seconds(now, cs_dt))))
+			except Exception:
+				running_sec = 0
+
+		total_elapsed_sec = actual_s + running_sec
 		cs_ms = _to_timestamp_ms(cs_dt) if is_running else None
 		cs_iso = cs_dt.isoformat() if (cs_dt and hasattr(cs_dt, "isoformat")) else (str(cs_dt) if cs_dt else None)
 
@@ -163,6 +172,8 @@ def get_board_orders(tab: str) -> list[dict]:
 				"clock_start_ms": cs_ms,
 				"actual_hours": actual_h,
 				"actual_seconds": actual_s,
+				"running_seconds": running_sec,
+				"total_seconds": total_elapsed_sec,
 			}
 		)
 	return cards
