@@ -3,6 +3,7 @@
 
 import frappe
 from frappe import _
+from frappe.utils import flt, get_datetime
 from vehicle_service.job_control import _require_job_controller
 from vehicle_service.state import JOB_COMPLETED, JOB_IN_PROGRESS
 
@@ -86,21 +87,68 @@ def get_board_orders(tab: str) -> list[dict]:
 	jobs = frappe.get_all(
 		"Service Job",
 		filters={"service_order": ["in", names]},
-		fields=["service_order", "status"],
+		fields=["name", "service_order", "status", "actual_hours", "started_on"],
 	)
 	completed: dict[str, int] = {}
 	running: set[str] = set()
+	actual_hours_map: dict[str, float] = {}
+
 	for job in jobs:
 		if job.status == JOB_COMPLETED:
 			completed[job.service_order] = completed.get(job.service_order, 0) + 1
 		if job.status == JOB_IN_PROGRESS:
 			running.add(job.service_order)
+		actual_hours_map[job.service_order] = round(
+			actual_hours_map.get(job.service_order, 0.0) + flt(job.actual_hours or 0.0), 2
+		)
+
+	# Fetch active running time logs for jobs
+	clock_starts: dict[str, object] = {}
+	job_names = [j.name for j in jobs]
+	if job_names:
+		active_logs = frappe.db.sql(
+			"""
+			SELECT parent, from_time
+			FROM `tabService Job Time Log`
+			WHERE parent IN %s AND (to_time IS NULL OR to_time = '')
+			ORDER BY from_time ASC
+			""",
+			(tuple(job_names),),
+			as_dict=True,
+		)
+		job_to_order = {j.name: j.service_order for j in jobs}
+		for al in active_logs:
+			so = job_to_order.get(al.parent)
+			if so and so not in clock_starts and al.from_time:
+				clock_starts[so] = al.from_time
+
+	# Fallback to started_on if in running and no active log record
+	for j in jobs:
+		if j.status == JOB_IN_PROGRESS and j.service_order not in clock_starts and j.started_on:
+			clock_starts[j.service_order] = j.started_on
+
+	def _to_timestamp_ms(dt):
+		if not dt:
+			return None
+		if isinstance(dt, str):
+			dt = get_datetime(dt)
+		try:
+			return int(dt.timestamp() * 1000)
+		except Exception:
+			return None
 
 	cards = []
 	for name in names:
 		order = by_name.get(name)
 		if not order:
 			continue
+		actual_h = actual_hours_map.get(name, 0.0)
+		actual_s = int(round(actual_h * 3600))
+		is_running = name in running
+		cs_dt = clock_starts.get(name) if is_running else None
+		cs_ms = _to_timestamp_ms(cs_dt) if is_running else None
+		cs_iso = cs_dt.isoformat() if (cs_dt and hasattr(cs_dt, "isoformat")) else (str(cs_dt) if cs_dt else None)
+
 		cards.append(
 			{
 				"name": order.name,
@@ -110,7 +158,11 @@ def get_board_orders(tab: str) -> list[dict]:
 				"technicians": order.technicians,
 				"job_count": order.job_count or 0,
 				"jobs_completed": completed.get(name, 0),
-				"has_running_clock": name in running,
+				"has_running_clock": is_running,
+				"clock_start": cs_iso,
+				"clock_start_ms": cs_ms,
+				"actual_hours": actual_h,
+				"actual_seconds": actual_s,
 			}
 		)
 	return cards

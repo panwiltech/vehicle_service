@@ -101,13 +101,22 @@ def get_workshop_live_board(filters=None):
 	# Fetch open time logs for dynamic duration
 	open_logs = {}
 	if active_job_ids:
-		logs = frappe.get_all(
-			"Service Job Time Log",
-			filters={"service_job": ["in", active_job_ids], "end_time": ["is", "not set"]},
-			fields=["service_job", "start_time", "technician"],
+		logs = frappe.db.sql(
+			"""
+			SELECT parent, from_time, technician
+			FROM `tabService Job Time Log`
+			WHERE parent IN %s AND (to_time IS NULL OR to_time = '')
+			""",
+			(tuple(active_job_ids),),
+			as_dict=True,
 		)
 		for log in logs:
-			open_logs[log.service_job] = log
+			open_logs[log.parent] = frappe._dict({
+				"service_job": log.parent,
+				"start_time": log.from_time,
+				"from_time": log.from_time,
+				"technician": log.technician,
+			})
 
 	# 5. Fetch parts for orders
 	parts = []

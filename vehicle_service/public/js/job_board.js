@@ -89,7 +89,7 @@ class JobControlBoardUI {
 										<div class="grid-static-col col text-center" style="flex: 0.8 1 90px; min-width: 80px; justify-content: center;" data-fieldname="jobs">
 											<span>${__("Jobs Done")}</span>
 										</div>
-										<div class="grid-static-col col text-center" style="flex: 0.6 1 65px; min-width: 55px; justify-content: center;" data-fieldname="clock">
+										<div class="grid-static-col col text-center" style="flex: 1.0 1 110px; min-width: 100px; justify-content: center;" data-fieldname="clock">
 											<span>${__("Clock")}</span>
 										</div>
 										<div class="grid-static-col col text-center" style="flex: 0 0 95px; max-width: 95px; justify-content: center;" data-fieldname="actions">
@@ -276,9 +276,27 @@ class JobControlBoardUI {
 		orders.forEach((o, index) => {
 			const ind_color = this.get_status_indicator_class(o.status);
 
-			const clock_badge = o.has_running_clock
-				? `<span class="indicator green blink" title="${__("Active Clock Running")}"></span>`
-				: `<span class="text-muted text-xs">—</span>`;
+			let clock_cell = `<span class="text-muted text-xs">—</span>`;
+			if (o.has_running_clock) {
+				const base_sec = o.actual_seconds || 0;
+				clock_cell = `
+					<div class="d-flex align-items-center justify-content-center" style="gap: 5px;" title="${__("Active Clock Running")}">
+						<span class="indicator green blink" style="margin: 0;"></span>
+						<span class="jcb-timer-display font-weight-bold text-success" style="font-size: 12px; font-variant-numeric: tabular-nums; font-family: monospace;" data-start-ms="${o.clock_start_ms || ""}" data-base-sec="${base_sec}">
+							${this.format_time_hhmmss(base_sec)}
+						</span>
+					</div>
+				`;
+			} else if (o.actual_seconds && o.actual_seconds > 0) {
+				clock_cell = `
+					<div class="d-flex align-items-center justify-content-center text-muted" style="gap: 4px;" title="${__("Total Logged: {0} hrs", [o.actual_hours || 0])}">
+						<i class="fa fa-clock-o text-muted" style="font-size: 11px;"></i>
+						<span class="text-muted" style="font-size: 12px; font-variant-numeric: tabular-nums; font-family: monospace;">
+							${this.format_time_hhmmss(o.actual_seconds)}
+						</span>
+					</div>
+				`;
+			}
 
 			const $row = $(`
 				<div class="grid-row" data-name="${esc(o.name)}" tabindex="0">
@@ -309,8 +327,8 @@ class JobControlBoardUI {
 								${o.jobs_completed} / ${o.job_count}
 							</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0.6 1 65px; min-width: 55px; justify-content: center;" data-fieldname="clock">
-							${clock_badge}
+						<div class="grid-static-col col text-center" style="flex: 1.0 1 110px; min-width: 100px; justify-content: center;" data-fieldname="clock">
+							${clock_cell}
 						</div>
 						<div class="grid-static-col col text-center" style="flex: 0 0 95px; max-width: 95px; justify-content: center;" data-fieldname="actions">
 							<button type="button" class="btn btn-default btn-xs jcb-btn-row-action" title="${__("Order Actions")}">
@@ -398,6 +416,43 @@ class JobControlBoardUI {
 
 			this.$rows_container.append($row);
 		});
+
+		this.start_clock_ticker();
+	}
+
+	format_time_hhmmss(total_seconds) {
+		const s = Math.max(0, Math.floor(total_seconds || 0));
+		const hrs = Math.floor(s / 3600);
+		const mins = Math.floor((s % 3600) / 60);
+		const secs = s % 60;
+		const pad = (n) => String(n).padStart(2, "0");
+		return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+	}
+
+	start_clock_ticker() {
+		if (this.clock_ticker_interval) {
+			clearInterval(this.clock_ticker_interval);
+			this.clock_ticker_interval = null;
+		}
+
+		const update_all_clocks = () => {
+			const now = Date.now();
+			this.$rows_container.find(".jcb-timer-display").each((_, el) => {
+				const $el = $(el);
+				const start_ms = parseInt($el.attr("data-start-ms"), 10);
+				const base_sec = parseInt($el.attr("data-base-sec"), 10) || 0;
+				let current_sec = base_sec;
+				if (start_ms && !isNaN(start_ms) && now >= start_ms) {
+					current_sec += Math.floor((now - start_ms) / 1000);
+				}
+				$el.text(this.format_time_hhmmss(current_sec));
+			});
+		};
+
+		update_all_clocks();
+		if (this.$rows_container.find(".jcb-timer-display").length) {
+			this.clock_ticker_interval = setInterval(update_all_clocks, 1000);
+		}
 	}
 
 	// Action: Add Job

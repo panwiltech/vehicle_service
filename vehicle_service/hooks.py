@@ -11,8 +11,8 @@ use_json_request_body = True
 after_install = "vehicle_service.install.after_install"
 after_migrate = "vehicle_service.install.after_migrate"
 
-app_include_js = "/assets/vehicle_service/js/job_board.js?v=20261015-5"
-app_include_css = "/assets/vehicle_service/css/job_board.css?v=20261015-5"
+app_include_js = "/assets/vehicle_service/js/job_board.js?v=20261015-6"
+app_include_css = "/assets/vehicle_service/css/job_board.css?v=20261015-6"
 
 # Document Events
 doc_events = {
