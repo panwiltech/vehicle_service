@@ -18,39 +18,117 @@ class JobControlBoardUI {
 	setup_dom() {
 		this.$container.empty();
 		this.$body = $(`
-			<div class="jcb-container">
-				<div class="jcb-top-bar d-flex justify-content-between align-items-center mb-3">
-					<div class="d-flex align-items-center" style="gap: 10px;">
-						<div class="jcb-search-wrapper position-relative">
-							<input type="text" class="form-control input-sm jcb-search-input" placeholder="${__("Search orders, customers, vehicles...")}" style="width: 280px; padding-left: 28px;">
-							<svg class="icon icon-xs position-absolute jcb-search-icon" style="left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none;"><use href="#icon-search"></use></svg>
+			<div class="frappe-control form-group jcb-wrapper" style="margin-bottom: 20px;">
+				<!-- Top Form Tabs (Native Frappe form-tabs) -->
+				<div class="form-tabs-list mb-3">
+					<ul class="nav form-tabs jcb-tabs" role="tablist"></ul>
+				</div>
+
+				<!-- Grid Field Container (Matches Service Order Jobs/Parts Grid) -->
+				<div class="grid-field">
+					<!-- Top Custom Action Buttons matching Jobs tab -->
+					<div class="grid-custom-buttons d-flex justify-content-between align-items-center mb-2">
+						<div class="btn-group" role="group">
+							<button class="btn btn-xs btn-default btn-assign-tech" type="button">
+								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-user"></use></svg>${__("Assign Technician")}
+							</button>
+							<button class="btn btn-xs btn-default btn-start-clock" type="button">
+								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-play"></use></svg>${__("Start Clock")}
+							</button>
+							<button class="btn btn-xs btn-default btn-pause-clock" type="button">
+								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-pause"></use></svg>${__("Pause Clock")}
+							</button>
+							<button class="btn btn-xs btn-primary btn-complete-order" type="button">
+								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-check"></use></svg>${__("Complete Job")}
+							</button>
+						</div>
+						<div class="d-flex align-items-center" style="gap: 8px;">
+							<div class="position-relative">
+								<input type="text" class="form-control input-xs jcb-search-input" placeholder="${__("Search orders, vehicles, technicians...")}" style="width: 240px; padding-left: 24px;">
+								<svg class="icon icon-xs position-absolute" style="left: 6px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none;"><use href="#icon-search"></use></svg>
+							</div>
+							<button class="btn btn-xs btn-default btn-refresh-board" type="button" title="${__("Refresh")}">
+								<svg class="icon icon-xs"><use href="#icon-refresh"></use></svg>
+							</button>
+							<button class="btn btn-xs btn-default btn-new-order" type="button" title="${__("New Service Order")}">
+								<svg class="icon icon-xs" style="margin-right: 2px;"><use href="#icon-add"></use></svg>${__("Add Service Order")}
+							</button>
 						</div>
 					</div>
-					<div class="d-flex align-items-center" style="gap: 8px;">
-						<button class="btn btn-default btn-sm jcb-refresh-btn" type="button" title="${__("Refresh")}">
-							<svg class="icon icon-xs" style="margin-right: 4px;"><use href="#icon-refresh"></use></svg>${__("Refresh")}
-						</button>
-						<button class="btn btn-primary btn-sm jcb-new-order-btn" type="button">
-							<svg class="icon icon-xs" style="margin-right: 4px;"><use href="#icon-add"></use></svg>${__("New Service Order")}
-						</button>
+
+					<!-- Form Grid Table matching Frappe/ERPNext form grid -->
+					<div class="form-grid-container">
+						<div class="form-grid">
+							<div class="grid-heading-row">
+								<div class="grid-row">
+									<div class="data-row row m-0">
+										<div class="row-check sortable-handle col" style="flex: 0 0 35px; max-width: 35px; text-align: center;">
+											<input type="checkbox" class="grid-row-check jcb-check-all" title="${__("Select All")}">
+										</div>
+										<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 45px; max-width: 45px; text-align: center;">
+											<span>${__("No.")}</span>
+										</div>
+										<div class="grid-static-col col bold" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="service_order">
+											<span>${__("Service Order")}</span>
+										</div>
+										<div class="grid-static-col col" style="flex: 1 1 180px;" data-fieldname="customer">
+											<span>${__("Customer")}</span>
+										</div>
+										<div class="grid-static-col col" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="vehicle">
+											<span>${__("Vehicle")}</span>
+										</div>
+										<div class="grid-static-col col" style="flex: 0 0 140px; max-width: 140px;" data-fieldname="status">
+											<span>${__("Status")}</span>
+										</div>
+										<div class="grid-static-col col" style="flex: 1 1 160px;" data-fieldname="technicians">
+											<span>${__("Technician(s)")}</span>
+										</div>
+										<div class="grid-static-col col" style="flex: 0 0 110px; max-width: 110px; text-align: center;" data-fieldname="jobs">
+											<span>${__("Jobs Done")}</span>
+										</div>
+										<div class="grid-static-col col text-center" style="flex: 0 0 85px; max-width: 85px;" data-fieldname="clock">
+											<span>${__("Clock")}</span>
+										</div>
+										<div class="grid-static-col col text-right" style="flex: 0 0 75px; max-width: 75px;" data-fieldname="actions">
+											<span>${__("Actions")}</span>
+										</div>
+									</div>
+								</div>
+							</div>
+							<div class="grid-body">
+								<div class="rows jcb-grid-rows"></div>
+								<div class="grid-empty text-center text-extra-muted py-4 jcb-grid-empty" style="display: none;">
+									${__("No service orders in this tab")}
+								</div>
+							</div>
+						</div>
 					</div>
 				</div>
-				<div class="jcb-tabs-wrap">
-					<ul class="nav nav-tabs form-tabs jcb-tabs" role="tablist"></ul>
-				</div>
-				<div class="jcb-content-area"></div>
 			</div>
 		`).appendTo(this.$container);
 
 		this.$tabs = this.$body.find(".jcb-tabs");
-		this.$content = this.$body.find(".jcb-content-area");
+		this.$rows_container = this.$body.find(".jcb-grid-rows");
+		this.$empty_state = this.$body.find(".jcb-grid-empty");
 		this.$search = this.$body.find(".jcb-search-input");
-		this.$refresh_btn = this.$body.find(".jcb-refresh-btn");
-		this.$new_order_btn = this.$body.find(".jcb-new-order-btn");
+		this.$check_all = this.$body.find(".jcb-check-all");
 
-		this.$refresh_btn.on("click", () => this.refresh());
-		this.$new_order_btn.on("click", () => frappe.new_doc("Service Order"));
+		// Bind toolbar action buttons
+		this.$body.find(".btn-refresh-board").on("click", () => this.refresh());
+		this.$body.find(".btn-new-order").on("click", () => frappe.new_doc("Service Order"));
 
+		this.$body.find(".btn-assign-tech").on("click", () => this.trigger_assign_technician());
+		this.$body.find(".btn-start-clock").on("click", () => this.trigger_start_clock());
+		this.$body.find(".btn-pause-clock").on("click", () => this.trigger_pause_clock());
+		this.$body.find(".btn-complete-order").on("click", () => this.trigger_complete_order());
+
+		// Select All Checkbox
+		this.$check_all.on("change", (e) => {
+			const isChecked = $(e.target).is(":checked");
+			this.$rows_container.find(".grid-row-check").prop("checked", isChecked);
+		});
+
+		// Search input
 		this.$search.on("input", (e) => {
 			this.search_query = (e.target.value || "").trim().toLowerCase();
 			this.filter_and_render_table();
@@ -94,17 +172,18 @@ class JobControlBoardUI {
 		this.tabs.forEach((tab) => {
 			const is_active = tab.name === this.active;
 			const $t = $(`
-				<li class="nav-item jcb-tab-item">
-					<button class="nav-link ${is_active ? "active" : ""}"
-						id="jcb-tab-${frappe.scrub(tab.name)}" role="tab" type="button">
+				<li class="nav-item">
+					<a class="nav-link ${is_active ? "active" : ""}"
+						id="jcb-tab-${frappe.scrub(tab.name)}" role="tab" href="#">
 						<span>${esc(tab.label)}</span>
-						<span class="jcb-tab-count badge ${is_active ? "badge-primary" : "badge-light"}" style="margin-left: 6px;">${tab.count}</span>
-					</button>
+						<span class="badge ${is_active ? "badge-primary" : "badge-light"}" style="margin-left: 6px;">${tab.count}</span>
+					</a>
 				</li>
 			`);
 			$t.find(".nav-link").on("click", (e) => {
 				e.preventDefault();
 				this.active = tab.name;
+				this.$check_all.prop("checked", false);
 				this.render_tabs();
 				this.load_orders();
 			});
@@ -114,7 +193,8 @@ class JobControlBoardUI {
 
 	async load_orders() {
 		if (!this.active) {
-			this.$content.html(`<div class="text-center text-muted py-5">${__("No tabs configured. Add Job Board Tabs from the desk.")}</div>`);
+			this.current_orders = [];
+			this.filter_and_render_table();
 			return;
 		}
 		const tab = this.active;
@@ -129,6 +209,15 @@ class JobControlBoardUI {
 		} catch (e) {
 			console.warn("Job Control Board could not load orders:", e);
 		}
+	}
+
+	get_selected_orders() {
+		const selected = [];
+		this.$rows_container.find(".grid-row-check:checked").each(function () {
+			const name = $(this).closest(".grid-row").attr("data-name");
+			if (name) selected.push(name);
+		});
+		return selected;
 	}
 
 	get_status_indicator_class(status) {
@@ -155,107 +244,295 @@ class JobControlBoardUI {
 				);
 			});
 		}
-		this.render_table(orders);
+		this.render_rows(orders);
 	}
 
-	render_table(orders) {
+	render_rows(orders) {
 		const esc = frappe.utils.escape_html;
+		this.$rows_container.empty();
+
 		if (!orders.length) {
 			const msg = this.search_query
 				? __("No matching service orders found.")
 				: __("No service orders in this tab.");
-			this.$content.html(`
-				<div class="text-center text-muted py-5 jcb-empty-state">
-					<div class="mb-2"><svg class="icon icon-xl text-muted"><use href="#icon-list"></use></svg></div>
-					<div>${msg}</div>
-				</div>
-			`);
+			this.$empty_state.text(msg).show();
 			return;
 		}
 
-		let rows_html = "";
-		orders.forEach((o) => {
-			const pct = o.job_count ? Math.round((o.jobs_completed / o.job_count) * 100) : 0;
+		this.$empty_state.hide();
+
+		orders.forEach((o, index) => {
 			const ind_color = this.get_status_indicator_class(o.status);
 
 			const clock_badge = o.has_running_clock
-				? `<span class="badge badge-success" style="font-weight: 500; font-size: 11px;"><span class="indicator green blink" style="margin-right: 3px;"></span>${__("Active")}</span>`
+				? `<span class="indicator green blink" title="${__("Active Clock Running")}"></span>`
 				: `<span class="text-muted text-xs">—</span>`;
 
-			rows_html += `
-				<tr class="jcb-row" data-order="${esc(o.name)}" tabindex="0">
-					<td class="bold">
-						<a class="jcb-order-link" href="/app/service-order/${encodeURIComponent(o.name)}">${esc(o.name)}</a>
-					</td>
-					<td>
-						<span class="jcb-cell-truncate" title="${esc(o.customer_name || "")}">${esc(o.customer_name || "—")}</span>
-					</td>
-					<td>
-						<span class="jcb-cell-truncate" title="${esc(o.vehicle || "")}">${esc(o.vehicle || "—")}</span>
-					</td>
-					<td>
-						<span class="indicator-pill ${ind_color}">${esc(o.status)}</span>
-					</td>
-					<td>
-						<span class="jcb-cell-truncate text-muted" title="${esc(o.technicians || __("Unassigned"))}">${esc(o.technicians || __("Unassigned"))}</span>
-					</td>
-					<td>
-						<div class="d-flex align-items-center" style="gap: 8px;">
-							<div class="progress flex-grow-1" style="height: 6px; background-color: var(--border-color); border-radius: 3px; min-width: 50px;">
-								<div class="progress-bar ${pct === 100 ? "bg-success" : "bg-primary"}" role="progressbar" style="width: ${pct}%;"></div>
-							</div>
-							<span class="text-muted text-xs text-nowrap">${o.jobs_completed}/${o.job_count}</span>
+			const $row = $(`
+				<div class="grid-row" data-name="${esc(o.name)}" tabindex="0">
+					<div class="data-row row m-0">
+						<div class="row-check sortable-handle col" style="flex: 0 0 35px; max-width: 35px; text-align: center;">
+							<input type="checkbox" class="grid-row-check">
 						</div>
-					</td>
-					<td class="text-center">
-						${clock_badge}
-					</td>
-					<td class="text-right">
-						<a href="/app/service-order/${encodeURIComponent(o.name)}" class="btn btn-default btn-xs jcb-open-btn" title="${__("Open Order")}">
-							${__("Open")} <i class="fa fa-angle-right" style="margin-left: 2px;"></i>
-						</a>
-					</td>
-				</tr>
-			`;
-		});
-
-		const table_html = `
-			<div class="form-grid jcb-table-card">
-				<div class="table-responsive">
-					<table class="table table-bordered table-hover jcb-table mb-0">
-						<thead>
-							<tr class="grid-heading-row">
-								<th style="width: 14%;">${__("Service Order")}</th>
-								<th style="width: 20%;">${__("Customer")}</th>
-								<th style="width: 15%;">${__("Vehicle")}</th>
-								<th style="width: 13%;">${__("Status")}</th>
-								<th style="width: 15%;">${__("Technician(s)")}</th>
-								<th style="width: 13%;">${__("Jobs Progress")}</th>
-								<th style="width: 10%; text-align: center;">${__("Clock")}</th>
-								<th style="width: 8%; text-align: right;">${__("Actions")}</th>
-							</tr>
-						</thead>
-						<tbody class="jcb-tbody">
-							${rows_html}
-						</tbody>
-					</table>
+						<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 45px; max-width: 45px; text-align: center;">
+							<span>${index + 1}</span>
+						</div>
+						<div class="grid-static-col col bold ellipsis" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="service_order">
+							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="jcb-order-link">${esc(o.name)}</a>
+						</div>
+						<div class="grid-static-col col ellipsis" style="flex: 1 1 180px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
+							<span>${esc(o.customer_name || "—")}</span>
+						</div>
+						<div class="grid-static-col col ellipsis" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
+							<span>${esc(o.vehicle || "—")}</span>
+						</div>
+						<div class="grid-static-col col ellipsis" style="flex: 0 0 140px; max-width: 140px;" data-fieldname="status">
+							<span class="indicator-pill ${ind_color}">${esc(o.status)}</span>
+						</div>
+						<div class="grid-static-col col ellipsis text-muted" style="flex: 1 1 160px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
+							<span>${esc(o.technicians || __("Unassigned"))}</span>
+						</div>
+						<div class="grid-static-col col text-center" style="flex: 0 0 110px; max-width: 110px;" data-fieldname="jobs">
+							<span class="badge ${o.jobs_completed === o.job_count && o.job_count > 0 ? "badge-success" : "badge-light"}">
+								${o.jobs_completed} / ${o.job_count}
+							</span>
+						</div>
+						<div class="grid-static-col col text-center" style="flex: 0 0 85px; max-width: 85px;" data-fieldname="clock">
+							${clock_badge}
+						</div>
+						<div class="grid-static-col col text-right" style="flex: 0 0 75px; max-width: 75px;" data-fieldname="actions">
+							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="btn btn-default btn-xs" title="${__("Open Order")}">
+								${__("Open")} <i class="fa fa-angle-right"></i>
+							</a>
+						</div>
+					</div>
 				</div>
-			</div>
-		`;
+			`);
 
-		this.$content.html(table_html);
+			// Row click navigation (excluding direct checkbox/link/button clicks)
+			$row.on("click", (e) => {
+				if ($(e.target).closest("a, button, input").length) return;
+				frappe.set_route("Form", "Service Order", o.name);
+			}).on("keydown", (e) => {
+				if (e.key === "Enter") {
+					frappe.set_route("Form", "Service Order", o.name);
+				}
+			});
 
-		// Handle row clicks
-		this.$content.find(".jcb-row").on("click", (e) => {
-			if ($(e.target).closest("a, button").length) return;
-			const order_name = $(e.currentTarget).attr("data-order");
-			if (order_name) frappe.set_route("Form", "Service Order", order_name);
-		}).on("keydown", (e) => {
-			if (e.key === "Enter") {
-				const order_name = $(e.currentTarget).attr("data-order");
-				if (order_name) frappe.set_route("Form", "Service Order", order_name);
-			}
+			this.$rows_container.append($row);
 		});
+	}
+
+	// Action: Assign Technician
+	trigger_assign_technician() {
+		const selected = this.get_selected_orders();
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a Service Order row first."));
+			return;
+		}
+		const order_name = selected[0];
+
+		frappe.db.get_doc("Service Order", order_name).then((so) => {
+			const job_options = (so.jobs || []).map((j) => ({
+				label: `${j.job_title} (${j.status || "Open"})`,
+				value: j.service_job,
+			}));
+
+			if (!job_options.length) {
+				frappe.msgprint(__("This Service Order has no jobs to assign."));
+				return;
+			}
+
+			const d = new frappe.ui.Dialog({
+				title: __("Assign Technician & Bay ({0})", [order_name]),
+				fields: [
+					{
+						fieldname: "job",
+						label: __("Select Job"),
+						fieldtype: "Select",
+						options: job_options,
+						default: job_options[0].value,
+						reqd: 1,
+					},
+					{
+						fieldname: "technician",
+						label: __("Technician"),
+						fieldtype: "Link",
+						options: "Employee",
+						reqd: 1,
+					},
+					{
+						fieldname: "bay",
+						label: __("Workshop Bay"),
+						fieldtype: "Link",
+						options: "Workshop Location",
+					},
+				],
+				primary_action_label: __("Assign"),
+				primary_action: (vals) => {
+					frappe.call({
+						method: "vehicle_service.job_control.assign_technician",
+						args: {
+							job_name: vals.job,
+							technician: vals.technician,
+							bay: vals.bay,
+						},
+						freeze: true,
+						callback: (r) => {
+							if (!r.exc) {
+								d.hide();
+								frappe.show_alert({ message: __("Technician assigned successfully"), indicator: "green" });
+								this.refresh();
+							}
+						},
+					});
+				},
+			});
+			d.show();
+		});
+	}
+
+	// Action: Start Clock
+	trigger_start_clock() {
+		const selected = this.get_selected_orders();
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a Service Order row to start clock."));
+			return;
+		}
+		const order_name = selected[0];
+
+		frappe.db.get_doc("Service Order", order_name).then((so) => {
+			const running_jobs = (so.jobs || []).filter((j) => j.status === "In Progress");
+			const eligible_jobs = (so.jobs || []).filter((j) => j.status !== "Completed" && j.assigned_technician);
+
+			if (!eligible_jobs.length) {
+				frappe.msgprint(__("No assigned, uncompleted jobs available on {0} to start clock.", [order_name]));
+				return;
+			}
+
+			const job_options = eligible_jobs.map((j) => ({
+				label: `${j.job_title} — ${j.technician_name || j.assigned_technician}`,
+				value: j.service_job,
+			}));
+
+			const d = new frappe.ui.Dialog({
+				title: __("Start Clock ({0})", [order_name]),
+				fields: [
+					{
+						fieldname: "job",
+						label: __("Select Job"),
+						fieldtype: "Select",
+						options: job_options,
+						default: job_options[0].value,
+						reqd: 1,
+					},
+				],
+				primary_action_label: __("Start Clock"),
+				primary_action: (vals) => {
+					frappe.call({
+						method: "vehicle_service.job_control.start_clock",
+						args: { job_name: vals.job },
+						freeze: true,
+						callback: (r) => {
+							if (!r.exc) {
+								d.hide();
+								frappe.show_alert({ message: __("Clock started successfully"), indicator: "green" });
+								this.refresh();
+							}
+						},
+					});
+				},
+			});
+			d.show();
+		});
+	}
+
+	// Action: Pause Clock
+	trigger_pause_clock() {
+		const selected = this.get_selected_orders();
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a Service Order row to pause clock."));
+			return;
+		}
+		const order_name = selected[0];
+
+		frappe.db.get_doc("Service Order", order_name).then((so) => {
+			const active_jobs = (so.jobs || []).filter((j) => j.status === "In Progress");
+			if (!active_jobs.length) {
+				frappe.msgprint(__("No running clock on {0}.", [order_name]));
+				return;
+			}
+
+			const job_options = active_jobs.map((j) => ({
+				label: `${j.job_title} — ${j.technician_name || j.assigned_technician}`,
+				value: j.service_job,
+			}));
+
+			const d = new frappe.ui.Dialog({
+				title: __("Pause Clock ({0})", [order_name]),
+				fields: [
+					{
+						fieldname: "job",
+						label: __("Select Running Job"),
+						fieldtype: "Select",
+						options: job_options,
+						default: job_options[0].value,
+						reqd: 1,
+					},
+					{
+						fieldname: "pause_reason",
+						label: __("Pause Reason"),
+						fieldtype: "Select",
+						options: "Awaiting Parts\nAwaiting Approval\nShift End / Break\nOther",
+						default: "Shift End / Break",
+					},
+				],
+				primary_action_label: __("Pause Clock"),
+				primary_action: (vals) => {
+					frappe.call({
+						method: "vehicle_service.job_control.pause_clock",
+						args: { job_name: vals.job, pause_reason: vals.pause_reason },
+						freeze: true,
+						callback: (r) => {
+							if (!r.exc) {
+								d.hide();
+								frappe.show_alert({ message: __("Clock paused successfully"), indicator: "orange" });
+								this.refresh();
+							}
+						},
+					});
+				},
+			});
+			d.show();
+		});
+	}
+
+	// Action: Complete Order
+	trigger_complete_order() {
+		const selected = this.get_selected_orders();
+		if (!selected.length) {
+			frappe.msgprint(__("Please select a Service Order row to complete."));
+			return;
+		}
+		const order_name = selected[0];
+
+		frappe.confirm(
+			__("Complete all jobs on Service Order {0} and mark Ready for Billing?", [order_name]),
+			() => {
+				frappe.call({
+					method: "vehicle_service.job_control.complete_service_order",
+					args: { order_name },
+					freeze: true,
+					freeze_message: __("Completing Service Order..."),
+					callback: (r) => {
+						if (!r.exc) {
+							frappe.show_alert({ message: __("Service Order {0} completed and marked Ready for Billing", [order_name]), indicator: "green" });
+							this.refresh();
+						}
+					},
+				});
+			}
+		);
 	}
 }
 

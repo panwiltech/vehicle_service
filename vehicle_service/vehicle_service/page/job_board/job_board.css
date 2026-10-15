@@ -1,165 +1,109 @@
-/* Job Control Board - Frappe Desk Uniform UI */
+/* Job Control Board - Pure ERPNext / Frappe Desk Form Grid & Tabs Theme */
 
-.jcb {
-	padding: var(--padding-xs, 4px) 0 var(--padding-lg, 20px);
+#jcb-workspace-mount {
+	margin-bottom: var(--margin-lg, 24px);
 }
 
-.jcb-header {
-	margin-bottom: var(--margin-md, 15px);
+.jcb-wrapper {
+	width: 100%;
 }
 
-.jcb-title {
-	font-size: var(--text-lg, 16px);
-	font-weight: var(--weight-bold, 600);
-	color: var(--text-color);
-	margin: 0;
-}
-
-/* Tabs list using native Frappe form-tabs styling */
-.jcb-tabs-wrap {
-	border-bottom: 1px solid var(--border-color);
+.jcb-wrapper .form-tabs-list {
 	margin-bottom: var(--margin-md, 16px);
 }
 
-.jcb-tabs-wrap .nav-tabs {
-	border-bottom: 0;
-	margin-bottom: -1px;
-	flex-wrap: nowrap;
+.jcb-wrapper .grid-custom-buttons {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: var(--margin-sm, 10px);
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.jcb-wrapper .grid-custom-buttons .btn-group {
+	gap: 6px;
+}
+
+.jcb-wrapper .form-grid {
+	background-color: var(--card-bg, #ffffff);
+	border: 1px solid var(--table-border-color, var(--border-color, #d1d8dd));
+	border-radius: var(--radius-md, 8px);
 	overflow-x: auto;
 }
 
-.jcb-tab-item .nav-link {
-	border: 0;
-	background: transparent;
-	color: var(--text-light);
-	padding: 10px 14px;
-	margin-right: var(--margin-xs, 6px);
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	cursor: pointer;
-	border-bottom: 2px solid transparent;
-	font-size: var(--text-base, 13px);
+.jcb-wrapper .grid-heading-row {
+	background-color: var(--subtle-fg, var(--bg-color, #fafbfc));
+	border-bottom: 1px solid var(--table-border-color, var(--border-color, #d1d8dd));
 	font-weight: 500;
-	transition: color 0.15s ease, border-color 0.15s ease;
+	color: var(--text-muted, #6c7680);
+	min-width: 900px;
 }
 
-.jcb-tab-item .nav-link:hover {
-	color: var(--text-color);
-}
-
-.jcb-tab-item .nav-link.active {
-	color: var(--text-color);
-	border-bottom: 2px solid var(--text-color);
-	font-weight: 600;
-}
-
-.jcb-tab-count {
-	font-size: 11px;
-	font-weight: 500;
-	padding: 1px 7px;
-	border-radius: var(--radius-full, 999px);
-	background: var(--control-bg);
-	color: var(--text-muted);
-}
-
-.jcb-tab-item .nav-link.active .jcb-tab-count {
-	background: var(--bg-gray, var(--control-bg));
-	color: var(--text-color);
-}
-
-/* Cards grid */
-.jcb-cards {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-	gap: var(--margin-md, 16px);
-}
-
-.jcb-card {
-	background-color: var(--card-bg);
-	border: 1px solid var(--border-color);
-	border-radius: var(--radius-md, 8px);
-	padding: var(--padding-md, 14px);
-	cursor: pointer;
-	box-shadow: var(--card-shadow, var(--shadow-xs));
-	transition: box-shadow 0.15s ease, border-color 0.15s ease;
+.jcb-wrapper .grid-heading-row .grid-static-col,
+.jcb-wrapper .grid-heading-row .row-check,
+.jcb-wrapper .grid-heading-row .row-index {
+	height: 34px;
 	display: flex;
-	flex-direction: column;
-	justify-content: space-between;
+	align-items: center;
+	font-size: var(--text-xs, 12px);
+	padding: 4px 8px;
 }
 
-.jcb-card:hover,
-.jcb-card:focus-visible {
-	box-shadow: var(--shadow-sm);
-	border-color: var(--gray-400);
+.jcb-wrapper .grid-body {
+	min-width: 900px;
+}
+
+.jcb-wrapper .grid-row {
+	border-bottom: 1px solid var(--table-border-color, var(--border-color, #ebeff2));
+	transition: background-color 0.1s ease;
+	cursor: pointer;
+}
+
+.jcb-wrapper .grid-row:last-child {
+	border-bottom: none;
+}
+
+.jcb-wrapper .grid-row:hover,
+.jcb-wrapper .grid-row:focus {
+	background-color: var(--table-hover-bg, var(--subtle-fg, #f7f9fa));
 	outline: none;
 }
 
-.jcb-card-head {
-	display: flex;
+.jcb-wrapper .grid-row .data-row {
+	min-height: 42px;
 	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 6px;
 }
 
-.jcb-order-link {
+.jcb-wrapper .grid-row .grid-static-col,
+.jcb-wrapper .grid-row .row-check,
+.jcb-wrapper .grid-row .row-index {
+	display: flex;
+	align-items: center;
+	font-size: var(--text-sm, 13px);
+	color: var(--text-color, #171717);
+	padding: 6px 8px;
+}
+
+.jcb-wrapper .grid-row-check {
+	cursor: pointer;
+	margin: 0;
+}
+
+.jcb-wrapper .jcb-order-link {
 	font-weight: 600;
-	font-size: var(--text-base, 14px);
-	color: var(--text-color);
+	color: var(--text-color, #171717);
 	text-decoration: none;
 }
 
-.jcb-order-link:hover {
-	color: var(--primary);
+.jcb-wrapper .jcb-order-link:hover {
+	color: var(--primary-color, var(--text-color, #171717));
 	text-decoration: underline;
 }
 
-.jcb-customer-name {
-	font-weight: 500;
-	font-size: var(--text-sm, 13px);
-	color: var(--text-color);
-}
-
-.jcb-meta-text {
-	font-size: var(--text-xs, 12px);
-	color: var(--text-muted);
-	margin-top: 2px;
-}
-
-.jcb-progress-bar {
-	height: 5px;
-	margin: 12px 0 8px;
-	background-color: var(--control-bg);
-	border-radius: var(--radius-full, 999px);
-	overflow: hidden;
-}
-
-.jcb-progress-fill {
-	height: 100%;
-	background-color: var(--primary);
-	border-radius: var(--radius-full, 999px);
-	transition: width 0.3s ease;
-}
-
-.jcb-card-footer {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	font-size: var(--text-xs, 12px);
-	margin-top: 6px;
-}
-
-.jcb-card-footer .jobs-done {
-	color: var(--text-muted);
-}
-
-.jcb-empty {
-	grid-column: 1 / -1;
+.jcb-wrapper .grid-empty {
 	padding: 40px 16px;
-	text-align: center;
-	color: var(--text-muted);
-	background-color: var(--control-bg);
-	border: 1px dashed var(--border-color);
-	border-radius: var(--radius-md, 8px);
+	color: var(--text-muted, #6c7680);
 	font-size: var(--text-sm, 13px);
+	background-color: var(--card-bg, #ffffff);
 }
