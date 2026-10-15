@@ -1,15 +1,37 @@
 /* Job Control Board - Pure ERPNext / Frappe Desk Form Grid & Tabs Theme */
 
+/* Make Job Control Board workspace and page full width */
+body[data-route*="job-control-board"] .page-container[data-page-route="Workspaces"] .layout-main,
+body[data-route*="job-control-board"] [data-page-route="Workspaces"] .layout-main,
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .layout-main,
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .layout-main-section,
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .layout-main-section-wrapper,
+body[data-route*="job-board"] .layout-main,
+body[data-route*="job-board"] .layout-main-section {
+	max-width: 100% !important;
+	width: 100% !important;
+	padding-left: var(--padding-md, 16px) !important;
+	padding-right: var(--padding-md, 16px) !important;
+}
+
 #jcb-workspace-mount {
-	margin-bottom: var(--margin-lg, 24px);
+	margin-bottom: var(--margin-md, 16px);
+	width: 100% !important;
+	max-width: 100% !important;
 }
 
 .jcb-wrapper {
-	width: 100%;
+	width: 100% !important;
+	max-width: 100% !important;
 }
 
 .jcb-wrapper .form-tabs-list {
 	margin-bottom: var(--margin-md, 16px);
+	width: 100%;
+}
+
+.jcb-wrapper .grid-field {
+	width: 100%;
 }
 
 .jcb-wrapper .grid-custom-buttons {
@@ -17,6 +39,7 @@
 	justify-content: space-between;
 	align-items: center;
 	margin-bottom: var(--margin-sm, 10px);
+	width: 100%;
 	flex-wrap: wrap;
 	gap: 8px;
 }
@@ -25,10 +48,16 @@
 	gap: 6px;
 }
 
+.jcb-wrapper .form-grid-container {
+	width: 100% !important;
+	max-width: 100% !important;
+}
+
 .jcb-wrapper .form-grid {
 	background-color: var(--card-bg, #ffffff);
 	border: 1px solid var(--table-border-color, var(--border-color, #d1d8dd));
 	border-radius: var(--radius-md, 8px);
+	width: 100% !important;
 	overflow-x: auto;
 }
 
@@ -37,7 +66,7 @@
 	border-bottom: 1px solid var(--table-border-color, var(--border-color, #d1d8dd));
 	font-weight: 500;
 	color: var(--text-muted, #6c7680);
-	min-width: 900px;
+	width: 100%;
 }
 
 .jcb-wrapper .grid-heading-row .grid-static-col,
@@ -51,10 +80,11 @@
 }
 
 .jcb-wrapper .grid-body {
-	min-width: 900px;
+	width: 100%;
 }
 
 .jcb-wrapper .grid-row {
+	width: 100%;
 	border-bottom: 1px solid var(--table-border-color, var(--border-color, #ebeff2));
 	transition: background-color 0.1s ease;
 	cursor: pointer;
@@ -71,6 +101,7 @@
 }
 
 .jcb-wrapper .grid-row .data-row {
+	width: 100%;
 	min-height: 42px;
 	align-items: center;
 }
@@ -106,4 +137,13 @@
 	color: var(--text-muted, #6c7680);
 	font-size: var(--text-sm, 13px);
 	background-color: var(--card-bg, #ffffff);
+	width: 100%;
+}
+
+/* Hide any remaining workspace blocks, number cards, or headers below JCB */
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .editor-js-container,
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .codex-editor,
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .widget-group,
+.page-container[data-page-route="Workspaces"]:has(#jcb-workspace-mount) .workspace-footer {
+	display: none !important;
 }

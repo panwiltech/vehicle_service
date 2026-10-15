@@ -68,28 +68,28 @@ class JobControlBoardUI {
 										<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 45px; max-width: 45px; text-align: center;">
 											<span>${__("No.")}</span>
 										</div>
-										<div class="grid-static-col col bold" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="service_order">
+										<div class="grid-static-col col bold" style="flex: 1.2 1 150px;" data-fieldname="service_order">
 											<span>${__("Service Order")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1 1 180px;" data-fieldname="customer">
+										<div class="grid-static-col col" style="flex: 1.8 1 180px;" data-fieldname="customer">
 											<span>${__("Customer")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="vehicle">
+										<div class="grid-static-col col" style="flex: 1.4 1 150px;" data-fieldname="vehicle">
 											<span>${__("Vehicle")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 0 0 140px; max-width: 140px;" data-fieldname="status">
+										<div class="grid-static-col col" style="flex: 1.1 1 130px;" data-fieldname="status">
 											<span>${__("Status")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1 1 160px;" data-fieldname="technicians">
+										<div class="grid-static-col col" style="flex: 1.6 1 170px;" data-fieldname="technicians">
 											<span>${__("Technician(s)")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 0 0 110px; max-width: 110px; text-align: center;" data-fieldname="jobs">
+										<div class="grid-static-col col text-center" style="flex: 0.9 1 100px; justify-content: center;" data-fieldname="jobs">
 											<span>${__("Jobs Done")}</span>
 										</div>
-										<div class="grid-static-col col text-center" style="flex: 0 0 85px; max-width: 85px;" data-fieldname="clock">
+										<div class="grid-static-col col text-center" style="flex: 0.6 1 70px; justify-content: center;" data-fieldname="clock">
 											<span>${__("Clock")}</span>
 										</div>
-										<div class="grid-static-col col text-right" style="flex: 0 0 75px; max-width: 75px;" data-fieldname="actions">
+										<div class="grid-static-col col text-right" style="flex: 0 0 80px; max-width: 80px; justify-content: flex-end;" data-fieldname="actions">
 											<span>${__("Actions")}</span>
 										</div>
 									</div>
@@ -277,30 +277,30 @@ class JobControlBoardUI {
 						<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 45px; max-width: 45px; text-align: center;">
 							<span>${index + 1}</span>
 						</div>
-						<div class="grid-static-col col bold ellipsis" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="service_order">
+						<div class="grid-static-col col bold ellipsis" style="flex: 1.2 1 150px;" data-fieldname="service_order">
 							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="jcb-order-link">${esc(o.name)}</a>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1 1 180px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
+						<div class="grid-static-col col ellipsis" style="flex: 1.8 1 180px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
 							<span>${esc(o.customer_name || "—")}</span>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 0 0 160px; max-width: 160px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
+						<div class="grid-static-col col ellipsis" style="flex: 1.4 1 150px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
 							<span>${esc(o.vehicle || "—")}</span>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 0 0 140px; max-width: 140px;" data-fieldname="status">
+						<div class="grid-static-col col ellipsis" style="flex: 1.1 1 130px;" data-fieldname="status">
 							<span class="indicator-pill ${ind_color}">${esc(o.status)}</span>
 						</div>
-						<div class="grid-static-col col ellipsis text-muted" style="flex: 1 1 160px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
+						<div class="grid-static-col col ellipsis text-muted" style="flex: 1.6 1 170px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
 							<span>${esc(o.technicians || __("Unassigned"))}</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0 0 110px; max-width: 110px;" data-fieldname="jobs">
+						<div class="grid-static-col col text-center" style="flex: 0.9 1 100px; justify-content: center;" data-fieldname="jobs">
 							<span class="badge ${o.jobs_completed === o.job_count && o.job_count > 0 ? "badge-success" : "badge-light"}">
 								${o.jobs_completed} / ${o.job_count}
 							</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0 0 85px; max-width: 85px;" data-fieldname="clock">
+						<div class="grid-static-col col text-center" style="flex: 0.6 1 70px; justify-content: center;" data-fieldname="clock">
 							${clock_badge}
 						</div>
-						<div class="grid-static-col col text-right" style="flex: 0 0 75px; max-width: 75px;" data-fieldname="actions">
+						<div class="grid-static-col col text-right" style="flex: 0 0 80px; max-width: 80px; justify-content: flex-end;" data-fieldname="actions">
 							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="btn btn-default btn-xs" title="${__("Open Order")}">
 								${__("Open")} <i class="fa fa-angle-right"></i>
 							</a>
@@ -604,14 +604,25 @@ function check_and_mount_jcb() {
 	$("#jcb-workspace-mount").remove();
 
 	const $mount = $(`
-		<div id="jcb-workspace-mount" style="margin-bottom: var(--margin-lg, 24px); padding-bottom: var(--margin-md, 16px); border-bottom: 1px solid var(--border-color);"></div>
+		<div id="jcb-workspace-mount" style="width: 100%; max-width: 100%; margin-bottom: var(--margin-md, 16px);"></div>
 	`);
+
+	// Hide any workspace editor, number cards, or widgets below
+	$container.find(".editor-js-container, .codex-editor, .widget-group, .widget-box, .widget, .workspace-footer").hide();
 
 	const $editor = $container.find(".editor-js-container");
 	if ($editor.length) {
 		$mount.insertBefore($editor);
 	} else {
 		$container.prepend($mount);
+	}
+
+	// Expand workspace page layout to full width
+	if ($ws_page && $ws_page.length) {
+		$ws_page.find(".layout-main, .layout-main-section, .layout-main-section-wrapper").css({
+			"max-width": "100%",
+			"width": "100%"
+		});
 	}
 
 	new JobControlBoardUI($mount);

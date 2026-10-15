@@ -1,7 +1,7 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[{\"id\": \"hdr_jcb\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Job Control Board</b></span>\", \"col\": 12}}, {\"id\": \"nc_open\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Open Service Orders\", \"col\": 3}}, {\"id\": \"nc_prog\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"In Progress Orders\", \"col\": 3}}, {\"id\": \"nc_pause\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Paused Orders\", \"col\": 3}}, {\"id\": \"nc_comp\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"Completed Orders\", \"col\": 3}}, {\"id\": \"sc_jcb\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Shortcuts\", \"col\": 12}}]",
+ "content": "[]",
  "creation": "2026-10-13 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -14,24 +14,7 @@
  "label": "Job Control Board",
  "module": "Vehicle Service",
  "name": "Job Control Board",
- "number_cards": [
-  {
-   "label": "Open Service Orders",
-   "number_card_name": "Open Service Orders"
-  },
-  {
-   "label": "In Progress Orders",
-   "number_card_name": "In Progress Orders"
-  },
-  {
-   "label": "Paused Orders",
-   "number_card_name": "Paused Orders"
-  },
-  {
-   "label": "Completed Orders",
-   "number_card_name": "Completed Orders"
-  }
- ],
+ "number_cards": [],
  "public": 1,
  "roles": [
   {
@@ -41,80 +24,7 @@
    "role": "System Manager"
   }
  ],
- "shortcuts": [
-  {
-   "color": "Orange",
-   "label": "Tabbed Job Board",
-   "link_to": "job-board",
-   "type": "Page"
-  },
-  {
-   "color": "Blue",
-   "doc_view": "List",
-   "label": "All Service Orders",
-   "link_to": "Service Order",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "Open Orders",
-   "link_to": "Service Order",
-   "stats_filter": "[[\"Service Order\",\"board_status\",\"=\",\"Open\",false]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "In Progress Orders",
-   "link_to": "Service Order",
-   "stats_filter": "[[\"Service Order\",\"board_status\",\"=\",\"In Progress\",false]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Yellow",
-   "doc_view": "List",
-   "label": "Paused Orders",
-   "link_to": "Service Order",
-   "stats_filter": "[[\"Service Order\",\"board_status\",\"=\",\"Paused\",false]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "label": "Completed Orders",
-   "link_to": "Service Order",
-   "stats_filter": "[[\"Service Order\",\"board_status\",\"=\",\"Completed\",false]]",
-   "type": "DocType"
-  },
-  {
-   "color": "Purple",
-   "doc_view": "Report",
-   "label": "Service Orders Report",
-   "link_to": "Service Order",
-   "type": "DocType"
-  },
-  {
-   "color": "Cyan",
-   "doc_view": "List",
-   "label": "Service Jobs",
-   "link_to": "Service Job",
-   "type": "DocType"
-  },
-  {
-   "color": "Teal",
-   "doc_view": "List",
-   "label": "Technicians",
-   "link_to": "Employee",
-   "type": "DocType"
-  },
-  {
-   "color": "Pink",
-   "label": "Technician Performance",
-   "link_to": "Technician Performance",
-   "type": "Report"
-  }
- ],
+ "shortcuts": [],
  "title": "Job Control Board",
  "type": "Workspace"
 }
