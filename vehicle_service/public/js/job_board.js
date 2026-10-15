@@ -65,34 +65,34 @@ class JobControlBoardUI {
 							<div class="grid-heading-row">
 								<div class="grid-row">
 									<div class="data-row row m-0">
-										<div class="row-check sortable-handle col" style="flex: 0 0 35px; max-width: 35px; text-align: center;">
+										<div class="row-check sortable-handle col" style="flex: 0 0 32px; max-width: 32px; text-align: center;">
 											<input type="checkbox" class="grid-row-check jcb-check-all" title="${__("Select All")}">
 										</div>
-										<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 45px; max-width: 45px; text-align: center;">
+										<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 38px; max-width: 38px; text-align: center;">
 											<span>${__("No.")}</span>
 										</div>
-										<div class="grid-static-col col bold" style="flex: 1.2 1 150px;" data-fieldname="service_order">
+										<div class="grid-static-col col bold" style="flex: 1.2 1 120px; min-width: 110px;" data-fieldname="service_order">
 											<span>${__("Service Order")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.8 1 180px;" data-fieldname="customer">
+										<div class="grid-static-col col" style="flex: 1.6 1 130px; min-width: 120px;" data-fieldname="customer">
 											<span>${__("Customer")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.4 1 150px;" data-fieldname="vehicle">
+										<div class="grid-static-col col" style="flex: 1.3 1 120px; min-width: 110px;" data-fieldname="vehicle">
 											<span>${__("Vehicle")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.1 1 130px;" data-fieldname="status">
+										<div class="grid-static-col col" style="flex: 1.0 1 110px; min-width: 95px;" data-fieldname="status">
 											<span>${__("Status")}</span>
 										</div>
-										<div class="grid-static-col col" style="flex: 1.6 1 170px;" data-fieldname="technicians">
+										<div class="grid-static-col col" style="flex: 1.4 1 130px; min-width: 110px;" data-fieldname="technicians">
 											<span>${__("Technician(s)")}</span>
 										</div>
-										<div class="grid-static-col col text-center" style="flex: 0.9 1 100px; justify-content: center;" data-fieldname="jobs">
+										<div class="grid-static-col col text-center" style="flex: 0.7 1 75px; min-width: 70px; justify-content: center;" data-fieldname="jobs">
 											<span>${__("Jobs Done")}</span>
 										</div>
-										<div class="grid-static-col col text-center" style="flex: 0.6 1 70px; justify-content: center;" data-fieldname="clock">
+										<div class="grid-static-col col text-center" style="flex: 0.5 1 50px; min-width: 45px; justify-content: center;" data-fieldname="clock">
 											<span>${__("Clock")}</span>
 										</div>
-										<div class="grid-static-col col text-right" style="flex: 0 0 115px; max-width: 115px; justify-content: flex-end;" data-fieldname="actions">
+										<div class="grid-static-col col text-right" style="flex: 0 0 85px; max-width: 85px; justify-content: flex-end;" data-fieldname="actions">
 											<span>${__("Actions")}</span>
 										</div>
 									</div>
@@ -148,11 +148,11 @@ class JobControlBoardUI {
 				}
 			});
 		}
-		if (!window._jcb_dropdown_listener_bound) {
-			window._jcb_dropdown_listener_bound = true;
-			$(document).on("click", (e) => {
-				if (!$(e.target).closest(".jcb-action-btn-group").length) {
-					$(".jcb-actions-dropdown").hide();
+		if (!window._jcb_floating_listener_bound) {
+			window._jcb_floating_listener_bound = true;
+			$(document).on("click scroll", (e) => {
+				if (!$(e.target).closest(".jcb-btn-row-action, .jcb-floating-menu").length) {
+					$(".jcb-floating-menu").remove();
 				}
 			});
 		}
@@ -283,99 +283,107 @@ class JobControlBoardUI {
 			const $row = $(`
 				<div class="grid-row" data-name="${esc(o.name)}" tabindex="0">
 					<div class="data-row row m-0">
-						<div class="row-check sortable-handle col" style="flex: 0 0 35px; max-width: 35px; text-align: center;">
+						<div class="row-check sortable-handle col" style="flex: 0 0 32px; max-width: 32px; text-align: center;">
 							<input type="checkbox" class="grid-row-check">
 						</div>
-						<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 45px; max-width: 45px; text-align: center;">
+						<div class="row-index sortable-handle grid-static-col col" style="flex: 0 0 38px; max-width: 38px; text-align: center;">
 							<span>${index + 1}</span>
 						</div>
-						<div class="grid-static-col col bold ellipsis" style="flex: 1.2 1 150px;" data-fieldname="service_order">
+						<div class="grid-static-col col bold ellipsis" style="flex: 1.2 1 120px; min-width: 110px;" data-fieldname="service_order">
 							<a href="/app/service-order/${encodeURIComponent(o.name)}" class="jcb-order-link">${esc(o.name)}</a>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1.8 1 180px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
+						<div class="grid-static-col col ellipsis" style="flex: 1.6 1 130px; min-width: 120px;" data-fieldname="customer" title="${esc(o.customer_name || "")}">
 							<span>${esc(o.customer_name || "—")}</span>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1.4 1 150px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
+						<div class="grid-static-col col ellipsis" style="flex: 1.3 1 120px; min-width: 110px;" data-fieldname="vehicle" title="${esc(o.vehicle || "")}">
 							<span>${esc(o.vehicle || "—")}</span>
 						</div>
-						<div class="grid-static-col col ellipsis" style="flex: 1.1 1 130px;" data-fieldname="status">
+						<div class="grid-static-col col ellipsis" style="flex: 1.0 1 110px; min-width: 95px;" data-fieldname="status">
 							<span class="indicator-pill ${ind_color}">${esc(o.status)}</span>
 						</div>
-						<div class="grid-static-col col ellipsis text-muted" style="flex: 1.6 1 170px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
+						<div class="grid-static-col col ellipsis text-muted" style="flex: 1.4 1 130px; min-width: 110px;" data-fieldname="technicians" title="${esc(o.technicians || __("Unassigned"))}">
 							<span>${esc(o.technicians || __("Unassigned"))}</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0.9 1 100px; justify-content: center;" data-fieldname="jobs">
+						<div class="grid-static-col col text-center" style="flex: 0.7 1 75px; min-width: 70px; justify-content: center;" data-fieldname="jobs">
 							<span class="badge ${o.jobs_completed === o.job_count && o.job_count > 0 ? "badge-success" : "badge-light"}">
 								${o.jobs_completed} / ${o.job_count}
 							</span>
 						</div>
-						<div class="grid-static-col col text-center" style="flex: 0.6 1 70px; justify-content: center;" data-fieldname="clock">
+						<div class="grid-static-col col text-center" style="flex: 0.5 1 50px; min-width: 45px; justify-content: center;" data-fieldname="clock">
 							${clock_badge}
 						</div>
-						<div class="grid-static-col col text-right" style="flex: 0 0 115px; max-width: 115px; justify-content: flex-end;" data-fieldname="actions">
-							<div class="btn-group jcb-action-btn-group" role="group">
-								<a href="/app/service-order/${encodeURIComponent(o.name)}" class="btn btn-default btn-xs" title="${__("Open Order")}">
-									${__("Open")}
-								</a>
-								<button type="button" class="btn btn-default btn-xs dropdown-toggle dropdown-toggle-split jcb-btn-actions-toggle" title="${__("More Actions")}">
-									<span class="caret"></span>
-								</button>
-								<div class="dropdown-menu dropdown-menu-right shadow-sm jcb-actions-dropdown" style="display: none;">
-									<a class="dropdown-item jcb-action-add-job" href="#"><i class="fa fa-plus text-primary"></i> ${__("Add Job")}</a>
-									<a class="dropdown-item jcb-action-start-clock" href="#"><i class="fa fa-play text-success"></i> ${__("Start Clock")}</a>
-									<a class="dropdown-item jcb-action-pause-clock" href="#"><i class="fa fa-pause text-warning"></i> ${__("Pause Job")}</a>
-									<a class="dropdown-item jcb-action-assign-tech" href="#"><i class="fa fa-user text-info"></i> ${__("Assign Technician")}</a>
-									<div class="dropdown-divider"></div>
-									<a class="dropdown-item jcb-action-complete-order" href="#"><i class="fa fa-check text-success"></i> ${__("Complete Job")}</a>
-								</div>
-							</div>
+						<div class="grid-static-col col text-right" style="flex: 0 0 85px; max-width: 85px; justify-content: flex-end;" data-fieldname="actions">
+							<button type="button" class="btn btn-default btn-xs jcb-btn-row-action" title="${__("Order Actions")}">
+								${__("Actions")} <i class="fa fa-caret-down" style="margin-left: 2px;"></i>
+							</button>
 						</div>
 					</div>
 				</div>
 			`);
 
-			// Bind Row Actions Dropdown & Items
-			$row.find(".jcb-btn-actions-toggle").on("click", (e) => {
+			// Bind Row Actions Floating Menu (Attached to body so it never clips)
+			$row.find(".jcb-btn-row-action").on("click", (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				const $menu = $(e.currentTarget).siblings(".jcb-actions-dropdown");
-				$(".jcb-actions-dropdown").not($menu).hide();
-				$menu.toggle();
-			});
 
-			$row.find(".jcb-action-add-job").on("click", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				$(".jcb-actions-dropdown").hide();
-				this.trigger_add_job(o.name);
-			});
+				const isCurrentOpen = $(".jcb-floating-menu").length && $(".jcb-floating-menu").data("order") === o.name;
+				$(".jcb-floating-menu").remove();
+				if (isCurrentOpen) return;
 
-			$row.find(".jcb-action-start-clock").on("click", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				$(".jcb-actions-dropdown").hide();
-				this.trigger_start_clock(o.name);
-			});
+				const rect = e.currentTarget.getBoundingClientRect();
+				const menuWidth = 190;
+				let leftPos = rect.right - menuWidth;
+				if (leftPos < 10) leftPos = 10;
+				let topPos = rect.bottom + 4;
+				if (topPos + 220 > window.innerHeight) {
+					topPos = Math.max(10, rect.top - 200);
+				}
 
-			$row.find(".jcb-action-pause-clock").on("click", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				$(".jcb-actions-dropdown").hide();
-				this.trigger_pause_clock(o.name);
-			});
+				const $menu = $(`
+					<div class="dropdown-menu show shadow jcb-floating-menu" data-order="${esc(o.name)}" style="position: fixed; top: ${topPos}px; left: ${leftPos}px; z-index: 10000; min-width: ${menuWidth}px; display: block; border-radius: 6px; padding: 4px 0; background: var(--card-bg, #fff); border: 1px solid var(--border-color, #d1d8dd); box-shadow: 0 6px 20px rgba(0,0,0,0.15);">
+						<a class="dropdown-item jcb-action-add-job" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-plus text-primary mr-2" style="width: 16px;"></i> ${__("Add Job")}</a>
+						<a class="dropdown-item jcb-action-start-clock" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-play text-success mr-2" style="width: 16px;"></i> ${__("Start Clock")}</a>
+						<a class="dropdown-item jcb-action-pause-clock" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-pause text-warning mr-2" style="width: 16px;"></i> ${__("Pause Job")}</a>
+						<a class="dropdown-item jcb-action-assign-tech" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-user text-info mr-2" style="width: 16px;"></i> ${__("Assign Technician")}</a>
+						<div class="dropdown-divider" style="margin: 4px 0; border-top: 1px solid var(--border-color, #ebeff2);"></div>
+						<a class="dropdown-item jcb-action-complete-order" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-check text-success mr-2" style="width: 16px;"></i> ${__("Complete Job")}</a>
+					</div>
+				`).appendTo("body");
 
-			$row.find(".jcb-action-assign-tech").on("click", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				$(".jcb-actions-dropdown").hide();
-				this.trigger_assign_technician(o.name);
-			});
+				$menu.find(".jcb-action-add-job").on("click", (evt) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					$menu.remove();
+					this.trigger_add_job(o.name);
+				});
 
-			$row.find(".jcb-action-complete-order").on("click", (e) => {
-				e.preventDefault();
-				e.stopPropagation();
-				$(".jcb-actions-dropdown").hide();
-				this.trigger_complete_order(o.name);
+				$menu.find(".jcb-action-start-clock").on("click", (evt) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					$menu.remove();
+					this.trigger_start_clock(o.name);
+				});
+
+				$menu.find(".jcb-action-pause-clock").on("click", (evt) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					$menu.remove();
+					this.trigger_pause_clock(o.name);
+				});
+
+				$menu.find(".jcb-action-assign-tech").on("click", (evt) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					$menu.remove();
+					this.trigger_assign_technician(o.name);
+				});
+
+				$menu.find(".jcb-action-complete-order").on("click", (evt) => {
+					evt.preventDefault();
+					evt.stopPropagation();
+					$menu.remove();
+					this.trigger_complete_order(o.name);
+				});
 			});
 
 			// Row click navigation (excluding direct checkbox/link/button clicks)
