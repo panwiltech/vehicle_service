@@ -1,0 +1,63 @@
+{
+ "app": "vehicle_service",
+ "creation": "2026-10-16 15:57:49.686015",
+ "docstatus": 0,
+ "doctype": "Dock",
+ "idx": 0,
+ "items": [
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "car",
+   "link_to": "Vehicle Service",
+   "link_type": "Workspace",
+   "title": "Vehicle Service"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "clipboard-list",
+   "link_to": "Service Advisor",
+   "link_type": "Workspace",
+   "title": "Service Advisor"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "circle-gauge",
+   "link_to": "Job Control Board",
+   "link_type": "Workspace",
+   "title": "Job Control Board"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "wrench",
+   "link_to": "Technician Portal",
+   "link_type": "Workspace",
+   "title": "Technician Portal"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "clipboard-check",
+   "link_to": "Quality Control",
+   "link_type": "Workspace",
+   "title": "Quality Control"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "package",
+   "link_to": "Parts Store",
+   "link_type": "Workspace",
+   "title": "Parts Store"
+  }
+ ],
+ "modified": "2026-10-16 15:59:38.069033",
+ "modified_by": "Administrator",
+ "name": "vehicle_service",
+ "owner": "Administrator",
+ "standard": 1,
+ "user": ""
+}

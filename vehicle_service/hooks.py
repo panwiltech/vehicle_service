@@ -5,6 +5,18 @@ app_description = "Vehicle service and workshop management on ERPNext"
 app_email = "azazel@example.com"
 app_license = "mit"
 
+app_logo_url = "/assets/vehicle_service/images/vehicle-service-logo.svg"
+app_home = "/desk/vehicle-service"
+
+add_to_apps_screen = [
+	{
+		"name": "vehicle_service",
+		"logo": "/assets/vehicle_service/images/vehicle-service-logo.svg",
+		"title": "Vehicle Service",
+		"route": "/desk/vehicle-service",
+	}
+]
+
 use_json_request_body = True
 
 # Installation and Migration

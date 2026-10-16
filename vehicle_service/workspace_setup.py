@@ -171,6 +171,52 @@ def setup_production_workspaces():
 		if frappe.db.exists("Workspace", ws_name):
 			frappe.db.set_value("Workspace", ws_name, "is_hidden", 1, update_modified=False)
 
+	# 4. Configure Dock for Vehicle Service & ERPNext
+	vs_dock_items = [
+		{"link_type": "Workspace", "link_to": "Vehicle Service", "icon": "car", "title": "Vehicle Service"},
+		{"link_type": "Workspace", "link_to": "Service Advisor", "icon": "clipboard-list", "title": "Service Advisor"},
+		{"link_type": "Workspace", "link_to": "Job Control Board", "icon": "circle-gauge", "title": "Job Control Board"},
+		{"link_type": "Workspace", "link_to": "Technician Portal", "icon": "wrench", "title": "Technician Portal"},
+		{"link_type": "Workspace", "link_to": "Quality Control", "icon": "clipboard-check", "title": "Quality Control"},
+		{"link_type": "Workspace", "link_to": "Parts Store", "icon": "package", "title": "Parts Store"},
+	]
+	if not frappe.db.exists("Dock", "vehicle_service"):
+		d = frappe.new_doc("Dock")
+		d.name = "vehicle_service"
+		d.app = "vehicle_service"
+		d.standard = 1
+		for it in vs_dock_items:
+			d.append("items", it)
+		d.insert(ignore_permissions=True)
+	else:
+		d = frappe.get_doc("Dock", "vehicle_service")
+		d.items = []
+		for it in vs_dock_items:
+			d.append("items", it)
+		d.save(ignore_permissions=True)
+
+	erp_dock_items = [
+		{"link_type": "Workspace", "link_to": "Invoicing", "icon": "accounting", "title": "Invoicing"},
+		{"link_type": "Workspace", "link_to": "Stock", "icon": "stock", "title": "Stock"},
+		{"link_type": "Workspace", "link_to": "Buying", "icon": "buying", "title": "Buying"},
+		{"link_type": "Workspace", "link_to": "Selling", "icon": "sell", "title": "Selling"},
+		{"link_type": "Workspace", "link_to": "ERPNext Settings", "icon": "setting", "title": "ERPNext Settings"},
+	]
+	if not frappe.db.exists("Dock", "erpnext"):
+		d = frappe.new_doc("Dock")
+		d.name = "erpnext"
+		d.app = "erpnext"
+		d.standard = 1
+		for it in erp_dock_items:
+			d.append("items", it)
+		d.insert(ignore_permissions=True)
+	else:
+		d = frappe.get_doc("Dock", "erpnext")
+		d.items = []
+		for it in erp_dock_items:
+			d.append("items", it)
+		d.save(ignore_permissions=True)
+
 	frappe.db.commit()
 	frappe.clear_cache()
 	print("Production workspaces setup completed successfully.")
