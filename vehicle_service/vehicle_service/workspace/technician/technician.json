@@ -8,12 +8,16 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "tool",
+ "icon": "wrench",
  "idx": 4,
+ "indicator_color": "green",
  "is_hidden": 0,
  "label": "Technician Portal",
  "module": "Vehicle Service",
  "name": "Technician Portal",
+ "parent_page": "Vehicle Service",
+ "public": 1,
+ "sequence_id": 1.3,
  "roles": [
   {
    "role": "Workshop Technician"

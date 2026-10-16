@@ -1,19 +1,46 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[{\"id\":\"header1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Vehicle Service & Workshop Command Center</b></span>\",\"col\":12}},{\"id\":\"shortcuts_block\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_reception\",\"type\":\"card\",\"data\":{\"card_name\":\"Reception & Intake\",\"col\":4}},{\"id\":\"card_workshop\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Execution\",\"col\":4}},{\"id\":\"card_parts\",\"type\":\"card\",\"data\":{\"card_name\":\"Parts & Materials\",\"col\":4}},{\"id\":\"card_qc\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Control\",\"col\":4}},{\"id\":\"card_analytics\",\"type\":\"card\",\"data\":{\"card_name\":\"Analytics & Reports\",\"col\":4}},{\"id\":\"card_settings\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings & Masters\",\"col\":4}}]",
+ "content": "[{\"id\":\"header1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Vehicle Service & Workshop Command Center</b></span>\",\"col\":12}},{\"id\":\"shortcuts_block\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_reception\",\"type\":\"card\",\"data\":{\"card_name\":\"Reception & Intake\",\"col\":4}},{\"id\":\"card_workshop\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Execution\",\"col\":4}},{\"id\":\"card_parts\",\"type\":\"card\",\"data\":{\"card_name\":\"Parts & Materials\",\"col\":4}},{\"id\":\"card_qc\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Control\",\"col\":4}},{\"id\":\"card_billing\",\"type\":\"card\",\"data\":{\"card_name\":\"Billing & Finance\",\"col\":4}},{\"id\":\"card_analytics\",\"type\":\"card\",\"data\":{\"card_name\":\"Analytics & Reports\",\"col\":4}},{\"id\":\"card_settings\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings & Masters\",\"col\":4}}]",
  "creation": "2026-10-03 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "tool",
+ "icon": "car",
  "idx": 0,
+ "indicator_color": "blue",
  "is_hidden": 0,
  "label": "Vehicle Service",
  "module": "Vehicle Service",
  "name": "Vehicle Service",
+ "parent_page": "",
+ "public": 1,
+ "roles": [
+  {
+   "role": "Service Manager"
+  },
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Workshop Supervisor"
+  },
+  {
+   "role": "Service Advisor"
+  },
+  {
+   "role": "Job Controller"
+  },
+  {
+   "role": "Parts Controller"
+  },
+  {
+   "role": "QC Inspector"
+  }
+ ],
+ "sequence_id": 1.0,
  "shortcuts": [
   {
    "color": "Blue",
@@ -249,6 +276,36 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Billing & Finance",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Invoices",
+   "link_count": 0,
+   "link_to": "Sales Invoice",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Entries",
+   "link_count": 0,
+   "link_to": "Payment Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Analytics & Reports",
    "link_count": 0,
    "onboard": 0,
@@ -329,7 +386,5 @@
    "type": "Link"
   }
  ],
- "public": 1,
- "roles": [],
  "title": "Vehicle Service"
 }

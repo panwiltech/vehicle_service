@@ -1,30 +1,187 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[]",
+ "content": "[{\"id\":\"header_jcb\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Job Control & Workshop Dispatch</b></span>\",\"col\":12}},{\"id\":\"shortcuts_jcb\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_live_dispatch\",\"type\":\"card\",\"data\":{\"card_name\":\"Live Dispatch & Bays\",\"col\":6}},{\"id\":\"card_job_exec\",\"type\":\"card\",\"data\":{\"card_name\":\"Job Execution\",\"col\":6}},{\"id\":\"card_yard_mov\",\"type\":\"card\",\"data\":{\"card_name\":\"Yard & Vehicle Movement\",\"col\":6}},{\"id\":\"card_workshop_analytics\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Analytics\",\"col\":6}}]",
  "creation": "2026-10-13 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "tool",
+ "icon": "circle-gauge",
  "idx": 1,
+ "indicator_color": "blue",
  "is_hidden": 0,
  "label": "Job Control Board",
  "module": "Vehicle Service",
  "name": "Job Control Board",
  "number_cards": [],
+ "parent_page": "Vehicle Service",
  "public": 1,
  "roles": [
   {
    "role": "Job Controller"
   },
   {
+   "role": "Workshop Supervisor"
+  },
+  {
+   "role": "Service Manager"
+  },
+  {
    "role": "System Manager"
   }
  ],
- "shortcuts": [],
- "title": "Job Control Board",
- "type": "Workspace"
+ "sequence_id": 1.2,
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "label": "Workshop Live Control",
+   "link_to": "workshop-control",
+   "type": "Page"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "List",
+   "label": "Service Jobs",
+   "link_to": "Service Job",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "List",
+   "label": "Vehicle Movements",
+   "link_to": "Vehicle Movement",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "label": "Technician Performance",
+   "link_to": "Technician Performance",
+   "type": "Report"
+  }
+ ],
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Live Dispatch & Bays",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workshop Live Control (Bay Board)",
+   "link_count": 0,
+   "link_to": "workshop-control",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workshop Locations",
+   "link_count": 0,
+   "link_to": "Workshop Location",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Job Execution",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Jobs",
+   "link_count": 0,
+   "link_to": "Service Job",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Orders",
+   "link_count": 0,
+   "link_to": "Service Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Yard & Vehicle Movement",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle Movements",
+   "link_count": 0,
+   "link_to": "Vehicle Movement",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Service Vehicles",
+   "link_count": 0,
+   "link_to": "Service Vehicle",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Workshop Analytics",
+   "link_count": 0,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "Service Job",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Technician Performance",
+   "link_count": 0,
+   "link_to": "Technician Performance",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Workshop Performance",
+   "link_count": 0,
+   "link_to": "Workshop Performance",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "title": "Job Control Board"
 }

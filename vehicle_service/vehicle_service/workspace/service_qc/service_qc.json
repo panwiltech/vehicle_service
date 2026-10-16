@@ -8,12 +8,16 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "check-circle",
+ "icon": "clipboard-check",
  "idx": 2,
+ "indicator_color": "purple",
  "is_hidden": 0,
  "label": "Quality Control",
  "module": "Vehicle Service",
  "name": "Quality Control",
+ "parent_page": "Vehicle Service",
+ "public": 1,
+ "sequence_id": 1.4,
  "roles": [
   {
    "role": "QC Inspector"

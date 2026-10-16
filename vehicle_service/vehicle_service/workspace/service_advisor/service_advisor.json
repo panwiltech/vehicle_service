@@ -8,12 +8,16 @@
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "user",
+ "icon": "clipboard-list",
  "idx": 1,
+ "indicator_color": "orange",
  "is_hidden": 0,
  "label": "Service Advisor",
  "module": "Vehicle Service",
  "name": "Service Advisor",
+ "parent_page": "Vehicle Service",
+ "public": 1,
+ "sequence_id": 1.1,
  "roles": [
   {
    "role": "Service Advisor"
