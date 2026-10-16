@@ -112,6 +112,93 @@ def setup_production_workspaces():
 			d.append("items", it)
 		d.save(ignore_permissions=True)
 
+	# 3. Configure Desktop Settings & Desktop Icons (Grid layout on Desk)
+	if frappe.db.exists("DocType", "Desktop Settings"):
+		frappe.db.set_single_value("Desktop Settings", "desktop_page", "Desktop Icons")
+
+	sub_pages_to_hide = [
+		"Accounts Setup",
+		"Organization",
+		"Share Management",
+		"Banking",
+		"Taxes",
+		"Budget",
+		"Subscription",
+		"Data",
+		"Home",
+		"Payments",
+		"Financial Reports",
+		"ERPNext",
+		"Framework",
+		"Frappe Framework",
+	]
+	for label in sub_pages_to_hide:
+		if frappe.db.exists("Desktop Icon", label):
+			frappe.db.set_value("Desktop Icon", label, "hidden", 1, update_modified=False)
+
+	if frappe.db.exists("Desktop Icon", "Vehicle Service"):
+		frappe.db.set_value(
+			"Desktop Icon",
+			"Vehicle Service",
+			{
+				"icon_type": "Link",
+				"link_type": "Workspace Sidebar",
+				"link_to": "Vehicle Service",
+				"icon": "car",
+				"parent_icon": None,
+				"hidden": 0,
+			},
+			update_modified=False,
+		)
+
+	primary_workspaces = [
+		("Accounting", "landmark"),
+		("Invoicing", "wallet"),
+		("Selling", "store"),
+		("Buying", "shopping-cart"),
+		("Stock", "package"),
+		("Manufacturing", "building-complex"),
+		("Subcontracting", "organization"),
+		("Vehicle Service", "car"),
+		("Service Advisor", "clipboard-list"),
+		("Job Control Board", "circle-gauge"),
+		("Technician Portal", "wrench"),
+		("Quality Control", "clipboard-check"),
+		("Parts Store", "package"),
+		("Projects", "folder-kanban"),
+		("Assets", "archive"),
+		("Quality", "shield-check"),
+		("Support", "headset"),
+		("CRM", "handshake"),
+		("ERPNext Settings", "sliders-horizontal"),
+		("Users", "users"),
+		("Integrations", "cable"),
+		("Automation", "repeat"),
+		("Printing", "printer"),
+		("Email", "mail"),
+		("System", "monitor-check"),
+		("Website", "app-window"),
+		("Build", "hammer"),
+	]
+
+	for idx, (label, icon) in enumerate(primary_workspaces, 1):
+		if frappe.db.exists("Desktop Icon", label):
+			frappe.db.set_value(
+				"Desktop Icon",
+				label,
+				{
+					"idx": idx,
+					"hidden": 0,
+					"parent_icon": None,
+					"icon": icon,
+				},
+				update_modified=False,
+			)
+
+	from frappe.desk.doctype.desktop_icon.desktop_icon import clear_every_users_desktop_icons
+
+	clear_every_users_desktop_icons()
 	frappe.db.commit()
 	frappe.clear_cache()
 	print("Vehicle Service production workspaces setup completed successfully.")
+
