@@ -16,45 +16,13 @@
   {
    "added": 0,
    "hidden": 0,
-   "icon": "clipboard-list",
-   "link_to": "Service Advisor",
-   "link_type": "Workspace",
-   "title": "Service Advisor"
-  },
-  {
-   "added": 0,
-   "hidden": 0,
-   "icon": "circle-gauge",
+   "icon": "folder-kanban",
    "link_to": "Job Control Board",
    "link_type": "Workspace",
    "title": "Job Control Board"
-  },
-  {
-   "added": 0,
-   "hidden": 0,
-   "icon": "wrench",
-   "link_to": "Technician Portal",
-   "link_type": "Workspace",
-   "title": "Technician Portal"
-  },
-  {
-   "added": 0,
-   "hidden": 0,
-   "icon": "clipboard-check",
-   "link_to": "Quality Control",
-   "link_type": "Workspace",
-   "title": "Quality Control"
-  },
-  {
-   "added": 0,
-   "hidden": 0,
-   "icon": "package",
-   "link_to": "Parts Store",
-   "link_type": "Workspace",
-   "title": "Parts Store"
   }
  ],
- "modified": "2026-10-16 20:31:08.443919",
+ "modified": "2026-10-16 21:43:20.456849",
  "modified_by": "Administrator",
  "name": "vehicle_service",
  "owner": "Administrator",

@@ -88,14 +88,16 @@ def setup_production_workspaces():
 				update_modified=False,
 			)
 
-	# 2. Configure Dock for Vehicle Service
+	# 2. Reload and sync standard Vehicle Service Sidebar
+	try:
+		frappe.reload_doc("vehicle_service", "sidebar", "vehicle_service", force=True)
+	except Exception as e:
+		frappe.logger("vehicle_service").warning(f"Could not reload sidebar vehicle_service: {e}")
+
+	# 3. Configure Dock for Vehicle Service
 	vs_dock_items = [
 		{"link_type": "Workspace", "link_to": "Vehicle Service", "icon": "car", "title": "Vehicle Service"},
-		{"link_type": "Workspace", "link_to": "Service Advisor", "icon": "clipboard-list", "title": "Service Advisor"},
-		{"link_type": "Workspace", "link_to": "Job Control Board", "icon": "circle-gauge", "title": "Job Control Board"},
-		{"link_type": "Workspace", "link_to": "Technician Portal", "icon": "wrench", "title": "Technician Portal"},
-		{"link_type": "Workspace", "link_to": "Quality Control", "icon": "clipboard-check", "title": "Quality Control"},
-		{"link_type": "Workspace", "link_to": "Parts Store", "icon": "package", "title": "Parts Store"},
+		{"link_type": "Workspace", "link_to": "Job Control Board", "icon": "folder-kanban", "title": "Job Control Board"},
 	]
 	if not frappe.db.exists("Dock", "vehicle_service"):
 		d = frappe.new_doc("Dock")
