@@ -1,4 +1,4 @@
-"""Production workspace and Desk setup utility for Vehicle Service and ERPNext."""
+"""Production workspace and Desk setup utility for Vehicle Service."""
 
 import frappe
 
@@ -59,72 +59,9 @@ VEHICLE_SERVICE_WORKSPACES = [
 	},
 ]
 
-CORE_ERPNEXT_WORKSPACES = {
-	"Invoicing": {
-		"sequence_id": 2.0,
-		"icon": "accounting",
-		"parent_page": "",
-		"is_hidden": 0,
-		"indicator_color": "blue",
-	},
-	"Financial Reports": {
-		"sequence_id": 2.1,
-		"icon": "table",
-		"parent_page": "Invoicing",
-		"is_hidden": 0,
-		"indicator_color": "cyan",
-	},
-	"Stock": {
-		"sequence_id": 3.0,
-		"icon": "stock",
-		"parent_page": "",
-		"is_hidden": 0,
-		"indicator_color": "orange",
-	},
-	"Buying": {
-		"sequence_id": 4.0,
-		"icon": "buying",
-		"parent_page": "",
-		"is_hidden": 0,
-		"indicator_color": "green",
-	},
-	"Selling": {
-		"sequence_id": 5.0,
-		"icon": "sell",
-		"parent_page": "",
-		"is_hidden": 0,
-		"indicator_color": "yellow",
-	},
-	"ERPNext Settings": {
-		"sequence_id": 6.0,
-		"icon": "setting",
-		"parent_page": "",
-		"is_hidden": 0,
-		"indicator_color": "grey",
-	},
-}
-
-HIDDEN_WORKSPACES = [
-	"Manufacturing",
-	"Subcontracting",
-	"Quality",
-	"Projects",
-	"Support",
-	"Website",
-	"Build",
-	"Email",
-	"Automation",
-	"Printing",
-	"System",
-	"Users",
-	"Integrations",
-	"Assets",
-	"CRM",
-]
-
 
 def setup_production_workspaces():
-	"""Synchronizes Vehicle Service and ERPNext workspaces for production readiness."""
+	"""Synchronizes Vehicle Service workspaces for production readiness."""
 	frappe.flags.in_patch = True
 
 	# 1. Reload and synchronize Vehicle Service workspaces from JSON files
@@ -151,27 +88,7 @@ def setup_production_workspaces():
 				update_modified=False,
 			)
 
-	# 2. Configure Core ERPNext Workspaces
-	for ws_name, conf in CORE_ERPNEXT_WORKSPACES.items():
-		if frappe.db.exists("Workspace", ws_name):
-			update_dict = {
-				"sequence_id": conf["sequence_id"],
-				"is_hidden": conf["is_hidden"],
-				"parent_page": conf["parent_page"],
-			}
-			if conf.get("icon"):
-				update_dict["icon"] = conf["icon"]
-			if conf.get("indicator_color"):
-				update_dict["indicator_color"] = conf["indicator_color"]
-
-			frappe.db.set_value("Workspace", ws_name, update_dict, update_modified=False)
-
-	# 3. Hide clutter / non-essential workspaces
-	for ws_name in HIDDEN_WORKSPACES:
-		if frappe.db.exists("Workspace", ws_name):
-			frappe.db.set_value("Workspace", ws_name, "is_hidden", 1, update_modified=False)
-
-	# 4. Configure Dock for Vehicle Service & ERPNext
+	# 2. Configure Dock for Vehicle Service
 	vs_dock_items = [
 		{"link_type": "Workspace", "link_to": "Vehicle Service", "icon": "car", "title": "Vehicle Service"},
 		{"link_type": "Workspace", "link_to": "Service Advisor", "icon": "clipboard-list", "title": "Service Advisor"},
@@ -195,28 +112,6 @@ def setup_production_workspaces():
 			d.append("items", it)
 		d.save(ignore_permissions=True)
 
-	erp_dock_items = [
-		{"link_type": "Workspace", "link_to": "Invoicing", "icon": "accounting", "title": "Invoicing"},
-		{"link_type": "Workspace", "link_to": "Stock", "icon": "stock", "title": "Stock"},
-		{"link_type": "Workspace", "link_to": "Buying", "icon": "buying", "title": "Buying"},
-		{"link_type": "Workspace", "link_to": "Selling", "icon": "sell", "title": "Selling"},
-		{"link_type": "Workspace", "link_to": "ERPNext Settings", "icon": "setting", "title": "ERPNext Settings"},
-	]
-	if not frappe.db.exists("Dock", "erpnext"):
-		d = frappe.new_doc("Dock")
-		d.name = "erpnext"
-		d.app = "erpnext"
-		d.standard = 1
-		for it in erp_dock_items:
-			d.append("items", it)
-		d.insert(ignore_permissions=True)
-	else:
-		d = frappe.get_doc("Dock", "erpnext")
-		d.items = []
-		for it in erp_dock_items:
-			d.append("items", it)
-		d.save(ignore_permissions=True)
-
 	frappe.db.commit()
 	frappe.clear_cache()
-	print("Production workspaces setup completed successfully.")
+	print("Vehicle Service production workspaces setup completed successfully.")

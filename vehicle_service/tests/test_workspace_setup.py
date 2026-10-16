@@ -45,34 +45,3 @@ class TestWorkspaceSetup(FrappeTestCase):
 		self.assertTrue(ws.content and ws.content != "[]", "Job Control Board content cannot be empty")
 		self.assertTrue(len(ws.shortcuts) > 0, "Job Control Board must have shortcuts")
 		self.assertTrue(len(ws.links) > 0, "Job Control Board must have links")
-
-	def test_erpnext_workspaces_configuration(self):
-		"""Core ERPNext workspaces must be active with correct sequence IDs."""
-		expected_core = {
-			"Invoicing": 2.0,
-			"Stock": 3.0,
-			"Buying": 4.0,
-			"Selling": 5.0,
-			"ERPNext Settings": 6.0,
-		}
-		for name, seq in expected_core.items():
-			if frappe.db.exists("Workspace", name):
-				ws = frappe.get_doc("Workspace", name)
-				self.assertEqual(ws.is_hidden, 0, f"{name} should not be hidden")
-				self.assertEqual(ws.sequence_id, seq, f"{name} sequence_id mismatch")
-
-	def test_hidden_workspaces(self):
-		"""Unused ERPNext modules must be hidden for clean production desk."""
-		hidden_modules = [
-			"Manufacturing",
-			"Subcontracting",
-			"Quality",
-			"Projects",
-			"Support",
-			"Website",
-			"Build",
-		]
-		for name in hidden_modules:
-			if frappe.db.exists("Workspace", name):
-				ws = frappe.get_doc("Workspace", name)
-				self.assertEqual(ws.is_hidden, 1, f"{name} should be hidden in production")
