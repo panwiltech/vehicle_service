@@ -7,6 +7,18 @@ frappe.ui.form.on("Service Order", {
 		frm.trigger("setup_jobs_tab_actions");
 		frm.trigger("setup_parts_tab_actions");
 		frm.trigger("setup_custom_buttons");
+
+		const isPartsAuthorized = frappe.user_roles.includes("Parts Controller") ||
+			frappe.user_roles.includes("Parts Manager") ||
+			frappe.user_roles.includes("System Manager") ||
+			frappe.session.user === "Administrator";
+		const isRestrictedRole = frappe.user_roles.includes("Job Controller") ||
+			frappe.user_roles.includes("Service Advisor");
+
+		if (isRestrictedRole && !isPartsAuthorized) {
+			frm.set_df_property("parts", "cannot_add_rows", true);
+			frm.set_df_property("parts", "cannot_delete_rows", true);
+		}
 	},
 
 	vehicle(frm) {
@@ -63,28 +75,9 @@ frappe.ui.form.on("Service Order", {
 		frm.set_df_property("status_html", "options", html);
 
 		if (frm.doc.sales_invoice) {
-			frappe.db.get_value("Sales Invoice", frm.doc.sales_invoice, ["grand_total", "outstanding_amount", "docstatus", "status"]).then(r => {
+			frappe.db.get_value("Sales Invoice", frm.doc.sales_invoice, ["docstatus"]).then(r => {
 				if (r && r.message) {
 					const inv = r.message;
-					const isPaid = flt(inv.outstanding_amount) <= 0 && inv.docstatus === 1;
-					const invBadge = isPaid ? "alert-success" : (inv.docstatus === 1 ? "alert-info" : "alert-warning");
-					const statusText = inv.docstatus === 0 ? __("Draft") : (isPaid ? __("Paid in Full") : __("Unpaid (Outstanding: {0})", [format_currency(inv.outstanding_amount)]));
-					const banner = `
-						<div class="alert ${invBadge} d-flex justify-content-between align-items-center" style="margin-bottom:12px; padding:8px 12px; border-radius:6px;">
-							<div>
-								<strong><i class="fa fa-file-text-o"></i> ${__("Sales Invoice")}:</strong>
-								<a href="/app/sales-invoice/${frm.doc.sales_invoice}" style="font-weight:700; text-decoration:underline; margin-left:4px;">${frm.doc.sales_invoice}</a>
-								<span style="margin-left:12px;">• Total: <strong>${format_currency(inv.grand_total)}</strong></span>
-								<span style="margin-left:12px;">• Status: <strong>${statusText}</strong></span>
-							</div>
-							<a href="/app/sales-invoice/${frm.doc.sales_invoice}" class="btn btn-xs btn-default">${__("Open Invoice")} →</a>
-						</div>
-					`;
-					if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
-						frm.fields_dict.status_html.$wrapper.find(".invoice-banner").remove();
-						frm.fields_dict.status_html.$wrapper.append(`<div class="invoice-banner">${banner}</div>`);
-					}
-
 					if (inv.docstatus === 1) {
 						frappe.db.get_value("Sales Invoice", {
 							return_against: frm.doc.sales_invoice,
@@ -95,19 +88,6 @@ frappe.ui.form.on("Service Order", {
 							if (!hasCreditNote) {
 								frm.disable_save();
 								frm.set_read_only();
-								const lockBanner = `
-									<div class="alert alert-warning d-flex align-items-center" style="margin-bottom:12px; padding:8px 12px; border-radius:6px;">
-										<i class="fa fa-lock" style="font-size:16px; margin-right:8px;"></i>
-										<div>
-											<strong>${__("Order Locked")}:</strong>
-											${__("Sales Invoice {0} is submitted. No changes can be made to this Service Order unless a Credit Note is raised against the invoice in Accounts.", [frm.doc.sales_invoice])}
-										</div>
-									</div>
-								`;
-								if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
-									frm.fields_dict.status_html.$wrapper.find(".invoice-lock-banner").remove();
-									frm.fields_dict.status_html.$wrapper.append(`<div class="invoice-lock-banner">${lockBanner}</div>`);
-								}
 							}
 						});
 					}
@@ -603,6 +583,15 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	show_add_part_dialog(frm) {
+		const isPartsAuthorized = frappe.user_roles.includes("Parts Controller") ||
+			frappe.user_roles.includes("Parts Manager") ||
+			frappe.user_roles.includes("System Manager") ||
+			frappe.session.user === "Administrator";
+		if (!isPartsAuthorized) {
+			frappe.msgprint(__("Access denied: only Parts Consultants (Parts Controllers) and Parts Managers can add parts."));
+			return;
+		}
+
 		if (frm.is_new()) {
 			frappe.msgprint(__("Please save the Service Order before adding parts."));
 			return;

@@ -7,6 +7,7 @@ ROLES = [
 	"Workshop Supervisor",
 	"Workshop Technician",
 	"Parts Controller",
+	"Parts Manager",
 	"QC Inspector",
 	"Service Accounts",
 	"Service Manager",
@@ -201,6 +202,7 @@ def after_install():
 	setup_default_settings()
 	setup_job_controller_permissions()
 	setup_default_board_tabs()
+	setup_test_users()
 
 
 def after_migrate():
@@ -212,6 +214,15 @@ def after_migrate():
 	setup_default_settings()
 	setup_job_controller_permissions()
 	setup_default_board_tabs()
+	setup_test_users()
+
+
+def setup_test_users():
+	try:
+		from vehicle_service.job_control_setup import create_all_test_users
+		create_all_test_users()
+	except Exception:
+		pass
 
 
 def setup_roles():

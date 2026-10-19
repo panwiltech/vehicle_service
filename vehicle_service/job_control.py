@@ -352,16 +352,20 @@ def complete_service_order(order_name: str):
 def order_has_permission(doc, ptype="read", user=None):
 	"""Permission hook for Service Order: denies write if order is completed and user only has Job Controller role."""
 	if ptype != "write":
-		return None
+		return True
 	user = user or frappe.session.user
 	if not user or user == "Administrator":
-		return None
+		return True
 
 	roles = set(frappe.get_roles(user))
 	if "System Manager" in roles:
 		return True
 
-	if "Job Controller" in roles and doc and getattr(doc, "status", None) in COMPLETED_STATES:
-		return False
+	if "Job Controller" in roles and doc:
+		status = getattr(doc, "status", None)
+		if not status and isinstance(doc, str):
+			status = frappe.db.get_value("Service Order", doc, "status")
+		if status in COMPLETED_STATES:
+			return False
 
-	return None
+	return True

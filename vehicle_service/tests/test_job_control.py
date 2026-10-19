@@ -28,6 +28,9 @@ class TestJobControl(FrappeTestCase):
 			it.is_stock_item = 0
 			it.insert(ignore_permissions=True)
 
+		from vehicle_service.job_control_setup import create_test_user
+		create_test_user()
+
 	def test_board_status_for(self):
 		self.assertEqual(board_status_for("Draft"), "Open")
 		self.assertEqual(board_status_for("Checked In"), "Open")
@@ -185,7 +188,21 @@ class TestJobControl(FrappeTestCase):
 		self.assertRaises(frappe.ValidationError, start_clock, job_name)
 
 		# 10. Permission hook check
-		self.assertFalse(order_has_permission(so, ptype="write", user="test_jc_user"))
+		jc_user = "jobcontroller.test@example.com"
+		# Job Controller can read completed order but cannot write
+		self.assertTrue(order_has_permission(so, ptype="read", user=jc_user))
+		self.assertFalse(order_has_permission(so, ptype="write", user=jc_user))
+		# Administrator can read and write
+		self.assertTrue(order_has_permission(so, ptype="read", user="Administrator"))
+		self.assertTrue(order_has_permission(so, ptype="write", user="Administrator"))
+
+		# Job Controller can both read and write an open / in-progress order
+		open_so = frappe.new_doc("Service Order")
+		open_so.vehicle = veh_id
+		open_so.customer = "Test Customer"
+		open_so.status = "In Progress"
+		self.assertTrue(order_has_permission(open_so, ptype="read", user=jc_user))
+		self.assertTrue(order_has_permission(open_so, ptype="write", user=jc_user))
 
 	def test_sales_invoice_labour_hours_sync(self):
 		from vehicle_service.job_control import add_job, complete_service_order
@@ -237,14 +254,30 @@ class TestJobControl(FrappeTestCase):
 				self.assertEqual(flt(row.estimated_hours), 2.5)
 
 	def test_role_and_test_user_setup(self):
+		from vehicle_service.job_control_setup import create_all_test_users
+		create_all_test_users()
+
 		self.assertTrue(frappe.db.exists("Role", "Job Controller"))
+		self.assertTrue(frappe.db.exists("Role", "Service Advisor"))
+		self.assertTrue(frappe.db.exists("Role", "Parts Controller"))
+		self.assertTrue(frappe.db.exists("Role", "Parts Manager"))
+
 		self.assertTrue(frappe.db.exists("Workspace", "Job Control Board"))
 		self.assertTrue(frappe.db.exists("User", "jobcontroller.test@example.com"))
+		self.assertTrue(frappe.db.exists("User", "serviceadvisor.test@example.com"))
+		self.assertTrue(frappe.db.exists("User", "partscontroller.test@example.com"))
 
 		ws = frappe.get_doc("Workspace", "Job Control Board")
 		self.assertEqual(ws.title, "Job Control Board")
 
-		roles = frappe.get_roles("jobcontroller.test@example.com")
-		self.assertIn("Job Controller", roles)
-		self.assertNotIn("System Manager", roles)
+		jc_roles = frappe.get_roles("jobcontroller.test@example.com")
+		self.assertIn("Job Controller", jc_roles)
+		self.assertNotIn("System Manager", jc_roles)
+
+		sa_roles = frappe.get_roles("serviceadvisor.test@example.com")
+		self.assertIn("Service Advisor", sa_roles)
+
+		pc_roles = frappe.get_roles("partscontroller.test@example.com")
+		self.assertIn("Parts Controller", pc_roles)
+
 

@@ -44,6 +44,7 @@ doc_events = {
 		"on_cancel": "vehicle_service.stock_events.handle_stock_entry_change",
 	},
 	"Sales Invoice": {
+		"validate": "vehicle_service.billing_events.validate_sales_invoice",
 		"on_submit": "vehicle_service.billing_events.handle_sales_invoice_submit",
 		"on_cancel": "vehicle_service.billing_events.handle_sales_invoice_cancel",
 	},

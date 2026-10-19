@@ -6,6 +6,59 @@ from frappe.utils import flt
 from vehicle_service.state import INVOICED, READY_FOR_BILLING, READY_FOR_COLLECTION, vehicle_status_for
 
 
+def validate_sales_invoice(doc, method=None):
+	"""Restricts Service Advisors from deleting or reducing parts on a Sales Invoice linked to a Service Order."""
+	if not getattr(doc, "vs_service_order", None):
+		return
+
+	user = frappe.session.user
+	if not user or user == "Administrator":
+		return
+
+	roles = set(frappe.get_roles(user))
+	if "System Manager" in roles or bool(roles & {"Parts Controller", "Parts Manager", "Accounts Manager"}):
+		return
+
+	if "Service Advisor" in roles:
+		so = frappe.get_doc("Service Order", doc.vs_service_order)
+		so_parts_map = {
+			p.name: p for p in so.get("parts", [])
+			if p.approval_status == "Approved" and flt(p.qty_used) > 0
+		}
+
+		inv_parts = {}
+		for item in doc.get("items", []):
+			part_row = getattr(item, "vs_part_row", None)
+			if part_row:
+				inv_parts[part_row] = item
+
+		for part_row, so_part in so_parts_map.items():
+			if part_row not in inv_parts:
+				frappe.throw(
+					frappe._(
+						"Service Advisors are not permitted to remove parts from Sales Invoice {0} that were added from Service Order {1} (Part: {2}). Please contact the Parts Consultant or Parts Manager."
+					).format(doc.name or "New", so.name, so_part.item_code),
+					frappe.ValidationError,
+				)
+
+			inv_item = inv_parts[part_row]
+			if flt(inv_item.qty) < flt(so_part.qty_used):
+				frappe.throw(
+					frappe._(
+						"Service Advisors are not permitted to reduce the quantity of part {0} on Sales Invoice {1} below {2}. Please contact the Parts Consultant or Parts Manager."
+					).format(so_part.item_code, doc.name or "New", so_part.qty_used),
+					frappe.ValidationError,
+				)
+
+			if flt(inv_item.rate) < flt(so_part.rate):
+				frappe.throw(
+					frappe._(
+						"Service Advisors are not permitted to reduce the rate of part {0} on Sales Invoice {1} below {2}. Please contact the Parts Consultant or Parts Manager."
+					).format(so_part.item_code, doc.name or "New", so_part.rate),
+					frappe.ValidationError,
+				)
+
+
 def handle_sales_invoice_submit(doc, method=None):
 	# 1. Credit Note (Return against an existing Sales Invoice)
 	if getattr(doc, "is_return", 0) and getattr(doc, "return_against", None):

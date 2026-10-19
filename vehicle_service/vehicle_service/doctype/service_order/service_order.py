@@ -49,6 +49,7 @@ class ServiceOrder(Document):
 		self.validate_completed_job_lock()
 		self.validate_invoice_lock()
 		self.validate_open_orders()
+		self.validate_parts_modification_permissions()
 		self.fetch_vehicle_and_company_defaults()
 		self.validate_intake_frozen()
 		self.validate_parts_defaults()
@@ -56,6 +57,52 @@ class ServiceOrder(Document):
 		self.sync_jobs_with_service_job_docs()
 		self.recalculate_parts_summary()
 		self.update_board_fields()
+
+	def validate_parts_modification_permissions(self):
+		if getattr(self.flags, "ignore_permissions", False) or getattr(frappe.flags, "in_quotation_sync", False):
+			return
+		user = frappe.session.user
+		if not user or user == "Administrator":
+			return
+
+		roles = set(frappe.get_roles(user))
+		if "System Manager" in roles:
+			return
+
+		is_parts_authorized = bool(roles & {"Parts Controller", "Parts Manager"})
+		is_restricted = bool(roles & {"Job Controller", "Service Advisor"})
+
+		if is_restricted and not is_parts_authorized:
+			old_doc = self.get_doc_before_save()
+			if not old_doc and not self.is_new():
+				old_doc = frappe.get_doc(self.doctype, self.name)
+
+			old_parts_map = {p.name: p for p in (old_doc.get("parts", []) if old_doc else [])}
+			new_parts = self.get("parts", [])
+
+			# Check if any new parts were added
+			new_part_items = [p for p in new_parts if not getattr(p, "name", None) or p.name not in old_parts_map]
+			if new_part_items:
+				role_name = "Job Controller" if "Job Controller" in roles else "Service Advisor"
+				frappe.throw(
+					_("Access denied: {0}s are not permitted to add parts to Service Order {1}. Only Parts Consultants (Parts Controllers) and Parts Managers can add parts.").format(
+						role_name, self.name
+					),
+					frappe.ValidationError,
+				)
+
+			# Check if any existing parts were removed
+			if old_doc:
+				new_part_names = {p.name for p in new_parts if getattr(p, "name", None)}
+				removed_parts = [p_name for p_name in old_parts_map if p_name not in new_part_names]
+				if removed_parts:
+					role_name = "Job Controller" if "Job Controller" in roles else "Service Advisor"
+					frappe.throw(
+						_("Access denied: {0}s are not permitted to remove parts from Service Order {1}. Only Parts Consultants (Parts Controllers) and Parts Managers can remove parts.").format(
+							role_name, self.name
+						),
+						frappe.ValidationError,
+					)
 
 	def update_board_fields(self):
 		self.board_status = board_status_for(self.status)
@@ -597,6 +644,16 @@ def add_manual_part(
 	category: str = "Essential",
 	reason: str | None = None,
 ):
+	user = frappe.session.user
+	if user != "Administrator":
+		roles = set(frappe.get_roles(user))
+		allowed_roles = {"Parts Controller", "Parts Manager", "System Manager"}
+		if not (roles & allowed_roles):
+			frappe.throw(
+				_("Access denied: only Parts Consultants (Parts Controllers) or Parts Managers can add parts to a Service Order."),
+				frappe.PermissionError,
+			)
+
 	order = frappe.get_doc("Service Order", service_order)
 	if order.is_locked_by_invoice():
 		frappe.throw(
