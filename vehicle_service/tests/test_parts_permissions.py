@@ -12,6 +12,8 @@ class TestPartsPermissions(FrappeTestCase):
 		frappe.set_user("Administrator")
 		self.setup_roles_and_users()
 		self.setup_items_and_customer()
+		from vehicle_service.install import setup_service_advisor_permissions
+		setup_service_advisor_permissions()
 
 	def setup_roles_and_users(self):
 		roles_to_ensure = ["Job Controller", "Service Advisor", "Parts Controller", "Parts Manager", "Service Manager"]
@@ -85,10 +87,19 @@ class TestPartsPermissions(FrappeTestCase):
 			v.model = "Hilux"
 			v.insert(ignore_permissions=True)
 
-	def create_test_order(self, with_part=False):
+	def create_test_order(self, with_part=False, completed=False):
 		frappe.set_user("Administrator")
+		veh_id = f"TST-V-{frappe.generate_hash(length=6)}"
+		v = frappe.new_doc("Service Vehicle")
+		v.registration_no = veh_id
+		v.customer = "Test Customer Parts"
+		v.vin = f"VIN-{frappe.generate_hash(length=8)}"
+		v.make = "Toyota"
+		v.model = "Hilux"
+		v.insert(ignore_permissions=True)
+
 		so = frappe.new_doc("Service Order")
-		so.vehicle = "TST-PART-VEH"
+		so.vehicle = veh_id
 		so.customer = "Test Customer Parts"
 		so.status = "In Progress"
 		so.append("jobs", {
@@ -108,6 +119,16 @@ class TestPartsPermissions(FrappeTestCase):
 				"part_status": "Issued",
 			})
 		so.insert(ignore_permissions=True)
+
+		if completed:
+			for row in so.jobs:
+				row.status = "Completed"
+				if row.service_job:
+					frappe.db.set_value("Service Job", row.service_job, "status", "Completed")
+			so.status = READY_FOR_BILLING
+			so.flags.ignore_job_lock = True
+			so.save(ignore_permissions=True)
+
 		return so
 
 	def test_job_controller_cannot_add_parts_via_api(self):
@@ -190,9 +211,7 @@ class TestPartsPermissions(FrappeTestCase):
 
 	def test_service_advisor_cannot_remove_or_reduce_parts_on_sales_invoice(self):
 		from vehicle_service.vehicle_service.doctype.service_order.service_order import create_sales_invoice_from_order
-		so = self.create_test_order(with_part=True)
-		so.status = READY_FOR_BILLING
-		so.save(ignore_permissions=True)
+		so = self.create_test_order(with_part=True, completed=True)
 
 		res = create_sales_invoice_from_order(so.name)
 		inv_name = res["sales_invoice"]
@@ -213,9 +232,7 @@ class TestPartsPermissions(FrappeTestCase):
 
 	def test_service_advisor_can_modify_labour_on_sales_invoice(self):
 		from vehicle_service.vehicle_service.doctype.service_order.service_order import create_sales_invoice_from_order
-		so = self.create_test_order(with_part=True)
-		so.status = READY_FOR_BILLING
-		so.save(ignore_permissions=True)
+		so = self.create_test_order(with_part=True, completed=True)
 
 		res = create_sales_invoice_from_order(so.name)
 		inv_name = res["sales_invoice"]

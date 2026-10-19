@@ -201,6 +201,7 @@ def after_install():
 	setup_default_service_items()
 	setup_default_settings()
 	setup_job_controller_permissions()
+	setup_service_advisor_permissions()
 	setup_default_board_tabs()
 	setup_test_users()
 
@@ -213,6 +214,7 @@ def after_migrate():
 	setup_default_service_items()
 	setup_default_settings()
 	setup_job_controller_permissions()
+	setup_service_advisor_permissions()
 	setup_default_board_tabs()
 	setup_test_users()
 
@@ -257,6 +259,33 @@ def setup_job_controller_permissions():
 		frappe.reload_doc("vehicle_service", "workspace", "job_control_board", force=True)
 	except Exception:
 		pass
+	frappe.db.commit()
+
+
+def setup_service_advisor_permissions():
+	"""Ensures Custom DocPerm records exist for Service Advisor on Sales Invoice and related masters."""
+	core_perms = [
+		("Sales Invoice", {"read": 1, "write": 1, "report": 1, "print": 1}),
+		("Account", {"read": 1}),
+		("Customer", {"read": 1}),
+		("Item", {"read": 1}),
+		("Price List", {"read": 1}),
+		("Warehouse", {"read": 1}),
+		("Company", {"read": 1}),
+	]
+	for dt, perms in core_perms:
+		if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": "Service Advisor"}):
+			try:
+				cdp = frappe.new_doc("Custom DocPerm")
+				cdp.parent = dt
+				cdp.parenttype = "DocType"
+				cdp.parentfield = "permissions"
+				cdp.role = "Service Advisor"
+				for k, v in perms.items():
+					setattr(cdp, k, v)
+				cdp.insert(ignore_permissions=True)
+			except Exception:
+				pass
 	frappe.db.commit()
 
 
