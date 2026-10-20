@@ -17,9 +17,29 @@ from vehicle_service.state import (
 
 def _require_job_controller():
 	user = frappe.session.user
+	if user == "Administrator":
+		return
 	roles = set(frappe.get_roles(user))
-	if not (roles & {"Job Controller", "System Manager"}):
+	if not (roles & {"Job Controller", "Workshop Supervisor", "Service Manager", "System Manager"}):
 		frappe.throw(_("Access denied: only Job Controllers or System Managers can perform this action."), frappe.PermissionError)
+
+
+def _require_board_viewer():
+	user = frappe.session.user
+	if user == "Administrator":
+		return
+	roles = set(frappe.get_roles(user))
+	allowed_roles = {
+		"Job Controller",
+		"Workshop Supervisor",
+		"Service Manager",
+		"Service Advisor",
+		"Parts Controller",
+		"Parts Manager",
+		"System Manager",
+	}
+	if not (roles & allowed_roles):
+		frappe.throw(_("Access denied: you do not have permission to view the Job Control Board."), frappe.PermissionError)
 
 
 def _assert_jobs_editable(order):
@@ -201,7 +221,7 @@ def start_clock(job_name: str):
 
 	# Authorization check: Job Controller/System Manager OR assigned technician
 	roles = set(frappe.get_roles(user))
-	is_controller = bool(roles & {"Job Controller", "System Manager"})
+	is_controller = bool(roles & {"Job Controller", "Workshop Supervisor", "Service Manager", "System Manager"}) or user == "Administrator"
 	emp_current = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
 	if not is_controller:
 		if not emp_current or emp_current != job.technician:
@@ -260,7 +280,7 @@ def pause_clock(job_name: str, reason: str | None = None):
 
 	# Authorization check
 	roles = set(frappe.get_roles(user))
-	is_controller = bool(roles & {"Job Controller", "System Manager"})
+	is_controller = bool(roles & {"Job Controller", "Workshop Supervisor", "Service Manager", "System Manager"}) or user == "Administrator"
 	emp_current = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
 	if not is_controller:
 		if not emp_current or emp_current != job.technician:

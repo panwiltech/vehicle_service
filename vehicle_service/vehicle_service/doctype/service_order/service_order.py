@@ -398,6 +398,8 @@ class ServiceOrder(Document):
 				row.rate = flt(std_price) if std_price else flt(frappe.db.get_value("Item", row.item_code, "valuation_rate") or 0)
 
 	def validate_open_orders(self):
+		if getattr(self.flags, "ignore_open_order_validation", False):
+			return
 		if self.is_new() or self.has_value_changed("vehicle"):
 			settings = frappe.get_cached_doc("Vehicle Service Settings")
 			if not settings.allow_multiple_open_orders and self.vehicle:

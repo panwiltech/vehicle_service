@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 from frappe.utils import flt, get_datetime, now_datetime, time_diff_in_seconds
-from vehicle_service.job_control import _require_job_controller
+from vehicle_service.job_control import _require_board_viewer, _require_job_controller
 from vehicle_service.state import JOB_COMPLETED, JOB_IN_PROGRESS
 
 
@@ -53,7 +53,7 @@ def _get_enabled_tab(tab: str):
 
 @frappe.whitelist()
 def get_board_tabs() -> list[dict]:
-	_require_job_controller()
+	_require_board_viewer()
 	tabs = frappe.get_all(
 		"Job Board Tab",
 		filters={"enabled": 1},
@@ -72,7 +72,7 @@ def get_board_tabs() -> list[dict]:
 
 @frappe.whitelist()
 def get_board_orders(tab: str) -> list[dict]:
-	_require_job_controller()
+	_require_board_viewer()
 	names = get_tab_order_names(_get_enabled_tab(tab))
 	if not names:
 		return []

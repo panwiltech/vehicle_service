@@ -119,6 +119,7 @@ class TestPartsPermissions(FrappeTestCase):
 				"approval_status": "Approved",
 				"part_status": "Issued",
 			})
+		so.flags.ignore_open_order_validation = True
 		so.insert(ignore_permissions=True)
 		self.created_orders.append(so.name)
 
@@ -289,3 +290,22 @@ class TestPartsPermissions(FrappeTestCase):
 		self.assertIn("Service Advisor", page_roles)
 		self.assertIn("Parts Controller", page_roles)
 		self.assertIn("Job Controller", page_roles)
+
+	def test_job_board_data_fetching_for_service_advisor_and_parts_controller(self):
+		from vehicle_service.job_board import get_board_orders, get_board_tabs
+
+		# Service Advisor can fetch board tabs and orders
+		frappe.set_user("serviceadvisor.test@example.com")
+		tabs = get_board_tabs()
+		self.assertIsInstance(tabs, list)
+		if tabs:
+			orders = get_board_orders(tabs[0]["name"])
+			self.assertIsInstance(orders, list)
+
+		# Parts Controller can fetch board tabs and orders
+		frappe.set_user("partscontroller.test@example.com")
+		tabs_pc = get_board_tabs()
+		self.assertIsInstance(tabs_pc, list)
+		if tabs_pc:
+			orders_pc = get_board_orders(tabs_pc[0]["name"])
+			self.assertIsInstance(orders_pc, list)

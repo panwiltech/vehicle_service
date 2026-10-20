@@ -14,6 +14,18 @@ from vehicle_service.state import (
 class TestJobControl(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		test_vehs = ["TST-BOARD-01", "TST-JC-01", "TST-INV-01"]
+		orders = frappe.get_all("Service Order", filters={"vehicle": ["in", test_vehs]}, pluck="name")
+		for o in orders:
+			try:
+				frappe.db.set_value("Service Order", o, "status", "Cancelled")
+				frappe.delete_doc("Service Order", o, force=True, ignore_permissions=True)
+			except Exception:
+				frappe.db.delete("Service Order Part", {"parent": o})
+				frappe.db.delete("Service Order Job", {"parent": o})
+				frappe.db.delete("Service Order", {"name": o})
+		frappe.db.commit()
+
 		if not frappe.db.exists("Customer", "Test Customer"):
 			c = frappe.new_doc("Customer")
 			c.customer_name = "Test Customer"
