@@ -71,6 +71,7 @@ doctype_js = {
 	"Service Job": "public/js/service_job.js",
 	"Service Vehicle": "public/js/service_vehicle.js",
 	"Service Booking": "public/js/service_booking.js",
+	"Sales Invoice": "public/js/sales_invoice.js",
 }
 
 export_python_type_annotations = True

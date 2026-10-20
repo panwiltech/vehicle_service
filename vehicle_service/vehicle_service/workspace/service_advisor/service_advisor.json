@@ -63,6 +63,12 @@
    "label": "Workshop Control",
    "link_to": "workshop-control",
    "type": "Page"
+  },
+  {
+   "color": "Purple",
+   "label": "Job Control Board",
+   "link_to": "job-board",
+   "type": "Page"
   }
  ],
  "links": [

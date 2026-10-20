@@ -7,7 +7,7 @@ from vehicle_service.state import INVOICED, READY_FOR_BILLING, READY_FOR_COLLECT
 
 
 def validate_sales_invoice(doc, method=None):
-	"""Restricts Service Advisors from deleting or reducing parts on a Sales Invoice linked to a Service Order."""
+	"""Restricts Service Advisors from deleting or altering parts on a Sales Invoice linked to a Service Order."""
 	if not getattr(doc, "vs_service_order", None):
 		return
 
@@ -31,6 +31,15 @@ def validate_sales_invoice(doc, method=None):
 			part_row = getattr(item, "vs_part_row", None)
 			if part_row:
 				inv_parts[part_row] = item
+			elif not getattr(item, "vs_job", None):
+				# Stock part added directly outside Service Order
+				if frappe.db.get_value("Item", item.item_code, "is_stock_item"):
+					frappe.throw(
+						frappe._(
+							"Service Advisors are not permitted to add stock parts ({0}) directly to Sales Invoice {1}. Parts must be added by a Parts Consultant or Parts Manager on Service Order {2}."
+						).format(item.item_code, doc.name or "New", so.name),
+						frappe.ValidationError,
+					)
 
 		for part_row, so_part in so_parts_map.items():
 			if part_row not in inv_parts:
@@ -42,19 +51,19 @@ def validate_sales_invoice(doc, method=None):
 				)
 
 			inv_item = inv_parts[part_row]
-			if flt(inv_item.qty) < flt(so_part.qty_used):
+			if flt(inv_item.qty) != flt(so_part.qty_used):
 				frappe.throw(
 					frappe._(
-						"Service Advisors are not permitted to reduce the quantity of part {0} on Sales Invoice {1} below {2}. Please contact the Parts Consultant or Parts Manager."
-					).format(so_part.item_code, doc.name or "New", so_part.qty_used),
+						"Service Advisors are not permitted to change the quantity of part {0} on Sales Invoice {1} (Service Order: {2}). Expected quantity: {3}, found: {4}. Only labour hours can be modified on the invoice."
+					).format(so_part.item_code, doc.name or "New", so.name, so_part.qty_used, inv_item.qty),
 					frappe.ValidationError,
 				)
 
-			if flt(inv_item.rate) < flt(so_part.rate):
+			if flt(inv_item.rate) != flt(so_part.rate):
 				frappe.throw(
 					frappe._(
-						"Service Advisors are not permitted to reduce the rate of part {0} on Sales Invoice {1} below {2}. Please contact the Parts Consultant or Parts Manager."
-					).format(so_part.item_code, doc.name or "New", so_part.rate),
+						"Service Advisors are not permitted to change the rate of part {0} on Sales Invoice {1} (Service Order: {2}). Expected rate: {3}, found: {4}. Only labour hours can be modified on the invoice."
+					).format(so_part.item_code, doc.name or "New", so.name, so_part.rate, inv_item.rate),
 					frappe.ValidationError,
 				)
 

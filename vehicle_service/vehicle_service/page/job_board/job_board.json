@@ -15,6 +15,21 @@
    "role": "Job Controller"
   },
   {
+   "role": "Service Advisor"
+  },
+  {
+   "role": "Parts Controller"
+  },
+  {
+   "role": "Parts Manager"
+  },
+  {
+   "role": "Workshop Supervisor"
+  },
+  {
+   "role": "Service Manager"
+  },
+  {
    "role": "System Manager"
   }
  ],

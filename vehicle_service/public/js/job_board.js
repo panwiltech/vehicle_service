@@ -15,8 +15,57 @@ class JobControlBoardUI {
 		this.refresh();
 	}
 
+	can_control() {
+		const userRoles = frappe.user_roles || [];
+		return userRoles.includes("Job Controller") ||
+			userRoles.includes("Workshop Supervisor") ||
+			userRoles.includes("Service Manager") ||
+			userRoles.includes("System Manager") ||
+			frappe.session.user === "Administrator";
+	}
+
+	can_create_order() {
+		const userRoles = frappe.user_roles || [];
+		return userRoles.includes("Service Advisor") ||
+			userRoles.includes("Job Controller") ||
+			userRoles.includes("Service Manager") ||
+			userRoles.includes("System Manager") ||
+			frappe.session.user === "Administrator";
+	}
+
 	setup_dom() {
 		this.$container.empty();
+
+		const controlButtonsHtml = this.can_control() ? `
+			<div class="btn-group" role="group">
+				<button class="btn btn-xs btn-default btn-add-job" type="button">
+					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-add"></use></svg>${__("Add Job")}
+				</button>
+				<button class="btn btn-xs btn-default btn-assign-tech" type="button">
+					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-user"></use></svg>${__("Assign Technician")}
+				</button>
+				<button class="btn btn-xs btn-default btn-start-clock" type="button">
+					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-play"></use></svg>${__("Start Clock")}
+				</button>
+				<button class="btn btn-xs btn-default btn-pause-clock" type="button">
+					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-pause"></use></svg>${__("Pause Clock")}
+				</button>
+				<button class="btn btn-xs btn-primary btn-complete-order" type="button">
+					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-check"></use></svg>${__("Complete Job")}
+				</button>
+			</div>
+		` : `
+			<span class="badge badge-default text-muted border" style="padding: 5px 10px; font-weight: 500; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+				<svg class="icon icon-xs" style="color: var(--text-muted);"><use href="#icon-view"></use></svg>${__("Workshop View Mode (Read Only)")}
+			</span>
+		`;
+
+		const newOrderBtnHtml = this.can_create_order() ? `
+			<button class="btn btn-xs btn-default btn-new-order" type="button" title="${__("New Service Order")}">
+				<svg class="icon icon-xs" style="margin-right: 2px;"><use href="#icon-add"></use></svg>${__("Add Service Order")}
+			</button>
+		` : ``;
+
 		this.$body = $(`
 			<div class="frappe-control form-group jcb-wrapper" style="margin-bottom: 20px;">
 				<!-- Top Form Tabs (Native Frappe form-tabs) -->
@@ -28,23 +77,7 @@ class JobControlBoardUI {
 				<div class="grid-field">
 					<!-- Top Custom Action Buttons matching Jobs tab -->
 					<div class="grid-custom-buttons d-flex justify-content-between align-items-center mb-2">
-						<div class="btn-group" role="group">
-							<button class="btn btn-xs btn-default btn-add-job" type="button">
-								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-add"></use></svg>${__("Add Job")}
-							</button>
-							<button class="btn btn-xs btn-default btn-assign-tech" type="button">
-								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-user"></use></svg>${__("Assign Technician")}
-							</button>
-							<button class="btn btn-xs btn-default btn-start-clock" type="button">
-								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-play"></use></svg>${__("Start Clock")}
-							</button>
-							<button class="btn btn-xs btn-default btn-pause-clock" type="button">
-								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-pause"></use></svg>${__("Pause Clock")}
-							</button>
-							<button class="btn btn-xs btn-primary btn-complete-order" type="button">
-								<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-check"></use></svg>${__("Complete Job")}
-							</button>
-						</div>
+						${controlButtonsHtml}
 						<div class="d-flex align-items-center" style="gap: 8px;">
 							<div class="position-relative">
 								<input type="text" class="form-control input-xs jcb-search-input" placeholder="${__("Search orders, vehicles, technicians...")}" style="width: 240px; padding-left: 24px;">
@@ -53,9 +86,7 @@ class JobControlBoardUI {
 							<button class="btn btn-xs btn-default btn-refresh-board" type="button" title="${__("Refresh")}">
 								<svg class="icon icon-xs"><use href="#icon-refresh"></use></svg>
 							</button>
-							<button class="btn btn-xs btn-default btn-new-order" type="button" title="${__("New Service Order")}">
-								<svg class="icon icon-xs" style="margin-right: 2px;"><use href="#icon-add"></use></svg>${__("Add Service Order")}
-							</button>
+							${newOrderBtnHtml}
 						</div>
 					</div>
 
@@ -349,13 +380,25 @@ class JobControlBoardUI {
 							${clock_cell}
 						</div>
 						<div class="grid-static-col col text-center" style="flex: 0 0 95px; max-width: 95px; justify-content: center;" data-fieldname="actions">
-							<button type="button" class="btn btn-default btn-xs jcb-btn-row-action" title="${__("Order Actions")}">
-								${__("Actions")} <i class="fa fa-caret-down" style="margin-left: 2px;"></i>
-							</button>
+							${this.can_control() ? `
+								<button type="button" class="btn btn-default btn-xs jcb-btn-row-action" title="${__("Order Actions")}">
+									${__("Actions")} <i class="fa fa-caret-down" style="margin-left: 2px;"></i>
+								</button>
+							` : `
+								<button type="button" class="btn btn-default btn-xs jcb-btn-row-view" title="${__("View Order")}">
+									<svg class="icon icon-xs" style="margin-right: 2px;"><use href="#icon-view"></use></svg>${__("View")}
+								</button>
+							`}
 						</div>
 					</div>
 				</div>
 			`);
+
+			$row.find(".jcb-btn-row-view").on("click", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				frappe.set_route("Form", "Service Order", o.name);
+			});
 
 			// Bind Row Actions Floating Menu (Attached to body so it never clips)
 			$row.find(".jcb-btn-row-action").on("click", (e) => {

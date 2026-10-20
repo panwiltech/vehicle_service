@@ -591,7 +591,19 @@
    "report": 1,
    "role": "Parts Controller",
    "share": 0,
-   "write": 0
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Parts Manager",
+   "share": 0,
+   "write": 1
   },
   {
    "create": 0,

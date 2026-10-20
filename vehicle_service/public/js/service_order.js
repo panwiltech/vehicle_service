@@ -534,6 +534,9 @@ frappe.ui.form.on("Service Order", {
 		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const grid = frm.fields_dict.parts.grid;
 			// Top toolbar buttons for immediate visibility
+			grid.add_custom_button(__("Add Part"), () => {
+				frm.trigger("show_add_part_dialog");
+			}, "top");
 			grid.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
 			}, "top");
@@ -545,6 +548,9 @@ frappe.ui.form.on("Service Order", {
 			}, "top");
 
 			// Bottom toolbar buttons
+			grid.add_custom_button(__("Add Part"), () => {
+				frm.trigger("show_add_part_dialog");
+			});
 			grid.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
 			});
@@ -560,7 +566,12 @@ frappe.ui.form.on("Service Order", {
 				Object.keys(grid.custom_buttons).forEach(label => {
 					const $btn = grid.custom_buttons[label];
 					if ($btn && $btn.length) {
-						if (label.indexOf("Issue") !== -1) {
+						if (label.indexOf("Add Part") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("show_add_part_dialog");
+							});
+						} else if (label.indexOf("Issue") !== -1) {
 							$btn.off("click").on("click", (e) => {
 								e.preventDefault();
 								frm.trigger("show_parts_issue_dialog");

@@ -263,29 +263,77 @@ def setup_job_controller_permissions():
 
 
 def setup_service_advisor_permissions():
-	"""Ensures Custom DocPerm records exist for Service Advisor on Sales Invoice and related masters."""
-	core_perms = [
-		("Sales Invoice", {"read": 1, "write": 1, "report": 1, "print": 1}),
-		("Account", {"read": 1}),
-		("Customer", {"read": 1}),
-		("Item", {"read": 1}),
-		("Price List", {"read": 1}),
-		("Warehouse", {"read": 1}),
-		("Company", {"read": 1}),
+	"""Ensures Custom DocPerm records exist for Service Advisor, Parts Controller, and Parts Manager on Quotation, Sales Invoice, and related masters."""
+	role_perms = [
+		(
+			"Service Advisor",
+			[
+				("Quotation", {"read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1, "report": 1, "print": 1, "email": 1}),
+				("Sales Invoice", {"read": 1, "write": 1, "report": 1, "print": 1}),
+				("Account", {"read": 1}),
+				("Customer", {"read": 1}),
+				("Item", {"read": 1}),
+				("Price List", {"read": 1}),
+				("Warehouse", {"read": 1}),
+				("Company", {"read": 1}),
+				("Terms and Conditions", {"read": 1}),
+				("Address", {"read": 1}),
+				("Contact", {"read": 1}),
+			],
+		),
+		(
+			"Parts Controller",
+			[
+				("Quotation", {"read": 1, "write": 1, "report": 1, "print": 1}),
+				("Customer", {"read": 1}),
+				("Item", {"read": 1}),
+				("Price List", {"read": 1}),
+				("Warehouse", {"read": 1}),
+				("Company", {"read": 1}),
+			],
+		),
+		(
+			"Parts Manager",
+			[
+				("Quotation", {"read": 1, "write": 1, "submit": 1, "cancel": 1, "report": 1, "print": 1}),
+				("Customer", {"read": 1}),
+				("Item", {"read": 1}),
+				("Price List", {"read": 1}),
+				("Warehouse", {"read": 1}),
+				("Company", {"read": 1}),
+			],
+		),
 	]
-	for dt, perms in core_perms:
-		if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": "Service Advisor"}):
-			try:
-				cdp = frappe.new_doc("Custom DocPerm")
-				cdp.parent = dt
-				cdp.parenttype = "DocType"
-				cdp.parentfield = "permissions"
-				cdp.role = "Service Advisor"
-				for k, v in perms.items():
-					setattr(cdp, k, v)
-				cdp.insert(ignore_permissions=True)
-			except Exception:
-				pass
+
+	for role, doctype_perms in role_perms:
+		for dt, perms in doctype_perms:
+			if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": role}):
+				try:
+					cdp = frappe.new_doc("Custom DocPerm")
+					cdp.parent = dt
+					cdp.parenttype = "DocType"
+					cdp.parentfield = "permissions"
+					cdp.role = role
+					for k, v in perms.items():
+						setattr(cdp, k, v)
+					cdp.insert(ignore_permissions=True)
+				except Exception:
+					pass
+			else:
+				try:
+					cdp_name = frappe.db.get_value("Custom DocPerm", {"parent": dt, "role": role}, "name")
+					if cdp_name:
+						cdp = frappe.get_doc("Custom DocPerm", cdp_name)
+						updated = False
+						for k, v in perms.items():
+							if getattr(cdp, k, 0) != v:
+								setattr(cdp, k, v)
+								updated = True
+						if updated:
+							cdp.save(ignore_permissions=True)
+				except Exception:
+					pass
+
 	frappe.db.commit()
 
 

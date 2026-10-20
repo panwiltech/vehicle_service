@@ -115,3 +115,35 @@ def sync_job_control_workspace():
 	frappe.reload_doc("vehicle_service", "workspace", "job_control_board", force=True)
 	frappe.db.commit()
 	return True
+
+
+def cleanup_test_data():
+	"""Cleans up temporary test artifacts created during automated testing."""
+	test_emails = [
+		"test_pm_parts@example.com",
+		"test_pc_parts@example.com",
+		"test_sa_parts@example.com",
+		"test_jc_parts@example.com",
+	]
+	for email in test_emails:
+		if frappe.db.exists("User", email):
+			frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+
+	test_vehs = frappe.get_all("Service Vehicle", filters={"name": ["like", "TST-%"]}, pluck="name")
+	for veh in test_vehs:
+		orders = frappe.get_all("Service Order", filters={"vehicle": veh}, pluck="name")
+		for o in orders:
+			try:
+				frappe.db.set_value("Service Order", o, "status", "Cancelled")
+				frappe.delete_doc("Service Order", o, force=True, ignore_permissions=True)
+			except Exception:
+				frappe.db.delete("Service Order Part", {"parent": o})
+				frappe.db.delete("Service Order Job", {"parent": o})
+				frappe.db.delete("Service Order", {"name": o})
+		frappe.delete_doc("Service Vehicle", veh, force=True, ignore_permissions=True)
+
+	if frappe.db.exists("Customer", "Test Customer Parts"):
+		frappe.delete_doc("Customer", "Test Customer Parts", force=True, ignore_permissions=True)
+
+	frappe.db.commit()
+	return True
