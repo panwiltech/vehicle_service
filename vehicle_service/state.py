@@ -193,7 +193,7 @@ def compute_operational_status(jobs: Iterable[Any], parts: Iterable[Any]) -> str
 
 JOB_STARTABLE_ACTION = frozenset({JOB_APPROVED, JOB_ASSIGNED, JOB_PAUSED, JOB_QC_FAILED})
 JOB_COMPLETABLE = frozenset({JOB_APPROVED, JOB_ASSIGNED, JOB_IN_PROGRESS, JOB_PAUSED, JOB_QC_FAILED})
-_ACTION_STATUSES = {
+JOB_ACTION_STATUSES = {
 	"start": JOB_STARTABLE_ACTION,
 	"pause": frozenset({JOB_IN_PROGRESS}),
 	"complete": JOB_COMPLETABLE,
@@ -205,7 +205,7 @@ def job_action_block_reason(action: str, job: Any, order_status: str | None, on_
 
 	Shared by the Job Control Board dialogs and the batch endpoints so both agree.
 	"""
-	statuses = _ACTION_STATUSES.get(action)
+	statuses = JOB_ACTION_STATUSES.get(action)
 	if statuses is None:
 		return "Unknown action"
 	if order_status in COMPLETED_STATES or order_status == CANCELLED:
