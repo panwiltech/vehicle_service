@@ -309,3 +309,34 @@ class TestPartsPermissions(FrappeTestCase):
 		if tabs_pc:
 			orders_pc = get_board_orders(tabs_pc[0]["name"])
 			self.assertIsInstance(orders_pc, list)
+
+	def test_service_advisor_cannot_create_credit_note(self):
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import create_sales_invoice_from_order
+		so = self.create_test_order(with_part=True, completed=False)
+
+		res = create_sales_invoice_from_order(so.name)
+		inv_name = res["sales_invoice"]
+		self.created_invoices.append(inv_name)
+
+		# 1. Service Advisor setting is_return on draft invoice must be rejected
+		frappe.set_user("serviceadvisor.test@example.com")
+		inv = frappe.get_doc("Sales Invoice", inv_name)
+		inv.is_return = 1
+		self.assertRaises(frappe.ValidationError, inv.save)
+
+		# 2. Service Advisor creating new credit note directly must be rejected
+		cn = frappe.new_doc("Sales Invoice")
+		cn.customer = so.customer
+		cn.is_return = 1
+		cn.return_against = inv_name
+		cn.vs_service_order = so.name
+		self.assertRaises((frappe.ValidationError, frappe.PermissionError), cn.insert)
+
+		# 3. Credit note cannot be created against a draft invoice (even by Administrator)
+		frappe.set_user("Administrator")
+		cn_admin = frappe.new_doc("Sales Invoice")
+		cn_admin.customer = so.customer
+		cn_admin.is_return = 1
+		cn_admin.return_against = inv_name
+		cn_admin.vs_service_order = so.name
+		self.assertRaises(frappe.ValidationError, cn_admin.insert)

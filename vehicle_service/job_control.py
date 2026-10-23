@@ -272,7 +272,8 @@ def start_clock(job_name: str):
 
 
 @frappe.whitelist()
-def pause_clock(job_name: str, reason: str | None = None):
+def pause_clock(job_name: str, reason: str | None = None, pause_reason: str | None = None):
+	reason = reason or pause_reason or _("Work paused")
 	user = frappe.session.user
 	job = frappe.get_doc("Service Job", job_name)
 	order = frappe.get_doc("Service Order", job.service_order)
@@ -293,18 +294,20 @@ def pause_clock(job_name: str, reason: str | None = None):
 	for row in job.get("time_logs", []):
 		if row.from_time and not row.to_time:
 			row.to_time = now
-			row.hours = round(flt(time_diff_in_hours(row.to_time, row.from_time)), 2)
+			row.hours = max(0.0, round(flt(time_diff_in_hours(row.to_time, row.from_time)), 2))
 			if reason:
 				row.note = (row.note or "") + f" [Paused: {reason}]"
 
 	job.status = JOB_PAUSED
-	job.pause_reason = reason or _("Work paused")
+	job.pause_reason = reason
 	job.calculate_actual_hours()
 	job.flags.ignore_job_lock = True
 	job.save(ignore_permissions=True)
 
+	from vehicle_service.vehicle_service.doctype.service_order.service_order import map_order_pause_reason
+	order.pause_reason = map_order_pause_reason(reason)
 	_mirror_job_to_order(job, order)
-	order.add_comment("Comment", _("Clock paused on Job {0} ({1})").format(job.job_title, reason or "Paused"))
+	order.add_comment("Comment", _("Clock paused on Job {0} ({1})").format(job.job_title, reason))
 	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "pause_clock"}, after_commit=True)
 
 	return {"status": "success", "job_status": job.status, "actual_hours": job.actual_hours}

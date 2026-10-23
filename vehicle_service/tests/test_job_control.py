@@ -14,7 +14,9 @@ from vehicle_service.state import (
 class TestJobControl(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
-		test_vehs = ["TST-BOARD-01", "TST-JC-01", "TST-INV-01"]
+		test_vehs = ["TST-BOARD-01", "TST-BOARD-02", "TST-JC-01", "TST-INV-01"]
+		# Clean up any open time logs from prior test runs
+		frappe.db.sql("UPDATE `tabService Job Time Log` SET to_time = NOW() WHERE to_time IS NULL")
 		orders = frappe.get_all("Service Order", filters={"vehicle": ["in", test_vehs]}, pluck="name")
 		for o in orders:
 			try:
@@ -58,6 +60,63 @@ class TestJobControl(FrappeTestCase):
 		self.assertEqual(board_status_for("Ready for Collection"), "Completed")
 		self.assertEqual(board_status_for("Delivered"), "Completed")
 		self.assertIsNone(board_status_for("Cancelled"))
+
+	def test_compute_operational_status_paused_and_pending(self):
+		# Case 1: Job 1 paused for parts, Job 2 pending approval -> Waiting for Parts
+		jobs = [
+			{"status": "Paused", "pause_reason": "Waiting for Parts"},
+			{"status": "Pending Approval"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "Waiting for Parts")
+
+		# Case 2: Job 1 paused with part waiting stock -> Waiting for Parts
+		jobs = [
+			{"status": "Paused", "pause_reason": "On hold"},
+			{"status": "Pending Approval"},
+		]
+		parts = [{"approval_status": "Approved", "part_status": "Waiting Stock"}]
+		self.assertEqual(compute_operational_status(jobs, parts), "Waiting for Parts")
+
+		# Case 3: Job 1 paused (general reason), Job 2 pending approval -> Paused
+		jobs = [
+			{"status": "Paused", "pause_reason": "Technician on break"},
+			{"status": "Pending Approval"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "Paused")
+
+		# Case 4: Job 1 In Progress, Job 2 Paused -> In Progress (active wrench turning)
+		jobs = [
+			{"status": "In Progress"},
+			{"status": "Paused", "pause_reason": "Waiting for Parts"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "In Progress")
+
+		# Case 5: Job 1 Completed, Job 2 Pending Approval -> Awaiting Approval
+		jobs = [
+			{"status": "Completed"},
+			{"status": "Pending Approval"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "Awaiting Approval")
+
+		# Case 6: All jobs Pending Approval -> Awaiting Approval
+		jobs = [
+			{"status": "Pending Approval"},
+			{"status": "Pending Approval"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "Awaiting Approval")
+
+		# Case 7: Job paused for Awaiting Approval -> Awaiting Approval
+		jobs = [
+			{"status": "Paused", "pause_reason": "Awaiting Approval"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "Awaiting Approval")
+
+		# Case 8: Job 1 paused for parts, Job 2 paused for approval -> Waiting for Parts
+		jobs = [
+			{"status": "Paused", "pause_reason": "Waiting for Parts"},
+			{"status": "Paused", "pause_reason": "Awaiting Approval"},
+		]
+		self.assertEqual(compute_operational_status(jobs, []), "Waiting for Parts")
 
 	def test_board_fields_and_completed_order_lock(self):
 		# Setup vehicle
@@ -291,5 +350,223 @@ class TestJobControl(FrappeTestCase):
 
 		pc_roles = frappe.get_roles("partscontroller.test@example.com")
 		self.assertIn("Parts Controller", pc_roles)
+
+	def test_draft_invoice_creation_with_incomplete_jobs_and_sync(self):
+		from vehicle_service.job_control import add_job, complete_service_order
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+			create_sales_invoice_from_order,
+			add_manual_part,
+		)
+
+		veh_id = "TST-INV-DRAFT-01"
+		if not frappe.db.exists("Service Vehicle", veh_id):
+			v = frappe.new_doc("Service Vehicle")
+			v.registration_no = veh_id
+			v.customer = "Test Customer"
+			v.vin = "VIN-TST-INV-DRAFT-01"
+			v.make = "Toyota"
+			v.model = "Hilux"
+			v.insert(ignore_permissions=True)
+
+		part_item = frappe.db.get_value("Item", {"is_stock_item": 1}, "name")
+		if not part_item:
+			p = frappe.new_doc("Item")
+			p.item_code = "TST-DRAFT-PART"
+			p.item_name = "Test Draft Part"
+			p.item_group = "Raw Material"
+			p.is_stock_item = 1
+			p.valuation_rate = 80.0
+			p.insert(ignore_permissions=True)
+			part_item = p.name
+
+		so = frappe.new_doc("Service Order")
+		so.vehicle = veh_id
+		so.customer = "Test Customer"
+		so.status = "In Progress"
+		so.flags.ignore_open_order_validation = True
+		so.insert(ignore_permissions=True)
+
+		res_add = add_job(so.name, job_title="Brake Inspection", estimated_hours=2.0)
+		job_name = res_add["job"]
+
+		# 1. Create draft invoice while order is In Progress and job is NOT completed
+		res_inv = create_sales_invoice_from_order(so.name)
+		self.assertEqual(res_inv["status"], "success")
+		inv_name = res_inv["sales_invoice"]
+		inv = frappe.get_doc("Sales Invoice", inv_name)
+		self.assertEqual(inv.docstatus, 0)
+
+		# Labour line must be present with estimated hours
+		job_items = [it for it in inv.items if getattr(it, "vs_job", None) == job_name]
+		self.assertEqual(len(job_items), 1)
+		self.assertEqual(flt(job_items[0].qty), 2.0)
+
+		# 2. Submitting Sales Invoice while job is still In Progress must fail
+		self.assertRaises(frappe.ValidationError, inv.submit)
+
+		# 3. Add part to Service Order after invoice was already created in draft
+		settings = frappe.get_cached_doc("Vehicle Service Settings")
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+		make_stock_entry(
+			item_code=part_item,
+			to_warehouse=settings.wip_warehouse,
+			qty=5.0,
+			rate=80.0,
+			purpose="Material Receipt",
+			company=so.company,
+		)
+
+		res_part = add_manual_part(
+			service_order=so.name,
+			item_code=part_item,
+			qty_required=1.0,
+			rate=100.0,
+		)
+		so.reload()
+		part_row = so.parts[-1]
+		part_row.approval_status = "Approved"
+		part_row.qty_issued = 1.0
+		part_row.qty_used = 1.0
+		so.flags.ignore_invoice_lock = True
+		so.flags.ignore_job_lock = True
+		so.save(ignore_permissions=True)
+
+		# Calling create_sales_invoice_from_order or auto-sync updates draft invoice
+		create_sales_invoice_from_order(so.name)
+		inv.reload()
+		part_items = [it for it in inv.items if getattr(it, "vs_part_row", None) == part_row.name]
+		self.assertEqual(len(part_items), 1)
+		self.assertEqual(flt(part_items[0].qty), 1.0)
+		self.assertEqual(flt(part_items[0].rate), 100.0)
+
+		# 4. Now complete the workshop jobs
+		complete_service_order(so.name)
+		so.reload()
+		self.assertEqual(so.status, "Ready for Billing")
+
+		# 5. Now submitting the Sales Invoice must succeed
+		inv.reload()
+		inv.submit()
+		self.assertEqual(inv.docstatus, 1)
+
+		so.reload()
+		self.assertIn(so.status, ["Invoiced", "Ready for Collection"])
+
+	def test_get_board_orders_multi_clock(self):
+		from vehicle_service.job_board import get_board_orders
+		from vehicle_service.job_control import add_job, assign_technician, start_clock
+
+		veh_id = "TST-BOARD-02"
+		if not frappe.db.exists("Service Vehicle", veh_id):
+			v = frappe.new_doc("Service Vehicle")
+			v.registration_no = veh_id
+			v.customer = "Test Customer"
+			v.vin = "VIN-TST-BOARD-02"
+			v.make = "Ford"
+			v.model = "Ranger"
+			v.insert(ignore_permissions=True)
+
+		company = frappe.db.get_single_value("Global Defaults", "default_company") or frappe.get_all("Company")[0].name
+		emp1 = frappe.db.get_value("Employee", {"first_name": "Alex", "last_name": "Tech"})
+		if not emp1:
+			e1 = frappe.new_doc("Employee")
+			e1.first_name = "Alex"
+			e1.last_name = "Tech"
+			e1.gender = "Male"
+			e1.company = company
+			e1.date_of_birth = "1990-01-01"
+			e1.date_of_joining = "2020-01-01"
+			e1.status = "Active"
+			e1.insert(ignore_permissions=True)
+			emp1 = e1.name
+
+		emp2 = frappe.db.get_value("Employee", {"first_name": "Sam", "last_name": "Tech"})
+		if not emp2:
+			e2 = frappe.new_doc("Employee")
+			e2.first_name = "Sam"
+			e2.last_name = "Tech"
+			e2.gender = "Female"
+			e2.company = company
+			e2.date_of_birth = "1992-02-02"
+			e2.date_of_joining = "2021-01-01"
+			e2.status = "Active"
+			e2.insert(ignore_permissions=True)
+			emp2 = e2.name
+
+		so = frappe.new_doc("Service Order")
+		so.vehicle = veh_id
+		so.customer = "Test Customer"
+		so.insert(ignore_permissions=True)
+
+		j1 = add_job(so.name, job_title="Front Brake Pads", estimated_hours=1.5)["job"]
+		j2 = add_job(so.name, job_title="Oil & Filter Change", estimated_hours=1.0)["job"]
+
+		assign_technician(j1, emp1)
+		assign_technician(j2, emp2)
+
+		start_clock(j1)
+		start_clock(j2)
+
+		cards = get_board_orders("In Progress")
+		order_card = next((c for c in cards if c["name"] == so.name), None)
+		self.assertIsNotNone(order_card, f"Service Order {so.name} must appear on In Progress tab")
+
+		self.assertEqual(order_card["clock_count"], 2)
+		self.assertTrue(order_card["has_running_clock"])
+		self.assertEqual(len(order_card["active_clocks"]), 2)
+		self.assertEqual(len(order_card["jobs"]), 2)
+
+		active_techs = {c["technician"] for c in order_card["active_clocks"]}
+		self.assertEqual(active_techs, {emp1, emp2})
+
+	def test_multi_technician_running_and_paused_clocks_on_board(self):
+		from vehicle_service.job_control import add_job, assign_technician, start_clock, pause_clock
+		from vehicle_service.job_board import get_board_orders
+		from frappe.utils import now_datetime
+
+		veh_id = "TST-BOARD-02"
+		if not frappe.db.exists("Service Vehicle", veh_id):
+			v = frappe.new_doc("Service Vehicle")
+			v.license_plate = veh_id
+			v.customer = "Test Customer"
+			v.make = "Toyota"
+			v.model = "Hilux"
+			v.insert(ignore_permissions=True)
+
+		company = frappe.db.get_single_value("Global Defaults", "default_company") or frappe.get_all("Company", pluck="name")[0]
+		emp1 = frappe.db.get_value("Employee", {"first_name": "Alex", "last_name": "Tech"})
+		emp2 = frappe.db.get_value("Employee", {"first_name": "Sam", "last_name": "Tech"})
+
+		so = frappe.new_doc("Service Order")
+		so.vehicle = veh_id
+		so.customer = "Test Customer"
+		so.insert(ignore_permissions=True)
+
+		j1 = add_job(so.name, job_title="Engine Diagnosis", estimated_hours=2.0)["job"]
+		j2 = add_job(so.name, job_title="Brake Replacement", estimated_hours=1.5)["job"]
+
+		assign_technician(j1, emp1)
+		assign_technician(j2, emp2)
+
+		start_clock(j1)
+		start_clock(j2)
+
+		# Pause j1 with Waiting for Parts, leaving j2 running
+		pause_clock(j1, reason="Waiting for Parts")
+
+		cards = get_board_orders("In Progress")
+		order_card = next((c for c in cards if c["name"] == so.name), None)
+		self.assertIsNotNone(order_card, f"Service Order {so.name} must appear on In Progress tab")
+
+		self.assertTrue(order_card["has_running_clock"])
+		self.assertEqual(len(order_card["active_clocks"]), 1)
+		self.assertEqual(order_card["active_clocks"][0]["technician"], emp2)
+
+		self.assertIn("paused_clocks", order_card)
+		self.assertEqual(len(order_card["paused_clocks"]), 1)
+		paused_info = order_card["paused_clocks"][0]
+		self.assertEqual(paused_info["job"], j1)
+		self.assertEqual(paused_info["technician"], emp1)
+		self.assertEqual(paused_info["pause_reason"], "Waiting for Parts")
 
 

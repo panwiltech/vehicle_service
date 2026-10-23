@@ -39,9 +39,9 @@ class ServiceJob(Document):
 		total_hours = 0.0
 		for row in self.get("time_logs", []):
 			if row.from_time and row.to_time:
-				row.hours = round(flt(time_diff_in_hours(row.to_time, row.from_time)), 2)
+				row.hours = max(0.0, round(flt(time_diff_in_hours(row.to_time, row.from_time)), 2))
 				total_hours += row.hours
-		self.actual_hours = round(total_hours, 2)
+		self.actual_hours = max(0.0, round(total_hours, 2))
 		self.variance_hours = round(self.actual_hours - flt(self.estimated_hours or 0), 2)
 
 

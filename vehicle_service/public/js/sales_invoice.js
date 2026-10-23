@@ -12,9 +12,25 @@ frappe.ui.form.on("Sales Invoice", {
 			userRoles.includes("Accounts Manager") ||
 			frappe.session.user === "Administrator";
 
+		const isAuthorizedCreditModifier = userRoles.includes("System Manager") ||
+			userRoles.includes("Accounts Manager") ||
+			userRoles.includes("Accounts User") ||
+			userRoles.includes("Service Accounts") ||
+			userRoles.includes("Service Manager") ||
+			frappe.session.user === "Administrator";
+
 		if (!isAuthorizedPartsModifier && userRoles.includes("Service Advisor")) {
 			// Disallow row deletion on items table
 			frm.set_df_property("items", "cannot_delete_rows", true);
+		}
+
+		if (!isAuthorizedCreditModifier && userRoles.includes("Service Advisor")) {
+			// Service Advisors cannot create Credit Notes or toggle is_return
+			frm.set_df_property("is_return", "read_only", true);
+			frm.set_df_property("is_return", "hidden", true);
+		} else if (!frm.doc.is_return && frm.doc.docstatus === 0) {
+			// A draft invoice created from Service Order cannot be toggled into a Credit Note
+			frm.set_df_property("is_return", "read_only", true);
 		}
 	}
 });

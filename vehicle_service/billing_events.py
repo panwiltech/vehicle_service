@@ -3,13 +3,66 @@
 
 import frappe
 from frappe.utils import flt
-from vehicle_service.state import INVOICED, READY_FOR_BILLING, READY_FOR_COLLECTION, vehicle_status_for
+from vehicle_service.state import (
+	INVOICED,
+	JOB_COMPLETED,
+	JOB_DONE,
+	READY_FOR_BILLING,
+	READY_FOR_COLLECTION,
+	vehicle_status_for,
+)
 
 
 def validate_sales_invoice(doc, method=None):
-	"""Restricts Service Advisors from deleting or altering parts on a Sales Invoice linked to a Service Order."""
+	"""Restricts Service Advisors from deleting or altering parts on a Sales Invoice linked to a Service Order,
+	and validates that all workshop jobs are completed before allowing invoice submission.
+	"""
 	if not getattr(doc, "vs_service_order", None):
 		return
+
+	# Credit Note validations
+	if getattr(doc, "is_return", 0):
+		user = frappe.session.user
+		if user and user != "Administrator":
+			roles = set(frappe.get_roles(user))
+			is_accounts_or_mgr = bool(roles & {"System Manager", "Accounts Manager", "Accounts User", "Service Accounts", "Service Manager"})
+			if "Service Advisor" in roles and not is_accounts_or_mgr:
+				frappe.throw(
+					frappe._("Access denied: Service Advisors are not permitted to create Credit Notes. Credit Notes can only be created by Accounts or Service Managers."),
+					frappe.ValidationError,
+				)
+
+		ret_against = getattr(doc, "return_against", None)
+		if not ret_against:
+			frappe.throw(
+				frappe._("Credit Note must be linked to a submitted Sales Invoice in 'Return Against'."),
+				frappe.ValidationError,
+			)
+		orig_docstatus = frappe.db.get_value("Sales Invoice", ret_against, "docstatus")
+		if orig_docstatus != 1:
+			frappe.throw(
+				frappe._("Cannot create Credit Note against draft Sales Invoice {0}. Credit Notes can only be created against submitted Sales Invoices.").format(
+					ret_against
+				),
+				frappe.ValidationError,
+			)
+
+	# Block submission if workshop jobs on the Service Order are incomplete
+	if doc.docstatus == 1 and not getattr(doc, "is_return", 0):
+		all_jobs = frappe.get_all(
+			"Service Job",
+			filters={"service_order": doc.vs_service_order},
+			fields=["name", "job_title", "status"],
+		)
+		incomplete = [j for j in all_jobs if j.status not in (JOB_DONE | {"Cancelled", "Declined"})]
+		if incomplete:
+			titles = ", ".join(f"{j.job_title} ({j.status})" for j in incomplete)
+			frappe.throw(
+				frappe._(
+					"Cannot submit Sales Invoice {0}: Service Order {1} still has incomplete workshop jobs: {2}. All jobs must be completed before submitting the invoice."
+				).format(doc.name or "New", doc.vs_service_order, titles),
+				frappe.ValidationError,
+			)
 
 	user = frappe.session.user
 	if not user or user == "Administrator":
