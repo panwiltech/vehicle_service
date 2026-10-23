@@ -1605,6 +1605,19 @@ def complete_and_create_invoice(order_name: str, notes: str | None = None):
 	return create_sales_invoice_from_order(order_name)
 
 
+def _job_invoice_item_code(job, labour_item):
+	"""Item code to bill a job under.
+
+	ERPNext checks each invoice row against the Sales Order Item it points at (so_detail), so a job
+	created from a quotation must be billed under that line's item, not the default labour item.
+	"""
+	if job.get("so_detail"):
+		so_item = frappe.db.get_value("Sales Order Item", job.so_detail, "item_code")
+		if so_item:
+			return so_item
+	return job.get("service_item") or labour_item
+
+
 def sync_draft_invoice_from_order(order):
 	"""Synchronizes active jobs and used parts from Service Order to its linked Draft Sales Invoice."""
 	if not order.sales_invoice or not frappe.db.exists("Sales Invoice", order.sales_invoice):
@@ -1632,7 +1645,7 @@ def sync_draft_invoice_from_order(order):
 
 	for j in jobs:
 		billable_hours = flt(j.estimated_hours) or 1.0
-		item_code = j.service_item or labour_item
+		item_code = _job_invoice_item_code(j, labour_item)
 		j_rate = flt(j.rate) or labour_rate
 		desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
 		if item_code == "SUBLET" and getattr(j, "supplier", None):
@@ -1746,7 +1759,7 @@ def create_sales_invoice_from_order(order_name: str):
 	for j in jobs:
 		billable_hours = flt(j.estimated_hours) or 1.0
 		if billable_hours > 0:
-			item_code = j.service_item or labour_item
+			item_code = _job_invoice_item_code(j, labour_item)
 			j_rate = flt(j.rate) or labour_rate
 			desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
 			if item_code == "SUBLET" and getattr(j, "supplier", None):
