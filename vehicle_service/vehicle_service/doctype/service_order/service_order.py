@@ -1747,6 +1747,20 @@ def sync_draft_invoice_from_order(order):
 		if getdate(ps.due_date or target_date) < getdate(target_date):
 			ps.due_date = target_date
 
+	# Sync PO, Driver, Mileage, and remarks (non-destructively)
+	if getattr(order, "customer_po_no", None):
+		si.po_no = order.customer_po_no
+	if order.driver_name:
+		si.vs_driver_name = order.driver_name
+	if order.driver_phone:
+		si.vs_driver_phone = order.driver_phone
+	if order.odometer_in:
+		si.vs_mileage_in = int(order.odometer_in)
+	if order.odometer_out:
+		si.vs_mileage_out = int(order.odometer_out)
+	if not getattr(si, "vs_invoice_remarks", None) and order.customer_complaint:
+		si.vs_invoice_remarks = order.customer_complaint
+
 	si.save(ignore_permissions=True)
 	return si
 
@@ -1781,6 +1795,17 @@ def create_sales_invoice_from_order(order_name: str):
 	si.posting_date = nowdate()
 	si.vs_service_order = order.name
 	si.update_stock = 1
+	si.po_no = getattr(order, "customer_po_no", None) or ""
+
+	v_doc = frappe.get_doc("Service Vehicle", order.vehicle) if order.vehicle and frappe.db.exists("Service Vehicle", order.vehicle) else None
+	si.vs_license_plate = (v_doc.registration_no if v_doc else None) or order.vehicle or ""
+	si.vs_chassis_no = (v_doc.vin if v_doc else None) or ""
+	si.vs_vehicle_model = order.vehicle_description or (f"{v_doc.make or ''} {v_doc.model or ''}".strip() if v_doc else "")
+	si.vs_mileage_in = int(order.odometer_in or 0)
+	si.vs_mileage_out = int(order.odometer_out or 0)
+	si.vs_driver_name = order.driver_name or ""
+	si.vs_driver_phone = order.driver_phone or ""
+	si.vs_invoice_remarks = order.customer_complaint or ""
 
 	# Jobs Labour billing
 	jobs = frappe.get_all(
@@ -1880,6 +1905,11 @@ def deliver_vehicle(
 	order.status = DELIVERED
 	order.flags.ignore_invoice_lock = True
 	order.save(ignore_permissions=True)
+
+	if order.sales_invoice and frappe.db.exists("Sales Invoice", order.sales_invoice):
+		inv_status = frappe.db.get_value("Sales Invoice", order.sales_invoice, "docstatus")
+		if inv_status == 0:
+			frappe.db.set_value("Sales Invoice", order.sales_invoice, "vs_mileage_out", odometer)
 
 	# Update Vehicle lifetime history
 	vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
