@@ -55,6 +55,14 @@ class TestInvoicePrintFormat(FrappeTestCase):
 
 		html = frappe.get_print("Sales Invoice", inv.name, "Vehicle Service Invoice")
 
+		# Header Company & Invoice Metadata
+		self.assertIn("Posting Date:", html)
+		self.assertIn("Posting Time:", html)
+		self.assertIn("Payment Due Date:", html)
+		self.assertIn("Include POS:", html)
+		self.assertIn("Is Return:", html)
+		self.assertIn("Is Rate Adjustment:", html)
+
 		# Section A: Customer & Invoice Info
 		self.assertIn("Print Test Customer", html)
 		self.assertIn("PO-998877", html)
@@ -71,8 +79,14 @@ class TestInvoicePrintFormat(FrappeTestCase):
 		# Section C: Items and Charges
 		self.assertIn("Engine Tuneup", html)
 
-		# Section D: Service Advisor Remarks
+		# Section D: Remarks & Placement
 		self.assertIn("All scheduled items replaced. Front pads at 70%.", html)
+
+		# Layout check: Remarks MUST be placed between Items and Taxes/Totals
+		idx_items = html.find("invoice-items")
+		idx_remarks = html.find("remarks-box")
+		idx_totals = html.find("totals-container")
+		self.assertTrue(idx_items < idx_remarks < idx_totals, "Remarks must be located between items and totals/taxes")
 
 	def test_print_format_graceful_handling_of_empty_optional_fields(self):
 		so = self._order_with_job(customer_po_no="", odometer_out=0, driver_name="", driver_phone="")
