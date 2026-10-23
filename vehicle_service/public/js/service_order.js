@@ -55,6 +55,15 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	render_status_stepper(frm) {
+		// The status_html wrapper is reused between Service Order forms, so clear any
+		// clock strip left over from the previously viewed order before rendering anything.
+		const clearClockStrip = () => {
+			if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
+				frm.fields_dict.status_html.$wrapper.find(".workshop-clock-strip").remove();
+			}
+		};
+		clearClockStrip();
+
 		if (frm.is_new()) {
 			frm.set_df_property("status_html", "options", "");
 			return;
@@ -76,10 +85,14 @@ frappe.ui.form.on("Service Order", {
 
 		// Workshop Technicians Clock Status Strip
 		if (!["Delivered", "Cancelled"].includes(frm.doc.status)) {
+			const requestedOrder = frm.doc.name;
 			frappe.db.get_list("Service Job", {
-				filters: { service_order: frm.doc.name },
+				filters: { service_order: requestedOrder },
 				fields: ["name", "job_title", "technician", "technician_name", "status", "actual_hours", "pause_reason"],
 			}).then(jobs => {
+				// Ignore a late response if the user has since moved to another (or a new) order.
+				if (frm.is_new() || frm.doc.name !== requestedOrder) return;
+				clearClockStrip();
 				if (!jobs || !jobs.length) return;
 				const running = jobs.filter(j => j.status === "In Progress");
 				const paused = jobs.filter(j => j.status === "Paused");
@@ -99,7 +112,6 @@ frappe.ui.form.on("Service Order", {
 					const strip_html = `<div class="workshop-clock-strip d-flex align-items-center flex-wrap my-2 p-2" style="background: var(--bg-light-gray, #f8f9fa); border-radius: 4px; border: 1px solid var(--border-color, #d1d8dd); gap: 6px;"><span class="text-muted font-weight-bold mr-2 text-xs" style="text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa fa-clock-o mr-1"></i>${__("Workshop Clocks")}:</span>${badges}</div>`;
 
 					if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
-						frm.fields_dict.status_html.$wrapper.find(".workshop-clock-strip").remove();
 						frm.fields_dict.status_html.$wrapper.append(strip_html);
 					}
 				}
