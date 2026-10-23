@@ -219,28 +219,24 @@ frappe.ui.form.on("Service Order", {
 			}
 		});
 
-		// 6. Complete workshop (all non-terminal statuses after check-in).
-		// Whole-order completion also used to be reachable from the Job Control menu.
+		// 6. Complete jobs: pick which jobs to complete. The order moves to Ready for Billing
+		// automatically once every active job is completed.
 		const canCompleteWorkshop = !isCompleted &&
 			!["Draft", "Cancelled"].includes(frm.doc.status);
 		if (canCompleteWorkshop) {
-			frm.add_custom_button(__("Complete Workshop (Ready for Billing)"), () => {
-				frappe.confirm(
-					__("Mark all workshop jobs as completed and move this Service Order to Ready for Billing?"),
-					() => {
-						frappe.call({
-							method: "vehicle_service.vehicle_service.doctype.service_order.service_order.complete_and_ready_for_billing",
-							args: { order_name: frm.doc.name },
-							freeze: true,
-							freeze_message: __("Marking Workshop Completed..."),
-							callback: (r) => {
-								if (!r.exc) {
-									frappe.show_alert({ message: __("Service Order marked Ready for Billing"), indicator: "green" });
-									frm.reload_doc();
-								}
-							}
-						});
-					}
+			frm.add_custom_button(__("Complete Job"), () => {
+				const UI = frappe.vehicle_service && frappe.vehicle_service.JobControlBoardUI;
+				if (!UI) return;
+				const proto = UI.prototype;
+				proto.show_job_action_dialog.call(
+					{
+						job_action_config: proto.job_action_config,
+						get_status_indicator_class: proto.get_status_indicator_class,
+						get_selected_orders: () => [frm.doc.name],
+						refresh: () => frm.reload_doc(),
+					},
+					frm.doc.name,
+					"complete"
 				);
 			}, __("Actions"));
 		}
