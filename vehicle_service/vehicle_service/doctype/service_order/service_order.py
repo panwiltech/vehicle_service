@@ -1075,6 +1075,27 @@ def create_estimate(order_name: str):
 	return {"status": "success", "quotation": quotation.name}
 
 
+def _apply_quotation_item(job, q_item):
+	"""Bill a quotation-born job under the quotation line's item at the quoted rate.
+
+	Without this a job falls back to the default labour item and labour rate, which disagrees with the
+	Sales Order line and the price the customer approved. Returns True when anything changed.
+	"""
+	changed = False
+	if q_item.item_code and job.service_item != q_item.item_code:
+		job.service_item = q_item.item_code
+		changed = True
+	rate = flt(q_item.rate)
+	if rate and flt(job.rate) != rate:
+		job.rate = rate
+		changed = True
+	amount = round(flt(job.estimated_hours) * flt(job.rate), 2)
+	if flt(job.amount) != amount:
+		job.amount = amount
+		changed = True
+	return changed
+
+
 def on_quotation_submit(doc, method=None):
 	if getattr(doc, "vs_service_order", None) and frappe.db.exists("Service Order", doc.vs_service_order):
 		order = frappe.get_doc("Service Order", doc.vs_service_order)
@@ -1208,6 +1229,7 @@ def record_customer_approval(
 									job.job_title = q_item.item_name or q_item.item_code
 									job.category = getattr(q_item, "vs_category", None) or "Essential"
 									job.estimated_hours = flt(q_item.qty) or 1.0
+									_apply_quotation_item(job, q_item)
 									job.quotation = quotation.name
 									job.quotation_item = q_item.name
 									job.status = "Approved"
@@ -1225,6 +1247,9 @@ def record_customer_approval(
 											"source": "From Quotation",
 											"sales_order": so.name,
 											"so_detail": so_item.name,
+											"service_item": q_item.item_code,
+											"rate": flt(q_item.rate),
+											"amount": round((flt(q_item.qty) or 1.0) * flt(q_item.rate), 2),
 										},
 									)
 								frappe.db.set_value("Quotation Item", q_item.name, "vs_job", job_name)
@@ -1324,6 +1349,8 @@ def sync_quotation_to_service_order(doc, method=None):
 					if job.estimated_hours != flt(item.qty):
 						job.estimated_hours = flt(item.qty)
 						job_modified = True
+					if _apply_quotation_item(job, item):
+						job_modified = True
 					if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 						if job.status != item.vs_approval and job.status not in ["In Progress", "Completed"]:
 							job.status = item.vs_approval
@@ -1337,6 +1364,11 @@ def sync_quotation_to_service_order(doc, method=None):
 						if j_row.service_job == item.vs_job:
 							if flt(j_row.estimated_hours) != flt(item.qty):
 								j_row.estimated_hours = flt(item.qty)
+								order_modified = True
+							if item.item_code and (j_row.service_item != item.item_code or flt(j_row.rate) != flt(item.rate)):
+								j_row.service_item = item.item_code
+								j_row.rate = flt(item.rate)
+								j_row.amount = round(flt(j_row.estimated_hours) * flt(j_row.rate), 2)
 								order_modified = True
 							if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 								if j_row.status != item.vs_approval and j_row.status not in ["In Progress", "Completed"]:
@@ -1385,6 +1417,7 @@ def sync_quotation_to_service_order(doc, method=None):
 						job.job_title = item.item_name or item.item_code
 						job.category = getattr(item, "vs_category", None) or "Maintenance"
 						job.estimated_hours = flt(item.qty) or 1.0
+						_apply_quotation_item(job, item)
 						job.quotation = doc.name
 						job.quotation_item = item.name
 						job.status = "Approved" if getattr(item, "vs_approval", None) == "Approved" else "Pending Approval"
