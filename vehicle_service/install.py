@@ -137,7 +137,7 @@ CUSTOM_FIELDS = {
 			"fieldname": "vs_section_vehicle",
 			"label": "Vehicle & Service Details",
 			"fieldtype": "Section Break",
-			"insert_after": "vs_service_order",
+			"insert_after": "has_subcontracted",
 			"collapsible": 0,
 		},
 		{
@@ -198,7 +198,7 @@ CUSTOM_FIELDS = {
 			"fieldname": "vs_section_remarks",
 			"label": "Invoice Remarks",
 			"fieldtype": "Section Break",
-			"insert_after": "vs_driver_phone",
+			"insert_after": "net_total",
 			"collapsible": 0,
 		},
 		{
