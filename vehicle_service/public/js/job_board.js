@@ -45,7 +45,7 @@ class JobControlBoardUI {
 					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-user"></use></svg>${__("Assign Technician")}
 				</button>
 				<button class="btn btn-xs btn-default btn-start-clock" type="button">
-					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-play"></use></svg>${__("Start Clock")}
+					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-play"></use></svg>${__("Start Job")}
 				</button>
 				<button class="btn btn-xs btn-default btn-pause-clock" type="button">
 					<svg class="icon icon-xs" style="margin-right: 3px;"><use href="#icon-pause"></use></svg>${__("Pause Clock")}
@@ -594,7 +594,7 @@ class JobControlBoardUI {
 				const $menu = $(`
 					<div class="dropdown-menu show shadow jcb-floating-menu" data-order="${esc(o.name)}" style="position: fixed; top: ${topPos}px; left: ${leftPos}px; z-index: 10000; min-width: ${menuWidth}px; display: block; border-radius: 6px; padding: 4px 0; background: var(--card-bg, #fff); border: 1px solid var(--border-color, #d1d8dd); box-shadow: 0 6px 20px rgba(0,0,0,0.15);">
 						<a class="dropdown-item jcb-action-add-job" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-plus text-primary mr-2" style="width: 16px;"></i> ${__("Add Job")}</a>
-						<a class="dropdown-item jcb-action-start-clock" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-play text-success mr-2" style="width: 16px;"></i> ${__("Start Clock")}</a>
+						<a class="dropdown-item jcb-action-start-clock" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-play text-success mr-2" style="width: 16px;"></i> ${__("Start Job")}</a>
 						<a class="dropdown-item jcb-action-pause-clock" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-pause text-warning mr-2" style="width: 16px;"></i> ${__("Pause Job")}</a>
 						<a class="dropdown-item jcb-action-assign-tech" href="#" style="display: flex; align-items: center; padding: 7px 14px; font-size: 13px; color: var(--text-color, #171717); cursor: pointer;"><i class="fa fa-user text-info mr-2" style="width: 16px;"></i> ${__("Assign Technician")}</a>
 						<div class="dropdown-divider" style="margin: 4px 0; border-top: 1px solid var(--border-color, #ebeff2);"></div>
@@ -872,153 +872,177 @@ class JobControlBoardUI {
 		});
 	}
 
-	// Action: Start Clock
+	// Actions: Start / Pause / Complete Job. One selection dialog over the jobs the server says are eligible.
 	trigger_start_clock(order_name) {
-		if (!order_name) {
-			const selected = this.get_selected_orders();
-			if (!selected.length) {
-				frappe.msgprint(__("Please select a Service Order row to start clock."));
-				return;
-			}
-			order_name = selected[0];
-		}
-
-		frappe.db.get_doc("Service Order", order_name).then((so) => {
-			const eligible_jobs = (so.jobs || []).filter((j) => j.status !== "Completed");
-
-			if (!eligible_jobs.length) {
-				frappe.msgprint(__("No uncompleted jobs available on {0} to start clock.", [order_name]));
-				return;
-			}
-
-			const job_options = eligible_jobs.map((j) => ({
-				label: `${j.job_title} — ${j.technician_name || j.assigned_technician || __("Unassigned")}`,
-				value: j.service_job,
-			}));
-
-			const d = new frappe.ui.Dialog({
-				title: __("Start Clock ({0})", [order_name]),
-				fields: [
-					{
-						fieldname: "job",
-						label: __("Select Job"),
-						fieldtype: "Select",
-						options: job_options,
-						default: job_options[0].value,
-						reqd: 1,
-					},
-				],
-				primary_action_label: __("Start Clock"),
-				primary_action: (vals) => {
-					frappe.call({
-						method: "vehicle_service.job_control.start_clock",
-						args: { job_name: vals.job },
-						freeze: true,
-						callback: (r) => {
-							if (!r.exc) {
-								d.hide();
-								frappe.show_alert({ message: __("Clock started successfully"), indicator: "green" });
-								this.refresh();
-							}
-						},
-					});
-				},
-			});
-			d.show();
-		});
+		this.show_job_action_dialog(order_name, "start");
 	}
 
-	// Action: Pause Clock
 	trigger_pause_clock(order_name) {
+		this.show_job_action_dialog(order_name, "pause");
+	}
+
+	trigger_complete_order(order_name) {
+		this.show_job_action_dialog(order_name, "complete");
+	}
+
+	job_action_config(action) {
+		return {
+			start: {
+				title: __("Start Job"),
+				method: "vehicle_service.job_control.start_jobs",
+				verb: (n) => (n === 1 ? __("Start 1 job") : __("Start {0} jobs", [n])),
+				empty: __("No jobs on {0} are eligible to start."),
+				done: __("Started {0} job(s)"),
+				indicator: "green",
+			},
+			pause: {
+				title: __("Pause Job"),
+				method: "vehicle_service.job_control.pause_jobs",
+				verb: (n) => (n === 1 ? __("Pause 1 job") : __("Pause {0} jobs", [n])),
+				empty: __("No jobs on {0} are currently in progress."),
+				done: __("Paused {0} job(s)"),
+				indicator: "orange",
+			},
+			complete: {
+				title: __("Complete Job"),
+				method: "vehicle_service.job_control.complete_jobs",
+				verb: (n) => (n === 1 ? __("Complete 1 job") : __("Complete {0} jobs", [n])),
+				empty: __("No jobs on {0} are eligible to complete."),
+				done: __("Completed {0} job(s)"),
+				indicator: "green",
+			},
+		}[action];
+	}
+
+	async show_job_action_dialog(order_name, action) {
 		if (!order_name) {
 			const selected = this.get_selected_orders();
 			if (!selected.length) {
-				frappe.msgprint(__("Please select a Service Order row to pause clock."));
+				frappe.msgprint(__("Please select a Service Order row first."));
 				return;
 			}
 			order_name = selected[0];
 		}
 
-		frappe.db.get_doc("Service Order", order_name).then((so) => {
-			const active_jobs = (so.jobs || []).filter((j) => j.status === "In Progress");
-			if (!active_jobs.length) {
-				frappe.msgprint(__("No running clock on {0}.", [order_name]));
-				return;
-			}
+		const cfg = this.job_action_config(action);
+		const r = await frappe.call({
+			method: "vehicle_service.job_control.get_job_action_candidates",
+			args: { order_name, action },
+		});
+		const jobs = r.message || [];
+		const selectable = jobs.filter((j) => !j.blocked_reason);
+		const esc = frappe.utils.escape_html;
 
-			const job_options = active_jobs.map((j) => ({
-				label: `${j.job_title} — ${j.technician_name || j.assigned_technician}`,
-				value: j.service_job,
-			}));
+		const fields = [{ fieldname: "jobs_html", fieldtype: "HTML" }];
+		if (action === "pause" && selectable.length) {
+			fields.push({
+				fieldname: "pause_reason",
+				label: __("Pause Reason"),
+				fieldtype: "Select",
+				options: "Waiting for Parts\nAwaiting Approval\nShift End / Break\nCustomer Consultation\nOther",
+				default: "Waiting for Parts",
+				reqd: 1,
+			});
+		}
 
-			const d = new frappe.ui.Dialog({
-				title: __("Pause Clock ({0})", [order_name]),
-				fields: [
-					{
-						fieldname: "job",
-						label: __("Select Running Job"),
-						fieldtype: "Select",
-						options: job_options,
-						default: job_options[0].value,
-						reqd: 1,
-					},
-					{
-						fieldname: "pause_reason",
-						label: __("Pause Reason"),
-						fieldtype: "Select",
-						options: "Waiting for Parts\nAwaiting Approval\nShift End / Break\nCustomer Consultation\nOther",
-						default: "Waiting for Parts",
-						reqd: 1,
-					},
-				],
-				primary_action_label: __("Pause Clock"),
-				primary_action: (vals) => {
+		const d = new frappe.ui.Dialog({
+			title: `${cfg.title} (${order_name})`,
+			fields,
+			primary_action_label: cfg.verb(0),
+			primary_action: () => {
+				const picked = checked_jobs();
+				if (!picked.length) return;
+				const run = () => {
+					d.disable_primary_action();
 					frappe.call({
-						method: "vehicle_service.job_control.pause_clock",
-						args: { job_name: vals.job, reason: vals.pause_reason, pause_reason: vals.pause_reason },
+						method: cfg.method,
+						args: {
+							order_name,
+							job_names: picked.map((p) => p.name),
+							...(action === "pause" ? { reason: d.get_value("pause_reason") } : {}),
+						},
 						freeze: true,
-						callback: (r) => {
-							if (!r.exc) {
+						callback: (res) => {
+							if (!res.exc) {
 								d.hide();
-								frappe.show_alert({ message: __("Clock paused successfully"), indicator: "orange" });
+								frappe.show_alert({ message: cfg.done.replace("{0}", picked.length), indicator: cfg.indicator });
 								this.refresh();
 							}
 						},
+						error: () => {
+							d.enable_primary_action();
+							refresh_list();
+						},
 					});
-				},
-			});
-			d.show();
+				};
+				if (action === "complete") {
+					frappe.confirm(
+						__("Complete the selected jobs? {0}", [picked.map((p) => esc(p.job_title)).join(", ")]),
+						run
+					);
+				} else {
+					run();
+				}
+			},
 		});
-	}
 
-	// Action: Complete Order
-	trigger_complete_order(order_name) {
-		if (!order_name) {
-			const selected = this.get_selected_orders();
-			if (!selected.length) {
-				frappe.msgprint(__("Please select a Service Order row to complete."));
+		const $body = d.fields_dict.jobs_html.$wrapper;
+		const checked_jobs = () =>
+			$body
+				.find("input.jcb-job-check:checked")
+				.map((_, el) => selectable.find((j) => j.name === el.value))
+				.get();
+
+		const sync_button = () => {
+			const n = checked_jobs().length;
+			d.set_primary_action(cfg.verb(n), d.primary_action);
+			d.get_primary_btn().prop("disabled", n === 0);
+		};
+
+		const render_list = (rows) => {
+			if (!rows.length) {
+				$body.html(`<p class="text-muted jcb-empty-state">${esc(cfg.empty.replace("{0}", order_name))}</p>`);
+				d.get_primary_btn().hide();
 				return;
 			}
-			order_name = selected[0];
-		}
+			const can_select = rows.filter((j) => !j.blocked_reason);
+			$body.html(`
+				${can_select.length > 1 ? `<label class="mb-2"><input type="checkbox" class="jcb-job-check-all"> <b>${__("Select all")}</b></label>` : ""}
+				<div style="max-height: 320px; overflow-y: auto;">
+					${rows
+						.map(
+							(j) => `
+						<label class="d-flex align-items-center py-2 border-bottom" style="gap: 10px; margin: 0; ${j.blocked_reason ? "opacity: .6;" : ""}">
+							<input type="checkbox" class="jcb-job-check" value="${esc(j.name)}" ${j.blocked_reason ? "disabled" : ""}>
+							<span class="flex-grow-1">
+								<b>${esc(j.job_title)}</b>
+								<span class="text-muted text-xs d-block">${esc(j.technician_name || j.technician || __("Unassigned"))}${j.blocked_reason ? ` — ${esc(__(j.blocked_reason))}` : ""}</span>
+							</span>
+							<span class="indicator-pill ${this.get_status_indicator_class(j.status)}">${esc(j.status)}</span>
+						</label>`
+						)
+						.join("")}
+				</div>`);
+			$body.find("input.jcb-job-check").on("change", sync_button);
+			$body.find("input.jcb-job-check-all").on("change", (e) => {
+				$body.find("input.jcb-job-check:not(:disabled)").prop("checked", e.target.checked);
+				sync_button();
+			});
+			sync_button();
+		};
 
-		frappe.confirm(
-			__("Complete all jobs on Service Order {0} and mark Ready for Billing?", [order_name]),
-			() => {
-				frappe.call({
-					method: "vehicle_service.job_control.complete_service_order",
-					args: { order_name },
-					freeze: true,
-					freeze_message: __("Completing Service Order..."),
-					callback: (r) => {
-						if (!r.exc) {
-							frappe.show_alert({ message: __("Service Order {0} completed and marked Ready for Billing", [order_name]), indicator: "green" });
-							this.refresh();
-						}
-					},
-				});
-			}
-		);
+		const refresh_list = async () => {
+			const rr = await frappe.call({
+				method: "vehicle_service.job_control.get_job_action_candidates",
+				args: { order_name, action },
+			});
+			selectable.length = 0;
+			(rr.message || []).filter((j) => !j.blocked_reason).forEach((j) => selectable.push(j));
+			render_list(rr.message || []);
+		};
+
+		d.show();
+		render_list(jobs);
 	}
 }
 
