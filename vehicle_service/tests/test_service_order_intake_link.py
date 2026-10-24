@@ -52,6 +52,7 @@ class TestServiceOrderIntakeLink(FrappeTestCase):
 		order.vehicle = "LINK-TEST-001"
 		order.customer = "Test Link Customer"
 		order.status = "In Progress"  # Attempt to move to In Progress directly without intake
+		order.flags.strict_intake_validation = True
 
 		with self.assertRaises(frappe.ValidationError):
 			order.insert(ignore_permissions=True)
