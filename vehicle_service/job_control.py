@@ -1,17 +1,22 @@
 # Copyright (c) 2026, Azazel and contributors
 # For license information, please see license.txt
 
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime, time_diff_in_hours
 from vehicle_service.state import (
+	CANCELLED,
 	COMPLETED_STATES,
+	JOB_ACTION_STATUSES,
 	JOB_ASSIGNED,
 	JOB_COMPLETED,
 	JOB_IN_PROGRESS,
 	JOB_PAUSED,
 	JOB_QC_FAILED,
 	READY_FOR_BILLING,
+	job_action_block_reason,
 )
 
 
@@ -359,17 +364,169 @@ def complete_service_order(order_name: str):
 	order.board_status = "Completed"
 	order.flags.ignore_job_lock = True
 
-	# Move vehicle to parking bay if configured
-	settings = frappe.get_cached_doc("Vehicle Service Settings")
-	if settings.parking_location and order.vehicle:
-		veh = frappe.get_doc("Service Vehicle", order.vehicle)
-		veh.move_location(settings.parking_location, _("Workshop jobs completed. Order ready for billing."), order.name)
+	_park_vehicle(order)
 
 	order.save(ignore_permissions=True)
 	order.add_comment("Comment", _("Service Order completed by {0}. All jobs marked Completed and transitioned to Ready for Billing.").format(frappe.session.user))
 	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "complete_service_order"}, after_commit=True)
 
 	return {"status": "success", "order_status": order.status, "board_status": order.board_status}
+
+
+def _park_vehicle(order):
+	"""Move the vehicle to the configured parking bay once workshop work is done."""
+	settings = frappe.get_cached_doc("Vehicle Service Settings")
+	if settings.parking_location and order.vehicle:
+		veh = frappe.get_doc("Service Vehicle", order.vehicle)
+		veh.move_location(settings.parking_location, _("Workshop jobs completed. Order ready for billing."), order.name)
+
+
+def _finalize_if_ready_for_billing(order, prev_status):
+	"""Side effects of the order becoming Ready for Billing via per-job completion."""
+	if order.status == READY_FOR_BILLING and prev_status != READY_FOR_BILLING:
+		_park_vehicle(order)
+		order.add_comment("Comment", _("All jobs completed. Service Order is Ready for Billing."))
+
+
+def _parse_job_names(job_names):
+	if isinstance(job_names, str):
+		try:
+			job_names = json.loads(job_names)
+		except ValueError:
+			job_names = [job_names]
+		if isinstance(job_names, str):
+			job_names = [job_names]
+	names = list(dict.fromkeys(n for n in (job_names or []) if n))
+	if not names:
+		frappe.throw(_("Select at least one job."))
+	return names
+
+
+def _lock_and_validate(order_name, job_names, action):
+	"""Lock the selected Service Job rows and verify each may take `action`. Throws on any problem."""
+	names = _parse_job_names(job_names)
+	order = frappe.get_doc("Service Order", order_name)
+	_assert_jobs_editable(order)
+
+	rows = frappe.db.sql(
+		"""SELECT name, job_title, status, technician, service_order
+		FROM `tabService Job` WHERE name IN %(names)s FOR UPDATE""",
+		{"names": names},
+		as_dict=True,
+	)
+	by_name = {r.name: r for r in rows}
+	foreign = [n for n in names if n not in by_name or by_name[n].service_order != order.name]
+	if foreign:
+		frappe.throw(_("Job(s) {0} do not belong to Service Order {1}.").format(", ".join(foreign), order.name))
+
+	problems = []
+	for n in names:
+		reason = job_action_block_reason(action, by_name[n], order.status, order.on_hold)
+		if reason:
+			problems.append(f"{by_name[n].job_title}: {_(reason)}")
+	if problems:
+		frappe.throw(_("Cannot {0} the selected jobs. {1}").format(_(action), "; ".join(problems)))
+	return order, [by_name[n] for n in names]
+
+
+def _batch_result(order_name, job_names):
+	jobs = frappe.get_all("Service Job", filters={"name": ["in", job_names]}, fields=["name", "status"])
+	return {
+		"status": "success",
+		"jobs": jobs,
+		"order_status": frappe.db.get_value("Service Order", order_name, "status"),
+	}
+
+
+@frappe.whitelist()
+def get_job_action_candidates(order_name: str, action: str):
+	"""Jobs on an order that `action` (start | pause | complete) applies to, for the board dialogs.
+
+	Jobs whose status fits the action are returned; `blocked_reason` is set when something else
+	(no technician, order on hold) stops them. A locked order has no candidates.
+	"""
+	_require_board_viewer()
+	if action not in JOB_ACTION_STATUSES:
+		frappe.throw(_("Unknown action {0}").format(action))
+	order = frappe.get_doc("Service Order", order_name)
+	if order.status in COMPLETED_STATES or order.status == CANCELLED:
+		return []
+	jobs = frappe.get_all(
+		"Service Job",
+		filters={"service_order": order.name, "status": ["in", list(JOB_ACTION_STATUSES[action])]},
+		fields=["name", "job_title", "technician", "technician_name", "status"],
+		order_by="creation asc",
+	)
+	for j in jobs:
+		j["blocked_reason"] = job_action_block_reason(action, j, order.status, order.on_hold)
+	return jobs
+
+
+@frappe.whitelist()
+def start_jobs(order_name: str, job_names):
+	"""Start (or resume) only the selected jobs. All-or-nothing."""
+	order, rows = _lock_and_validate(order_name, job_names, "start")
+	seen = {}
+	for r in rows:
+		if r.technician in seen:
+			frappe.throw(
+				_("Jobs {0} and {1} have the same technician. A technician can only run one clock at a time.").format(
+					seen[r.technician], r.job_title
+				)
+			)
+		seen[r.technician] = r.job_title
+	for r in rows:
+		start_clock(r.name)
+	return _batch_result(order.name, [r.name for r in rows])
+
+
+@frappe.whitelist()
+def pause_jobs(order_name: str, job_names, reason: str | None = None):
+	"""Pause only the selected In Progress jobs. All-or-nothing."""
+	order, rows = _lock_and_validate(order_name, job_names, "pause")
+	for r in rows:
+		pause_clock(r.name, reason)
+	return _batch_result(order.name, [r.name for r in rows])
+
+
+def _complete_job_row(job, now):
+	for row in job.get("time_logs", []):
+		if row.from_time and not row.to_time:
+			row.to_time = now
+			row.hours = round(flt(time_diff_in_hours(row.to_time, row.from_time)), 2)
+	job.status = JOB_COMPLETED
+	job.completed_on = now
+	job.calculate_actual_hours()
+	job.flags.ignore_job_lock = True
+	job.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def complete_jobs(order_name: str, job_names):
+	"""Complete only the selected jobs (Job Controllers). The order status is derived from all its
+	jobs afterwards, so the order reaches Ready for Billing only when every required job is done."""
+	_require_job_controller()
+	return _complete_jobs(order_name, job_names)
+
+
+def _complete_jobs(order_name, job_names):
+	"""Authorization is the caller's job."""
+	order, rows = _lock_and_validate(order_name, job_names, "complete")
+	prev_status = order.status
+	now = now_datetime()
+	for r in rows:
+		_complete_job_row(frappe.get_doc("Service Job", r.name), now)
+
+	order.reload()
+	order.flags.ignore_job_lock = True
+	order.sync_status_from_jobs_and_parts()
+	_finalize_if_ready_for_billing(order, prev_status)
+	order.add_comment(
+		"Comment",
+		_("Jobs completed by {0}: {1}").format(frappe.session.user, ", ".join(r.job_title for r in rows)),
+	)
+	frappe.publish_realtime("job_board_update", {"order": order.name, "action": "complete_jobs"}, after_commit=True)
+	return _batch_result(order.name, [r.name for r in rows])
 
 
 def order_has_permission(doc, ptype="read", user=None):

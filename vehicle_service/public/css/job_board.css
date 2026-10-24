@@ -1,3 +1,82 @@
+/* Completely remove and hide the Dock (left-most icon rail) */
+#desk-dock,
+.dock,
+.dock-user,
+.sidebar-dock {
+	display: none !important;
+	width: 0 !important;
+	max-width: 0 !important;
+	min-width: 0 !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	opacity: 0 !important;
+	position: absolute !important;
+	left: -9999px !important;
+}
+
+body.dock-pinned .dock {
+	display: none !important;
+	width: 0 !important;
+	flex: 0 0 0 !important;
+}
+
+/* Hide sidebar strictly and ONLY on the Desktop home launcher */
+body.is-desk-home .body-sidebar-container,
+body.is-desk-home .body-sidebar,
+body[data-route="desktop"] .body-sidebar-container,
+body[data-route="desktop"] .body-sidebar,
+#page-desktop:not([style*="display: none"]) ~ .body-sidebar-container {
+	display: none !important;
+	width: 0 !important;
+	max-width: 0 !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	opacity: 0 !important;
+}
+
+/* Ensure wide sidebar is restored and visible on all other modules and workspaces */
+body:not(.is-desk-home):not([data-route="desktop"]) .body-sidebar-container {
+	display: flex !important;
+	position: relative !important;
+	width: fit-content !important;
+	opacity: 1 !important;
+	visibility: visible !important;
+	pointer-events: auto !important;
+}
+
+body:not(.is-desk-home):not([data-route="desktop"]) .body-sidebar {
+	display: flex !important;
+	position: relative !important;
+	width: var(--sidebar-width, 224px) !important;
+	opacity: 1 !important;
+	visibility: visible !important;
+	pointer-events: auto !important;
+}
+
+body:not(.is-desk-home):not([data-route="desktop"]) .body-sidebar > * {
+	opacity: 1 !important;
+	visibility: visible !important;
+}
+
+/* Ensure user avatar/menu in sidebar is visible since dock is removed */
+body.dock-pinned.dock-active .body-sidebar .dropdown-navbar-user,
+.body-sidebar .dropdown-navbar-user {
+	display: block !important;
+	visibility: visible !important;
+}
+
+body.dock-pinned.dock-active .body-sidebar-container.expanded .sidebar-header .header-logo,
+.body-sidebar .sidebar-header .header-logo {
+	display: flex !important;
+	visibility: visible !important;
+}
+
+.sidebar-edge,
+.sidebar-collapse-arrow {
+	display: flex !important;
+	visibility: visible !important;
+}
+
 /* Job Control Board - Pure ERPNext / Frappe Desk Form Grid & Tabs Theme */
 
 /* Make Job Control Board workspace and page 100% full width */

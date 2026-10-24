@@ -51,6 +51,16 @@ def extend_bootinfo(bootinfo):
 		{
 			"on_apps_screen": True,
 			"sequence_id": 5,
+			"app_name": "crm",
+			"app_title": "CRM",
+			"app_route": "/desk/crm",
+			"desk_route": "",
+			"app_logo_url": "/assets/erpnext/desktop_icons/crm.svg",
+			"dock": [],
+		},
+		{
+			"on_apps_screen": True,
+			"sequence_id": 6,
 			"app_name": "vehicle_service",
 			"app_title": "Vehicle Service",
 			"app_route": "/desk/vehicle-service",
@@ -61,3 +71,4 @@ def extend_bootinfo(bootinfo):
 	]
 
 	bootinfo.app_data = primary_desk_apps
+

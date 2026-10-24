@@ -98,6 +98,7 @@ def setup_production_workspaces():
 	vs_dock_items = [
 		{"link_type": "Workspace", "link_to": "Vehicle Service", "icon": "car", "title": "Vehicle Service"},
 		{"link_type": "Workspace", "link_to": "Job Control Board", "icon": "folder-kanban", "title": "Job Control Board"},
+		{"link_type": "Sidebar", "link_to": "CRM", "icon": "handshake-soft", "title": "CRM"},
 	]
 	if not frappe.db.exists("Dock", "vehicle_service"):
 		d = frappe.new_doc("Dock")
@@ -113,6 +114,17 @@ def setup_production_workspaces():
 		for it in vs_dock_items:
 			d.append("items", it)
 		d.save(ignore_permissions=True)
+
+	# Ensure CRM in erpnext Dock is unhidden
+	if frappe.db.exists("Dock", "erpnext"):
+		erpnext_dock = frappe.get_doc("Dock", "erpnext")
+		crm_updated = False
+		for item in erpnext_dock.items:
+			if item.link_to == "CRM" and item.hidden:
+				item.hidden = 0
+				crm_updated = True
+		if crm_updated:
+			erpnext_dock.save(ignore_permissions=True)
 
 	# 3. Configure Desktop Settings & Desktop Icons (Grid layout on Desk)
 	if frappe.db.exists("DocType", "Desktop Settings"):
@@ -153,7 +165,27 @@ def setup_production_workspaces():
 			update_modified=False,
 		)
 
+	if not frappe.db.exists("Desktop Icon", "CRM"):
+		crm_icon = frappe.new_doc("Desktop Icon")
+		crm_icon.name = "CRM"
+		crm_icon.label = "CRM"
+		crm_icon.icon_type = "Link"
+		crm_icon.link_type = "Workspace Sidebar"
+		crm_icon.link_to = "CRM"
+		crm_icon.icon = "handshake"
+		crm_icon.hidden = 0
+		crm_icon.parent_icon = None
+		crm_icon.app = "erpnext"
+		crm_icon.insert(ignore_permissions=True)
+
 	primary_workspaces = [
+		("Vehicle Service", "car"),
+		("Job Control Board", "circle-gauge"),
+		("CRM", "handshake"),
+		("Service Advisor", "clipboard-list"),
+		("Technician Portal", "wrench"),
+		("Quality Control", "clipboard-check"),
+		("Parts Store", "package"),
 		("Accounting", "landmark"),
 		("Invoicing", "wallet"),
 		("Selling", "store"),
@@ -161,17 +193,10 @@ def setup_production_workspaces():
 		("Stock", "package"),
 		("Manufacturing", "building-complex"),
 		("Subcontracting", "organization"),
-		("Vehicle Service", "car"),
-		("Service Advisor", "clipboard-list"),
-		("Job Control Board", "circle-gauge"),
-		("Technician Portal", "wrench"),
-		("Quality Control", "clipboard-check"),
-		("Parts Store", "package"),
 		("Projects", "folder-kanban"),
 		("Assets", "archive"),
 		("Quality", "shield-check"),
 		("Support", "headset"),
-		("CRM", "handshake"),
 		("ERPNext Settings", "sliders-horizontal"),
 		("Users", "users"),
 		("Integrations", "cable"),

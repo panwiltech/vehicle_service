@@ -32,6 +32,15 @@ frappe.ui.form.on("Sales Invoice", {
 			// A draft invoice created from Service Order cannot be toggled into a Credit Note
 			frm.set_df_property("is_return", "read_only", true);
 		}
+
+		// Service Advisor can edit remarks and Customer PO on draft invoices
+		if (frm.doc.docstatus === 0) {
+			frm.set_df_property("vs_invoice_remarks", "read_only", false);
+			frm.set_df_property("po_no", "read_only", false);
+		} else {
+			frm.set_df_property("vs_invoice_remarks", "read_only", true);
+			frm.set_df_property("po_no", "read_only", true);
+		}
 	}
 });
 

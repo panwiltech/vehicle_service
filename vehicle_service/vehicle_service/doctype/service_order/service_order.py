@@ -1075,6 +1075,27 @@ def create_estimate(order_name: str):
 	return {"status": "success", "quotation": quotation.name}
 
 
+def _apply_quotation_item(job, q_item):
+	"""Bill a quotation-born job under the quotation line's item at the quoted rate.
+
+	Without this a job falls back to the default labour item and labour rate, which disagrees with the
+	Sales Order line and the price the customer approved. Returns True when anything changed.
+	"""
+	changed = False
+	if q_item.item_code and job.service_item != q_item.item_code:
+		job.service_item = q_item.item_code
+		changed = True
+	rate = flt(q_item.rate)
+	if rate and flt(job.rate) != rate:
+		job.rate = rate
+		changed = True
+	amount = round(flt(job.estimated_hours) * flt(job.rate), 2)
+	if flt(job.amount) != amount:
+		job.amount = amount
+		changed = True
+	return changed
+
+
 def on_quotation_submit(doc, method=None):
 	if getattr(doc, "vs_service_order", None) and frappe.db.exists("Service Order", doc.vs_service_order):
 		order = frappe.get_doc("Service Order", doc.vs_service_order)
@@ -1208,6 +1229,7 @@ def record_customer_approval(
 									job.job_title = q_item.item_name or q_item.item_code
 									job.category = getattr(q_item, "vs_category", None) or "Essential"
 									job.estimated_hours = flt(q_item.qty) or 1.0
+									_apply_quotation_item(job, q_item)
 									job.quotation = quotation.name
 									job.quotation_item = q_item.name
 									job.status = "Approved"
@@ -1225,6 +1247,9 @@ def record_customer_approval(
 											"source": "From Quotation",
 											"sales_order": so.name,
 											"so_detail": so_item.name,
+											"service_item": q_item.item_code,
+											"rate": flt(q_item.rate),
+											"amount": round((flt(q_item.qty) or 1.0) * flt(q_item.rate), 2),
 										},
 									)
 								frappe.db.set_value("Quotation Item", q_item.name, "vs_job", job_name)
@@ -1324,6 +1349,8 @@ def sync_quotation_to_service_order(doc, method=None):
 					if job.estimated_hours != flt(item.qty):
 						job.estimated_hours = flt(item.qty)
 						job_modified = True
+					if _apply_quotation_item(job, item):
+						job_modified = True
 					if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 						if job.status != item.vs_approval and job.status not in ["In Progress", "Completed"]:
 							job.status = item.vs_approval
@@ -1337,6 +1364,11 @@ def sync_quotation_to_service_order(doc, method=None):
 						if j_row.service_job == item.vs_job:
 							if flt(j_row.estimated_hours) != flt(item.qty):
 								j_row.estimated_hours = flt(item.qty)
+								order_modified = True
+							if item.item_code and (j_row.service_item != item.item_code or flt(j_row.rate) != flt(item.rate)):
+								j_row.service_item = item.item_code
+								j_row.rate = flt(item.rate)
+								j_row.amount = round(flt(j_row.estimated_hours) * flt(j_row.rate), 2)
 								order_modified = True
 							if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 								if j_row.status != item.vs_approval and j_row.status not in ["In Progress", "Completed"]:
@@ -1385,6 +1417,7 @@ def sync_quotation_to_service_order(doc, method=None):
 						job.job_title = item.item_name or item.item_code
 						job.category = getattr(item, "vs_category", None) or "Maintenance"
 						job.estimated_hours = flt(item.qty) or 1.0
+						_apply_quotation_item(job, item)
 						job.quotation = doc.name
 						job.quotation_item = item.name
 						job.status = "Approved" if getattr(item, "vs_approval", None) == "Approved" else "Pending Approval"
@@ -1605,6 +1638,19 @@ def complete_and_create_invoice(order_name: str, notes: str | None = None):
 	return create_sales_invoice_from_order(order_name)
 
 
+def _job_invoice_item_code(job, labour_item):
+	"""Item code to bill a job under.
+
+	ERPNext checks each invoice row against the Sales Order Item it points at (so_detail), so a job
+	created from a quotation must be billed under that line's item, not the default labour item.
+	"""
+	if job.get("so_detail"):
+		so_item = frappe.db.get_value("Sales Order Item", job.so_detail, "item_code")
+		if so_item:
+			return so_item
+	return job.get("service_item") or labour_item
+
+
 def sync_draft_invoice_from_order(order):
 	"""Synchronizes active jobs and used parts from Service Order to its linked Draft Sales Invoice."""
 	if not order.sales_invoice or not frappe.db.exists("Sales Invoice", order.sales_invoice):
@@ -1632,7 +1678,7 @@ def sync_draft_invoice_from_order(order):
 
 	for j in jobs:
 		billable_hours = flt(j.estimated_hours) or 1.0
-		item_code = j.service_item or labour_item
+		item_code = _job_invoice_item_code(j, labour_item)
 		j_rate = flt(j.rate) or labour_rate
 		desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
 		if item_code == "SUBLET" and getattr(j, "supplier", None):
@@ -1701,6 +1747,20 @@ def sync_draft_invoice_from_order(order):
 		if getdate(ps.due_date or target_date) < getdate(target_date):
 			ps.due_date = target_date
 
+	# Sync PO, Driver, Mileage, and remarks (non-destructively)
+	if getattr(order, "customer_po_no", None):
+		si.po_no = order.customer_po_no
+	if order.driver_name:
+		si.vs_driver_name = order.driver_name
+	if order.driver_phone:
+		si.vs_driver_phone = order.driver_phone
+	if order.odometer_in:
+		si.vs_mileage_in = int(order.odometer_in)
+	if order.odometer_out:
+		si.vs_mileage_out = int(order.odometer_out)
+	if not getattr(si, "vs_invoice_remarks", None) and order.customer_complaint:
+		si.vs_invoice_remarks = order.customer_complaint
+
 	si.save(ignore_permissions=True)
 	return si
 
@@ -1735,6 +1795,17 @@ def create_sales_invoice_from_order(order_name: str):
 	si.posting_date = nowdate()
 	si.vs_service_order = order.name
 	si.update_stock = 1
+	si.po_no = getattr(order, "customer_po_no", None) or ""
+
+	v_doc = frappe.get_doc("Service Vehicle", order.vehicle) if order.vehicle and frappe.db.exists("Service Vehicle", order.vehicle) else None
+	si.vs_license_plate = (v_doc.registration_no if v_doc else None) or order.vehicle or ""
+	si.vs_chassis_no = (v_doc.vin if v_doc else None) or ""
+	si.vs_vehicle_model = order.vehicle_description or (f"{v_doc.make or ''} {v_doc.model or ''}".strip() if v_doc else "")
+	si.vs_mileage_in = int(order.odometer_in or 0)
+	si.vs_mileage_out = int(order.odometer_out or 0)
+	si.vs_driver_name = order.driver_name or ""
+	si.vs_driver_phone = order.driver_phone or ""
+	si.vs_invoice_remarks = order.customer_complaint or ""
 
 	# Jobs Labour billing
 	jobs = frappe.get_all(
@@ -1746,7 +1817,7 @@ def create_sales_invoice_from_order(order_name: str):
 	for j in jobs:
 		billable_hours = flt(j.estimated_hours) or 1.0
 		if billable_hours > 0:
-			item_code = j.service_item or labour_item
+			item_code = _job_invoice_item_code(j, labour_item)
 			j_rate = flt(j.rate) or labour_rate
 			desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
 			if item_code == "SUBLET" and getattr(j, "supplier", None):
@@ -1834,6 +1905,11 @@ def deliver_vehicle(
 	order.status = DELIVERED
 	order.flags.ignore_invoice_lock = True
 	order.save(ignore_permissions=True)
+
+	if order.sales_invoice and frappe.db.exists("Sales Invoice", order.sales_invoice):
+		inv_status = frappe.db.get_value("Sales Invoice", order.sales_invoice, "docstatus")
+		if inv_status == 0:
+			frappe.db.set_value("Sales Invoice", order.sales_invoice, "vs_mileage_out", odometer)
 
 	# Update Vehicle lifetime history
 	vehicle = frappe.get_doc("Service Vehicle", order.vehicle)
