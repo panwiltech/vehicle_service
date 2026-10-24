@@ -70,6 +70,7 @@ class ServiceOrder(Document):
 		self.validate_open_orders()
 		self.validate_parts_modification_permissions()
 		self.fetch_vehicle_and_company_defaults()
+		self.validate_intake_link()
 		self.validate_intake_frozen()
 		self.validate_parts_defaults()
 		self.validate_jobs_defaults()
@@ -455,6 +456,44 @@ class ServiceOrder(Document):
 
 		if not self.service_advisor:
 			self.service_advisor = frappe.session.user
+
+	def validate_intake_link(self):
+		if getattr(frappe.flags, "in_migration", False) or getattr(self.flags, "in_migration", False):
+			return
+
+		# If status is not Draft or Cancelled, vehicle_intake must exist and be Checked In
+		if self.status not in (DRAFT, CANCELLED):
+			if not self.vehicle_intake:
+				frappe.throw(
+					_("Cannot proceed with Service Order {0} without a linked Vehicle Intake record.").format(self.name or ""),
+					frappe.ValidationError,
+				)
+			intake_status = frappe.db.get_value("Vehicle Intake", self.vehicle_intake, "status")
+			if intake_status != "Checked In":
+				frappe.throw(
+					_(
+						"Linked Vehicle Intake {0} is in '{1}' status. It must be Checked In before workshop execution can proceed."
+					).format(self.vehicle_intake, intake_status or "Unknown"),
+					frappe.ValidationError,
+				)
+
+		# If vehicle_intake is present, mirror snapshot fields if empty
+		if self.vehicle_intake and frappe.db.exists("Vehicle Intake", self.vehicle_intake):
+			intake = frappe.get_doc("Vehicle Intake", self.vehicle_intake)
+			if not self.odometer_in and intake.odometer_in:
+				self.odometer_in = intake.odometer_in
+			if not self.fuel_level and intake.fuel_level:
+				self.fuel_level = intake.fuel_level
+			if not self.customer_signature and intake.customer_signature:
+				self.customer_signature = intake.customer_signature
+			if not self.existing_damage and intake.existing_damage:
+				self.existing_damage = intake.existing_damage
+			if not self.vehicle_contents and intake.vehicle_contents:
+				self.vehicle_contents = intake.vehicle_contents
+			if not self.checked_in_on and intake.checked_in_on:
+				self.checked_in_on = intake.checked_in_on
+			if not self.checked_in_by and intake.checked_in_by:
+				self.checked_in_by = intake.checked_in_by
 
 	def validate_intake_frozen(self):
 		if not self.is_new() and not frappe.flags.in_correction:

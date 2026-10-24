@@ -151,11 +151,11 @@ frappe.ui.form.on("Service Order", {
 			frm.disable_form();
 		}
 
-		// 1. Check-in Button (if Draft)
-		if (frm.doc.status === "Draft") {
-			frm.add_custom_button(__("Check In Vehicle"), () => {
-				frm.trigger("show_check_in_dialog");
-			}).addClass("btn-primary");
+		// 1. Intake Link Button
+		if (frm.doc.vehicle_intake) {
+			frm.add_custom_button(__("View Vehicle Intake"), () => {
+				frappe.set_route("Form", "Vehicle Intake", frm.doc.vehicle_intake);
+			}, __("Actions"));
 		}
 
 		// 2. Correct Intake Button (if intake frozen & active)

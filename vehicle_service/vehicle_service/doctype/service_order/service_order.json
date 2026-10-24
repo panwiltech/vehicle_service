@@ -49,6 +49,7 @@
   "activity_html",
   "tab_intake",
   "sb_intake",
+  "vehicle_intake",
   "odometer_in",
   "fuel_level",
   "service_package",
@@ -404,6 +405,14 @@
    "fieldname": "sb_intake",
    "fieldtype": "Section Break",
    "label": "Vehicle Intake"
+  },
+  {
+   "fieldname": "vehicle_intake",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vehicle Intake",
+   "options": "Vehicle Intake"
   },
   {
    "fieldname": "odometer_in",
