@@ -1169,12 +1169,64 @@ if (!window._jcb_mount_interval) {
 	window._jcb_mount_interval = setInterval(check_and_mount_jcb, 400);
 }
 
+function disable_desk_dock() {
+	try {
+		const path = (window.location.pathname || "").replace(/\/+$/, "");
+		const currentRoute = (window.frappe && frappe.get_route) ? frappe.get_route() : [];
+		const isDesktopPage =
+			(path === "/desk" || path === "/app" || path === "") &&
+			(!currentRoute || currentRoute.length === 0 || ["desktop", ""].includes(currentRoute[0]));
+
+		$("#desk-dock, .dock").hide().addClass("hidden");
+		$("body").removeClass("dock-pinned dock-open dock-active");
+
+		if (isDesktopPage) {
+			$("body").addClass("is-desk-home");
+			if (window.frappe && frappe.app && frappe.app.sidebar) {
+				frappe.app.sidebar.close();
+				if (frappe.app.sidebar.wrapper) {
+					frappe.app.sidebar.wrapper.hide();
+				}
+			}
+			$(".body-sidebar-container").hide();
+			return;
+		}
+
+		// On all other pages, workspaces and modules:
+		$("body").removeClass("is-desk-home");
+		$(".body-sidebar-container").removeClass("sidebar-hidden").show();
+		localStorage.setItem("desk-sidebar-collapsed", "0");
+		if (window.frappe && frappe.app) {
+			if (frappe.app.dock) {
+				frappe.app.dock.enabled = false;
+				frappe.app.dock.is_pinned = false;
+				if (frappe.app.dock.$dock) {
+					frappe.app.dock.$dock.hide().addClass("hidden");
+				}
+			}
+			if (frappe.app.sidebar) {
+				if (frappe.app.sidebar.wrapper) {
+					frappe.app.sidebar.wrapper.removeClass("sidebar-hidden").show();
+				}
+				if (!frappe.app.sidebar.sidebar_expanded) {
+					frappe.app.sidebar.open();
+				}
+			}
+		}
+	} catch (e) {}
+}
+
 $(document).ready(() => {
+	disable_desk_dock();
 	check_and_mount_jcb();
-	setTimeout(check_and_mount_jcb, 100);
-	setTimeout(check_and_mount_jcb, 300);
-	setTimeout(check_and_mount_jcb, 800);
-	setTimeout(check_and_mount_jcb, 1500);
+	setTimeout(() => { disable_desk_dock(); check_and_mount_jcb(); }, 100);
+	setTimeout(() => { disable_desk_dock(); check_and_mount_jcb(); }, 300);
+	setTimeout(() => { disable_desk_dock(); check_and_mount_jcb(); }, 800);
+	setTimeout(() => { disable_desk_dock(); check_and_mount_jcb(); }, 1500);
+});
+
+$(document).on("page-change", () => {
+	disable_desk_dock();
 });
 
 // Standalone page definition for /app/job-board
