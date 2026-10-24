@@ -182,7 +182,7 @@ def get_workshop_live_board(filters=None):
 		# Determine next action
 		next_action = "View Order"
 		if o.status == "Draft":
-			next_action = "Approve / Check In"
+			next_action = "View Intake / Order"
 		elif o.status == "Waiting for Parts":
 			next_action = "Issue Parts"
 		elif o.status == "Ready for Work":

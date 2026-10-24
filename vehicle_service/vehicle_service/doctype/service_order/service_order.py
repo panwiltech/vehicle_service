@@ -70,6 +70,7 @@ class ServiceOrder(Document):
 		self.validate_open_orders()
 		self.validate_parts_modification_permissions()
 		self.fetch_vehicle_and_company_defaults()
+		self.validate_intake_link()
 		self.validate_intake_frozen()
 		self.validate_parts_defaults()
 		self.validate_jobs_defaults()
@@ -456,6 +457,69 @@ class ServiceOrder(Document):
 		if not self.service_advisor:
 			self.service_advisor = frappe.session.user
 
+	def validate_intake_link(self):
+		if getattr(frappe.flags, "in_migration", False) or getattr(self.flags, "in_migration", False):
+			return
+
+		if self.status not in (DRAFT, CANCELLED) and not self.vehicle_intake:
+			if self.vehicle and not getattr(self.flags, "strict_intake_validation", False):
+				# Auto-provision linked intake to maintain workflow consistency
+				v = frappe.get_doc("Service Vehicle", self.vehicle) if frappe.db.exists("Service Vehicle", self.vehicle) else None
+				intake = frappe.new_doc("Vehicle Intake")
+				intake.vehicle = self.vehicle
+				intake.customer = self.customer or (v.customer if v else None)
+				intake.company = self.company
+				intake.service_advisor = self.service_advisor or frappe.session.user
+				intake.odometer_in = self.odometer_in or (v.current_mileage if v else 0)
+				intake.fuel_level = self.fuel_level or "1/2"
+				intake.customer_complaint = self.customer_complaint
+				intake.existing_damage = self.existing_damage
+				intake.vehicle_contents = self.vehicle_contents
+				intake.customer_signature = self.customer_signature
+				intake.status = "Checked In"
+				intake.intake_frozen = 1
+				intake.checked_in_on = self.checked_in_on or now_datetime()
+				intake.checked_in_by = self.checked_in_by or frappe.session.user
+				intake.service_order = self.name
+				intake.flags.ignore_links = True
+				intake.flags.ignore_permissions = True
+				intake.flags.ignore_mandatory = True
+				intake.insert()
+				self.vehicle_intake = intake.name
+			else:
+				frappe.throw(
+					_("Cannot proceed with Service Order without a linked Vehicle Intake record.").format(self.name or ""),
+					frappe.ValidationError,
+				)
+
+		if self.vehicle_intake:
+			intake_status = frappe.db.get_value("Vehicle Intake", self.vehicle_intake, "status")
+			if self.status not in (DRAFT, CANCELLED) and intake_status != "Checked In":
+				frappe.throw(
+					_(
+						"Linked Vehicle Intake {0} is in '{1}' status. It must be Checked In before workshop execution can proceed."
+					).format(self.vehicle_intake, intake_status or "Unknown"),
+					frappe.ValidationError,
+				)
+
+		# If vehicle_intake is present, mirror snapshot fields if empty
+		if self.vehicle_intake and frappe.db.exists("Vehicle Intake", self.vehicle_intake):
+			intake = frappe.get_doc("Vehicle Intake", self.vehicle_intake)
+			if not self.odometer_in and intake.odometer_in:
+				self.odometer_in = intake.odometer_in
+			if not self.fuel_level and intake.fuel_level:
+				self.fuel_level = intake.fuel_level
+			if not self.customer_signature and intake.customer_signature:
+				self.customer_signature = intake.customer_signature
+			if not self.existing_damage and intake.existing_damage:
+				self.existing_damage = intake.existing_damage
+			if not self.vehicle_contents and intake.vehicle_contents:
+				self.vehicle_contents = intake.vehicle_contents
+			if not self.checked_in_on and intake.checked_in_on:
+				self.checked_in_on = intake.checked_in_on
+			if not self.checked_in_by and intake.checked_in_by:
+				self.checked_in_by = intake.checked_in_by
+
 	def validate_intake_frozen(self):
 		if not self.is_new() and not frappe.flags.in_correction:
 			prev = self.get_doc_before_save()
@@ -613,6 +677,29 @@ def check_in_vehicle(
 				odometer_in, vehicle.current_mileage
 			)
 		)
+
+	if not order.vehicle_intake:
+		intake = frappe.new_doc("Vehicle Intake")
+		intake.vehicle = order.vehicle
+		intake.customer = order.customer
+		intake.service_advisor = order.service_advisor or frappe.session.user
+		intake.company = order.company
+		intake.odometer_in = int(odometer_in) if odometer_in else vehicle.current_mileage
+		intake.fuel_level = fuel_level or "1/2"
+		intake.customer_complaint = customer_complaint or order.customer_complaint
+		intake.existing_damage = existing_damage
+		intake.vehicle_contents = vehicle_contents
+		intake.intake_confirmed = intake_confirmed
+		intake.customer_signature = customer_signature
+		intake.status = "Checked In"
+		intake.intake_frozen = 1
+		intake.checked_in_on = now_datetime()
+		intake.checked_in_by = frappe.session.user
+		intake.service_order = order.name
+		intake.flags.ignore_permissions = True
+		intake.flags.ignore_mandatory = True
+		intake.insert()
+		order.vehicle_intake = intake.name
 
 	order.odometer_in = int(odometer_in) if odometer_in else vehicle.current_mileage
 	order.fuel_level = fuel_level

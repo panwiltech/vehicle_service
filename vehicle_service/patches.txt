@@ -6,6 +6,7 @@
 # Patches added in this section will be executed after doctypes are migrated
 vehicle_service.patches.v1_0.setup_production_workspaces
 vehicle_service.patches.v1_0.add_invoice_vehicle_and_remarks_fields
+vehicle_service.patches.v1_0.migrate_service_orders_to_vehicle_intakes
 
 [post_fixture_sync]
 # Patches added in this section will be executed after fixtures and customizations
