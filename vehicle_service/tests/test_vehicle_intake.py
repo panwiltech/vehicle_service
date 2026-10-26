@@ -129,3 +129,34 @@ class TestVehicleIntake(FrappeTestCase):
 		# Test double creation returns existing
 		res2 = create_service_order_from_intake(intake.name)
 		self.assertEqual(res2["service_order"], order_name)
+
+	def test_quick_register_vehicle_creates_service_vehicle(self):
+		from vehicle_service.vehicle_service.doctype.vehicle_intake.vehicle_intake import quick_register_vehicle
+
+		frappe.db.delete("Service Vehicle", {"registration_no": "WIZ-TEST-001"})
+		res = quick_register_vehicle(
+			registration_no="WIZ-TEST-001",
+			make="Toyota",
+			model="Corolla",
+			year=2022,
+			vin="VINWIZ1234567890",
+			customer="Test Intake Customer",
+			colour="White"
+		)
+		self.assertEqual(res["registration_no"], "WIZ-TEST-001")
+		self.assertTrue(frappe.db.exists("Service Vehicle", "WIZ-TEST-001"))
+		sv = frappe.get_doc("Service Vehicle", "WIZ-TEST-001")
+		self.assertEqual(sv.customer, "Test Intake Customer")
+		self.assertEqual(sv.make, "Toyota")
+		self.assertEqual(sv.model, "Corolla")
+
+		# Duplicate registration attempt raises error
+		with self.assertRaises(frappe.ValidationError):
+			quick_register_vehicle(
+				registration_no="WIZ-TEST-001",
+				make="Toyota",
+				model="Corolla",
+				year=2022,
+				vin="VINWIZ1234567890",
+				customer="Test Intake Customer"
+			)

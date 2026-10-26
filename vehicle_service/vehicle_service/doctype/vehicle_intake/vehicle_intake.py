@@ -174,3 +174,48 @@ def create_service_order_from_intake(intake_name: str) -> dict:
 		)
 
 	return {"status": "success", "service_order": order.name}
+
+
+@frappe.whitelist()
+def quick_register_vehicle(
+	registration_no: str,
+	make: str,
+	model: str,
+	year: int,
+	vin: str,
+	customer: str,
+	colour: str | None = None,
+):
+	if not registration_no or not str(registration_no).strip():
+		frappe.throw(_("Vehicle Registration Number is mandatory."), frappe.ValidationError)
+	if not customer:
+		frappe.throw(_("Customer is mandatory for registering a vehicle."), frappe.ValidationError)
+
+	reg = str(registration_no).strip().upper()
+	if frappe.db.exists("Service Vehicle", reg):
+		frappe.throw(
+			_("Vehicle with registration {0} already exists.").format(reg),
+			frappe.ValidationError,
+		)
+
+	veh = frappe.new_doc("Service Vehicle")
+	veh.registration_no = reg
+	veh.make = make
+	veh.model = model
+	veh.year = int(year) if year else None
+	veh.vin = vin
+	veh.customer = customer
+	veh.colour = colour
+	veh.flags.ignore_permissions = True
+	veh.insert()
+
+	return {
+		"status": "success",
+		"registration_no": veh.name,
+		"vehicle": veh.name,
+		"customer": veh.customer,
+		"make": veh.make,
+		"model": veh.model,
+		"year": veh.year,
+		"vin": veh.vin,
+	}

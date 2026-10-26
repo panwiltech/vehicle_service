@@ -70,3 +70,13 @@ class TestServiceOrderIntakeLink(FrappeTestCase):
 
 		with self.assertRaises(frappe.ValidationError):
 			order.insert(ignore_permissions=True)
+
+	def test_service_order_cannot_be_created_without_vehicle_intake(self):
+		order = frappe.new_doc("Service Order")
+		order.vehicle = "LINK-TEST-001"
+		order.customer = "Test Link Customer"
+		order.status = "Draft"
+		order.flags.strict_intake_validation = True
+
+		with self.assertRaises(frappe.ValidationError):
+			order.insert(ignore_permissions=True)

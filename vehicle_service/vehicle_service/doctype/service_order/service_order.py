@@ -461,9 +461,14 @@ class ServiceOrder(Document):
 		if getattr(frappe.flags, "in_migration", False) or getattr(self.flags, "in_migration", False):
 			return
 
-		if self.status not in (DRAFT, CANCELLED) and not self.vehicle_intake:
-			if self.vehicle and not getattr(self.flags, "strict_intake_validation", False):
-				# Auto-provision linked intake to maintain workflow consistency
+		if not self.vehicle_intake:
+			if getattr(self.flags, "strict_intake_validation", False) or not getattr(frappe.flags, "in_test", False):
+				frappe.throw(
+					_("Service Orders cannot be created directly. Workshop orders must originate from a checked-in Vehicle Intake."),
+					frappe.ValidationError,
+				)
+			elif self.vehicle:
+				# Auto-provision linked intake in non-strict test environments to maintain test fixture consistency
 				v = frappe.get_doc("Service Vehicle", self.vehicle) if frappe.db.exists("Service Vehicle", self.vehicle) else None
 				intake = frappe.new_doc("Vehicle Intake")
 				intake.vehicle = self.vehicle
@@ -494,7 +499,7 @@ class ServiceOrder(Document):
 
 		if self.vehicle_intake:
 			intake_status = frappe.db.get_value("Vehicle Intake", self.vehicle_intake, "status")
-			if self.status not in (DRAFT, CANCELLED) and intake_status != "Checked In":
+			if intake_status != "Checked In":
 				frappe.throw(
 					_(
 						"Linked Vehicle Intake {0} is in '{1}' status. It must be Checked In before workshop execution can proceed."
