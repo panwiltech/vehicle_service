@@ -80,6 +80,12 @@
    "label": "Estimate vs Actual",
    "link_to": "Estimate vs Actual",
    "type": "Report"
+  },
+  {
+   "color": "Blue",
+   "label": "Reports Dashboard",
+   "link_to": "reports-dashboard",
+   "type": "Page"
   }
  ],
  "links": [
@@ -328,6 +334,39 @@
    "link_count": 0,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports Dashboard",
+   "link_count": 0,
+   "link_to": "reports-dashboard",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Completed Service Orders",
+   "link_count": 0,
+   "link_to": "Completed Service Orders",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Service Order Throughput",
+   "link_count": 0,
+   "link_to": "Service Order Throughput",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
   },
   {
    "dependencies": "Service Order",

@@ -203,3 +203,42 @@ class TestWorkshopReports(FrappeTestCase):
 		self.assertIn("department_total", doc_summary)
 		self.assertIn("wip_snapshot", doc_summary)
 
+	def test_completed_service_orders_script_report(self):
+		from vehicle_service.vehicle_service.report.completed_service_orders.completed_service_orders import (
+			execute as execute_completed_orders,
+		)
+
+		columns, data, message, chart, summary = execute_completed_orders(
+			{"from_date": "2026-01-01", "to_date": "2026-12-31"}
+		)
+		self.assertGreater(len(columns), 0)
+		self.assertIsInstance(data, list)
+		self.assertIsNotNone(summary)
+
+	def test_service_order_throughput_script_report(self):
+		from vehicle_service.vehicle_service.report.service_order_throughput.service_order_throughput import (
+			execute as execute_throughput,
+		)
+
+		columns, data, message, chart, summary = execute_throughput(
+			{"from_date": "2026-10-01", "to_date": "2026-10-31"}
+		)
+		self.assertGreater(len(columns), 0)
+		self.assertIsInstance(data, list)
+		self.assertIsNotNone(chart)
+		self.assertIsNotNone(summary)
+
+	def test_reports_dashboard_metrics_api(self):
+		from vehicle_service.vehicle_service.page.reports_dashboard.reports_dashboard import (
+			get_dashboard_data,
+		)
+
+		res = get_dashboard_data({"from_date": "2026-10-01", "to_date": "2026-10-31"})
+		self.assertIn("cards", res)
+		self.assertIn("charts", res)
+		self.assertEqual(len(res["cards"]), 6)
+		self.assertIn("throughput", res["charts"])
+		self.assertIn("wip", res["charts"])
+		self.assertIn("technician", res["charts"])
+
+
