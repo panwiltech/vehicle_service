@@ -1,0 +1,375 @@
+{
+ "actions": [],
+ "autoname": "format:VINT-{YYYY}-{#####}",
+ "creation": "2026-10-24 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tab_intake",
+  "step_progress_html",
+  "sb_step_1_vehicle",
+  "vehicle",
+  "vehicle_description",
+  "license_plate",
+  "vin",
+  "cb_step_1",
+  "odometer_in",
+  "sb_step_2_customer",
+  "customer",
+  "customer_name",
+  "cb_step_2",
+  "driver_name",
+  "driver_phone",
+  "company",
+  "service_advisor",
+  "booking",
+  "sb_step_3_condition",
+  "fuel_level",
+  "customer_complaint",
+  "reception_notes",
+  "cb_step_3",
+  "existing_damage",
+  "vehicle_contents",
+  "sb_photos",
+  "intake_photos",
+  "sb_step_4_review",
+  "step_review_html",
+  "sb_signoff",
+  "intake_confirmed",
+  "cb_signoff",
+  "customer_signature",
+  "sb_status",
+  "status",
+  "service_order",
+  "cb_status",
+  "checked_in_on",
+  "checked_in_by",
+  "intake_frozen",
+  "tab_corrections",
+  "corrections"
+ ],
+ "fields": [
+  {
+   "fieldname": "tab_intake",
+   "fieldtype": "Tab Break",
+   "label": "Vehicle Intake"
+  },
+  {
+   "fieldname": "step_progress_html",
+   "fieldtype": "HTML",
+   "label": "Progress"
+  },
+  {
+   "fieldname": "sb_step_1_vehicle",
+   "fieldtype": "Section Break",
+   "label": "Step 1: Vehicle Identification"
+  },
+  {
+   "fieldname": "vehicle",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vehicle",
+   "options": "Service Vehicle",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "vehicle.make",
+   "fieldname": "vehicle_description",
+   "fieldtype": "Data",
+   "label": "Vehicle Make / Model",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "vehicle.registration_no",
+   "fieldname": "license_plate",
+   "fieldtype": "Data",
+   "label": "License Plate",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "vehicle.vin",
+   "fieldname": "vin",
+   "fieldtype": "Data",
+   "label": "VIN / Chassis No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_step_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "odometer_in",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Odometer In (km)"
+  },
+  {
+   "fieldname": "sb_step_2_customer",
+   "fieldtype": "Section Break",
+   "label": "Step 2: Customer Details"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_step_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "driver_name",
+   "fieldtype": "Data",
+   "label": "Driver / Agent Name"
+  },
+  {
+   "fieldname": "driver_phone",
+   "fieldtype": "Data",
+   "label": "Driver Phone",
+   "options": "Phone"
+  },
+  {
+   "default": "frappe.defaults.get_user_default(\"Company\")",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_advisor",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Service Advisor",
+   "options": "User"
+  },
+  {
+   "fieldname": "booking",
+   "fieldtype": "Link",
+   "label": "Service Booking",
+   "options": "Service Booking"
+  },
+  {
+   "fieldname": "sb_step_3_condition",
+   "fieldtype": "Section Break",
+   "label": "Step 3: Vehicle Condition & Scope"
+  },
+  {
+   "default": "1/2",
+   "fieldname": "fuel_level",
+   "fieldtype": "Select",
+   "label": "Fuel Level",
+   "options": "\nEmpty\n1/4\n1/2\n3/4\nFull"
+  },
+  {
+   "fieldname": "customer_complaint",
+   "fieldtype": "Small Text",
+   "label": "Customer Reported Complaint / Requested Work"
+  },
+  {
+   "fieldname": "reception_notes",
+   "fieldtype": "Small Text",
+   "label": "Reception Notes"
+  },
+  {
+   "fieldname": "cb_step_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "existing_damage",
+   "fieldtype": "Small Text",
+   "label": "Existing Scratches / Dents / Damages"
+  },
+  {
+   "fieldname": "vehicle_contents",
+   "fieldtype": "Small Text",
+   "label": "Valuables / Tools / Spare Wheel Declared"
+  },
+  {
+   "fieldname": "sb_photos",
+   "fieldtype": "Section Break",
+   "label": "Inspection Photos"
+  },
+  {
+   "fieldname": "intake_photos",
+   "fieldtype": "Table",
+   "label": "Intake Photos",
+   "options": "Vehicle Intake Photo"
+  },
+  {
+   "fieldname": "sb_step_4_review",
+   "fieldtype": "Section Break",
+   "label": "Step 4: Review & Sign-Off"
+  },
+  {
+   "fieldname": "step_review_html",
+   "fieldtype": "HTML",
+   "label": "Intake Review Summary"
+  },
+  {
+   "fieldname": "sb_signoff",
+   "fieldtype": "Section Break",
+   "label": "Customer Sign-Off"
+  },
+  {
+   "default": "1",
+   "fieldname": "intake_confirmed",
+   "fieldtype": "Check",
+   "label": "Customer confirmed intake details"
+  },
+  {
+   "fieldname": "cb_signoff",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer_signature",
+   "fieldtype": "Signature",
+   "label": "Customer Signature"
+  },
+  {
+   "fieldname": "sb_status",
+   "fieldtype": "Section Break",
+   "label": "Intake Status & Tracking"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nChecked In\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "service_order",
+   "fieldtype": "Link",
+   "label": "Service Order",
+   "options": "Service Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "checked_in_on",
+   "fieldtype": "Datetime",
+   "label": "Checked In On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checked_in_by",
+   "fieldtype": "Link",
+   "label": "Checked In By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "intake_frozen",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Intake Frozen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tab_corrections",
+   "fieldtype": "Tab Break",
+   "label": "Corrections"
+  },
+  {
+   "fieldname": "corrections",
+   "fieldtype": "Table",
+   "label": "Intake Corrections",
+   "options": "Service Order Correction"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-26 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Vehicle Intake",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Advisor",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Service Receptionist",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Workshop Supervisor",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "vehicle",
+ "track_changes": 1
+}
