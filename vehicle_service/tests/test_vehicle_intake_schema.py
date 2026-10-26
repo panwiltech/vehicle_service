@@ -23,3 +23,13 @@ class TestVehicleIntakeSchema(FrappeTestCase):
 		self.assertTrue(bool(meta.istable), "Vehicle Intake Photo must be a child table")
 		self.assertTrue(meta.has_field("photo"))
 		self.assertEqual(meta.get_field("photo").fieldtype, "Attach Image")
+
+	def test_vehicle_intake_has_step_sections(self):
+		frappe.reload_doc("vehicle_service", "doctype", "vehicle_intake", force=True)
+		meta = frappe.get_meta("Vehicle Intake")
+		self.assertTrue(meta.has_field("step_progress_html"), "Missing step_progress_html")
+		self.assertTrue(meta.has_field("sb_step_1_vehicle"), "Missing sb_step_1_vehicle")
+		self.assertTrue(meta.has_field("sb_step_2_customer"), "Missing sb_step_2_customer")
+		self.assertTrue(meta.has_field("sb_step_3_condition"), "Missing sb_step_3_condition")
+		self.assertTrue(meta.has_field("sb_step_4_review"), "Missing sb_step_4_review")
+		self.assertTrue(meta.has_field("step_review_html"), "Missing step_review_html")

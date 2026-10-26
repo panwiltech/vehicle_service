@@ -6,42 +6,45 @@
  "engine": "InnoDB",
  "field_order": [
   "tab_intake",
-  "sb_vehicle",
+  "step_progress_html",
+  "sb_step_1_vehicle",
   "vehicle",
   "vehicle_description",
   "license_plate",
   "vin",
-  "cb_customer",
+  "cb_step_1",
+  "odometer_in",
+  "sb_step_2_customer",
   "customer",
   "customer_name",
+  "cb_step_2",
   "driver_name",
   "driver_phone",
   "company",
-  "sb_status",
-  "status",
   "service_advisor",
   "booking",
-  "cb_status",
-  "service_order",
-  "checked_in_on",
-  "checked_in_by",
-  "intake_frozen",
-  "sb_condition",
-  "odometer_in",
+  "sb_step_3_condition",
   "fuel_level",
-  "cb_condition",
   "customer_complaint",
   "reception_notes",
-  "sb_damages",
+  "cb_step_3",
   "existing_damage",
-  "cb_damages",
   "vehicle_contents",
   "sb_photos",
   "intake_photos",
+  "sb_step_4_review",
+  "step_review_html",
   "sb_signoff",
   "intake_confirmed",
   "cb_signoff",
   "customer_signature",
+  "sb_status",
+  "status",
+  "service_order",
+  "cb_status",
+  "checked_in_on",
+  "checked_in_by",
+  "intake_frozen",
   "tab_corrections",
   "corrections"
  ],
@@ -52,9 +55,14 @@
    "label": "Vehicle Intake"
   },
   {
-   "fieldname": "sb_vehicle",
+   "fieldname": "step_progress_html",
+   "fieldtype": "HTML",
+   "label": "Progress"
+  },
+  {
+   "fieldname": "sb_step_1_vehicle",
    "fieldtype": "Section Break",
-   "label": "Vehicle & Customer"
+   "label": "Step 1: Vehicle Identification"
   },
   {
    "fieldname": "vehicle",
@@ -87,8 +95,19 @@
    "read_only": 1
   },
   {
-   "fieldname": "cb_customer",
+   "fieldname": "cb_step_1",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "odometer_in",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Odometer In (km)"
+  },
+  {
+   "fieldname": "sb_step_2_customer",
+   "fieldtype": "Section Break",
+   "label": "Step 2: Customer Details"
   },
   {
    "fieldname": "customer",
@@ -105,6 +124,10 @@
    "fieldtype": "Data",
    "label": "Customer Name",
    "read_only": 1
+  },
+  {
+   "fieldname": "cb_step_2",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "driver_name",
@@ -126,21 +149,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "sb_status",
-   "fieldtype": "Section Break",
-   "label": "Status & References"
-  },
-  {
-   "default": "Draft",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Status",
-   "options": "Draft\nChecked In\nCancelled",
-   "reqd": 1
-  },
-  {
    "fieldname": "service_advisor",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -154,8 +162,96 @@
    "options": "Service Booking"
   },
   {
-   "fieldname": "cb_status",
+   "fieldname": "sb_step_3_condition",
+   "fieldtype": "Section Break",
+   "label": "Step 3: Vehicle Condition & Scope"
+  },
+  {
+   "default": "1/2",
+   "fieldname": "fuel_level",
+   "fieldtype": "Select",
+   "label": "Fuel Level",
+   "options": "\nEmpty\n1/4\n1/2\n3/4\nFull"
+  },
+  {
+   "fieldname": "customer_complaint",
+   "fieldtype": "Small Text",
+   "label": "Customer Reported Complaint / Requested Work"
+  },
+  {
+   "fieldname": "reception_notes",
+   "fieldtype": "Small Text",
+   "label": "Reception Notes"
+  },
+  {
+   "fieldname": "cb_step_3",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "existing_damage",
+   "fieldtype": "Small Text",
+   "label": "Existing Scratches / Dents / Damages"
+  },
+  {
+   "fieldname": "vehicle_contents",
+   "fieldtype": "Small Text",
+   "label": "Valuables / Tools / Spare Wheel Declared"
+  },
+  {
+   "fieldname": "sb_photos",
+   "fieldtype": "Section Break",
+   "label": "Inspection Photos"
+  },
+  {
+   "fieldname": "intake_photos",
+   "fieldtype": "Table",
+   "label": "Intake Photos",
+   "options": "Vehicle Intake Photo"
+  },
+  {
+   "fieldname": "sb_step_4_review",
+   "fieldtype": "Section Break",
+   "label": "Step 4: Review & Sign-Off"
+  },
+  {
+   "fieldname": "step_review_html",
+   "fieldtype": "HTML",
+   "label": "Intake Review Summary"
+  },
+  {
+   "fieldname": "sb_signoff",
+   "fieldtype": "Section Break",
+   "label": "Customer Sign-Off"
+  },
+  {
+   "default": "1",
+   "fieldname": "intake_confirmed",
+   "fieldtype": "Check",
+   "label": "Customer confirmed intake details"
+  },
+  {
+   "fieldname": "cb_signoff",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer_signature",
+   "fieldtype": "Signature",
+   "label": "Customer Signature"
+  },
+  {
+   "fieldname": "sb_status",
+   "fieldtype": "Section Break",
+   "label": "Intake Status & Tracking"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nChecked In\nCancelled",
+   "reqd": 1
   },
   {
    "fieldname": "service_order",
@@ -163,6 +259,10 @@
    "label": "Service Order",
    "options": "Service Order",
    "read_only": 1
+  },
+  {
+   "fieldname": "cb_status",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "checked_in_on",
@@ -186,88 +286,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "sb_condition",
-   "fieldtype": "Section Break",
-   "label": "Arrival Readings & Scope"
-  },
-  {
-   "fieldname": "odometer_in",
-   "fieldtype": "Int",
-   "in_list_view": 1,
-   "label": "Odometer In (km)"
-  },
-  {
-   "default": "1/2",
-   "fieldname": "fuel_level",
-   "fieldtype": "Select",
-   "label": "Fuel Level",
-   "options": "\nEmpty\n1/4\n1/2\n3/4\nFull"
-  },
-  {
-   "fieldname": "cb_condition",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "customer_complaint",
-   "fieldtype": "Small Text",
-   "label": "Customer Reported Complaint / Requested Work"
-  },
-  {
-   "fieldname": "reception_notes",
-   "fieldtype": "Small Text",
-   "label": "Reception Notes"
-  },
-  {
-   "fieldname": "sb_damages",
-   "fieldtype": "Section Break",
-   "label": "Condition, Damages & Items Received"
-  },
-  {
-   "fieldname": "existing_damage",
-   "fieldtype": "Small Text",
-   "label": "Existing Scratches / Dents / Damages"
-  },
-  {
-   "fieldname": "cb_damages",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "vehicle_contents",
-   "fieldtype": "Small Text",
-   "label": "Valuables / Tools / Spare Wheel Declared"
-  },
-  {
-   "fieldname": "sb_photos",
-   "fieldtype": "Section Break",
-   "label": "Inspection Photos"
-  },
-  {
-   "fieldname": "intake_photos",
-   "fieldtype": "Table",
-   "label": "Intake Photos",
-   "options": "Vehicle Intake Photo"
-  },
-  {
-   "fieldname": "sb_signoff",
-   "fieldtype": "Section Break",
-   "label": "Customer Acknowledgement & Sign-off"
-  },
-  {
-   "default": "1",
-   "fieldname": "intake_confirmed",
-   "fieldtype": "Check",
-   "label": "Customer confirmed intake details"
-  },
-  {
-   "fieldname": "cb_signoff",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "customer_signature",
-   "fieldtype": "Signature",
-   "label": "Customer Signature"
-  },
-  {
    "fieldname": "tab_corrections",
    "fieldtype": "Tab Break",
    "label": "Corrections"
@@ -281,7 +299,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-24 10:00:00.000000",
+ "modified": "2026-10-26 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Vehicle Service",
  "name": "Vehicle Intake",
