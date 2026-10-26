@@ -95,9 +95,18 @@ def complete_check_in(intake_name: str, customer_signature: str | None = None):
 	try:
 		settings = frappe.get_cached_doc("Vehicle Service Settings")
 		if settings.reception_location:
-			vehicle.move_location(settings.reception_location, _("Vehicle intake check-in"), intake.name)
+			service_order = (
+				intake.service_order
+				if intake.service_order and frappe.db.exists("Service Order", intake.service_order)
+				else None
+			)
+			vehicle.move_location(
+				to_location=settings.reception_location,
+				reason=_("Vehicle intake check-in: {0}").format(intake.name),
+				service_order=service_order,
+			)
 	except Exception:
-		pass
+		frappe.log_error("Failed to move vehicle location during check-in")
 
 	vehicle.save(ignore_permissions=True)
 

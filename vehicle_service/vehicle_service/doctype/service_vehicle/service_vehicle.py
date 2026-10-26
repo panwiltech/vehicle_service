@@ -91,7 +91,9 @@ class ServiceVehicle(Document):
 
 		movement = frappe.new_doc("Vehicle Movement")
 		movement.vehicle = self.name
-		movement.service_order = service_order or self.current_service_order
+		order = service_order or self.current_service_order
+		if order and frappe.db.exists("Service Order", order):
+			movement.service_order = order
 		movement.from_location = from_loc
 		movement.to_location = to_location
 		movement.moved_on = now_datetime()
