@@ -63,6 +63,21 @@ def map_order_pause_reason(reason: str | None) -> str | None:
 	return "Other"
 
 
+def determine_status_timestamps(status: str | None, work_started_on, work_completed_on, now=None):
+	"""Determines authoritative start and completion timestamps based on service order status."""
+	now = now or now_datetime()
+	started = work_started_on
+	completed = work_completed_on
+
+	if status in {"In Progress", "QC", "Ready for Billing", "Invoiced", "Ready for Collection", "Delivered"} and not started:
+		started = now
+
+	if status in {"Ready for Billing", "Invoiced", "Ready for Collection", "Delivered"} and not completed:
+		completed = now
+
+	return started, completed
+
+
 class ServiceOrder(Document):
 	def validate(self):
 		self.validate_completed_job_lock()
@@ -77,6 +92,12 @@ class ServiceOrder(Document):
 		self.sync_jobs_with_service_job_docs()
 		self.recalculate_parts_summary()
 		self.update_board_fields()
+		self.update_status_timestamps()
+
+	def update_status_timestamps(self):
+		self.work_started_on, self.work_completed_on = determine_status_timestamps(
+			self.status, getattr(self, "work_started_on", None), getattr(self, "work_completed_on", None)
+		)
 
 	def validate_parts_modification_permissions(self):
 		if getattr(self.flags, "ignore_permissions", False) or getattr(frappe.flags, "in_quotation_sync", False):
