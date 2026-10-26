@@ -43,6 +43,8 @@ class TestVehicleIntake(FrappeTestCase):
 		self.assertEqual(intake.customer, "Test Intake Customer")
 		self.assertEqual(intake.status, "Draft")
 		self.assertEqual(intake.license_plate, "INTAKE-TEST-001")
+		self.assertEqual(intake.service_advisor, frappe.session.user)
+		self.assertTrue(bool(intake.company))
 
 	def test_complete_check_in_validates_odometer(self):
 		intake = frappe.new_doc("Vehicle Intake")

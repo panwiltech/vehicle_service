@@ -12,27 +12,24 @@
   "vehicle_description",
   "license_plate",
   "vin",
-  "cb_step_1",
   "odometer_in",
-  "sb_step_2_customer",
+  "cb_step_1",
   "customer",
   "customer_name",
-  "cb_step_2",
   "driver_name",
   "driver_phone",
-  "company",
   "service_advisor",
   "booking",
-  "sb_step_3_condition",
+  "sb_step_2_condition",
   "fuel_level",
   "customer_complaint",
   "reception_notes",
-  "cb_step_3",
+  "cb_step_2",
   "existing_damage",
   "vehicle_contents",
   "sb_photos",
   "intake_photos",
-  "sb_step_4_review",
+  "sb_step_3_review",
   "step_review_html",
   "sb_signoff",
   "intake_confirmed",
@@ -41,6 +38,7 @@
   "sb_status",
   "status",
   "service_order",
+  "company",
   "cb_status",
   "checked_in_on",
   "checked_in_by",
@@ -62,7 +60,7 @@
   {
    "fieldname": "sb_step_1_vehicle",
    "fieldtype": "Section Break",
-   "label": "Step 1: Vehicle Identification"
+   "label": "Step 1: Vehicle & Customer Details"
   },
   {
    "fieldname": "vehicle",
@@ -95,19 +93,14 @@
    "read_only": 1
   },
   {
-   "fieldname": "cb_step_1",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "odometer_in",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Odometer In (km)"
   },
   {
-   "fieldname": "sb_step_2_customer",
-   "fieldtype": "Section Break",
-   "label": "Step 2: Customer Details"
+   "fieldname": "cb_step_1",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "customer",
@@ -126,10 +119,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "cb_step_2",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "driver_name",
    "fieldtype": "Data",
    "label": "Driver / Agent Name"
@@ -141,7 +130,7 @@
    "options": "Phone"
   },
   {
-   "default": "frappe.defaults.get_user_default(\"Company\")",
+   "remember_last_selected_value": 1,
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
@@ -149,6 +138,7 @@
    "reqd": 1
   },
   {
+   "default": "__user",
    "fieldname": "service_advisor",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -162,9 +152,9 @@
    "options": "Service Booking"
   },
   {
-   "fieldname": "sb_step_3_condition",
+   "fieldname": "sb_step_2_condition",
    "fieldtype": "Section Break",
-   "label": "Step 3: Vehicle Condition & Scope"
+   "label": "Step 2: Vehicle Condition & Scope"
   },
   {
    "default": "1/2",
@@ -184,7 +174,7 @@
    "label": "Reception Notes"
   },
   {
-   "fieldname": "cb_step_3",
+   "fieldname": "cb_step_2",
    "fieldtype": "Column Break"
   },
   {
@@ -209,9 +199,9 @@
    "options": "Vehicle Intake Photo"
   },
   {
-   "fieldname": "sb_step_4_review",
+   "fieldname": "sb_step_3_review",
    "fieldtype": "Section Break",
-   "label": "Step 4: Review & Sign-Off"
+   "label": "Step 3: Review & Sign-Off"
   },
   {
    "fieldname": "step_review_html",

@@ -12,7 +12,26 @@ CANCELLED = "Cancelled"
 
 
 class VehicleIntake(Document):
+	def before_insert(self):
+		if not self.service_advisor or self.service_advisor == "frappe.session.user":
+			self.service_advisor = frappe.session.user
+		if not self.company or "frappe.defaults" in str(self.company):
+			self.company = (
+				frappe.defaults.get_user_default("Company")
+				or frappe.db.get_single_value("Global Defaults", "default_company")
+				or frappe.db.get_value("Company", {}, "name")
+			)
+
 	def validate(self):
+		if not self.service_advisor or self.service_advisor == "frappe.session.user":
+			self.service_advisor = frappe.session.user
+		if not self.company or "frappe.defaults" in str(self.company):
+			self.company = (
+				frappe.defaults.get_user_default("Company")
+				or frappe.db.get_single_value("Global Defaults", "default_company")
+				or frappe.db.get_value("Company", {}, "name")
+			)
+
 		if self.vehicle:
 			v = frappe.get_doc("Service Vehicle", self.vehicle)
 			if not self.customer:

@@ -24,8 +24,8 @@ after_install = "vehicle_service.install.after_install"
 after_migrate = "vehicle_service.install.after_migrate"
 extend_bootinfo = "vehicle_service.boot.extend_bootinfo"
 
-app_include_js = "/assets/vehicle_service/js/job_board.js?v=20261024-5"
-app_include_css = "/assets/vehicle_service/css/job_board.css?v=20261024-5"
+app_include_js = "/assets/vehicle_service/js/job_board.js?v=20261026-1"
+app_include_css = "/assets/vehicle_service/css/job_board.css?v=20261026-1"
 
 # Document Events
 doc_events = {

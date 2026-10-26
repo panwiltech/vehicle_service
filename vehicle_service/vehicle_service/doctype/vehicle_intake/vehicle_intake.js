@@ -7,12 +7,47 @@ frappe.ui.form.on("Vehicle Intake", {
 	},
 
 	onload(frm) {
+		if (!frm.doc.service_advisor || frm.doc.service_advisor === "frappe.session.user") {
+			frm.set_value("service_advisor", frappe.session.user);
+		}
 		if (frm.doc.vehicle) {
 			frm.trigger("fetch_vehicle_meta");
 		}
 	},
 
 	refresh(frm) {
+		if (frm.page && frm.page.wrapper) {
+			frm.page.wrapper.addClass("vehicle-intake-wide-form");
+			if (!frm._wide_style_injected) {
+				frm._wide_style_injected = true;
+				const wideStyle = `
+					<style id="vehicle-intake-wide-form-style">
+						.vehicle-intake-wide-form .std-form-layout .section-head,
+						.vehicle-intake-wide-form .std-form-layout .section-body {
+							max-width: 100% !important;
+							margin-left: 0 !important;
+							margin-right: 0 !important;
+							padding-left: 14px !important;
+							padding-right: 14px !important;
+						}
+						.vehicle-intake-wide-form .form-section {
+							padding-left: 14px !important;
+							padding-right: 14px !important;
+						}
+						.vehicle-intake-wide-form .form-layout .form-page {
+							padding-left: 8px !important;
+							padding-right: 8px !important;
+						}
+						.vehicle-intake-wide-form .form-section-description,
+						.vehicle-intake-wide-form .form-footer {
+							max-width: 100% !important;
+						}
+					</style>
+				`;
+				$(wideStyle).appendTo(frm.page.wrapper);
+			}
+		}
+
 		// 1. Wizard Setup (when Draft or New)
 		if (frm.doc.status === "Draft") {
 			frm.trigger("setup_wizard");
@@ -110,27 +145,35 @@ frappe.ui.form.on("Vehicle Intake", {
 
 	setup_wizard(frm) {
 		frm._current_step = frm._current_step || 1;
+		if (!frm.doc.service_advisor || frm.doc.service_advisor === "frappe.session.user") {
+			frm.set_value("service_advisor", frappe.session.user);
+		}
+		if (!frm.doc.company || (frm.doc.company && frm.doc.company.includes("frappe.defaults"))) {
+			const defaultCompany = frappe.defaults.get_default("Company") || frappe.defaults.get_user_default("Company");
+			if (defaultCompany) {
+				frm.set_value("company", defaultCompany);
+			}
+		}
 		frm.trigger("render_wizard_view");
 	},
 
 	show_all_sections(frm) {
 		frm.set_df_property("sb_step_1_vehicle", "hidden", 0);
-		frm.set_df_property("sb_step_2_customer", "hidden", 0);
-		frm.set_df_property("sb_step_3_condition", "hidden", 0);
+		frm.set_df_property("sb_step_2_condition", "hidden", 0);
 		frm.set_df_property("sb_photos", "hidden", 0);
-		frm.set_df_property("sb_step_4_review", "hidden", 0);
+		frm.set_df_property("sb_step_3_review", "hidden", 0);
 		frm.set_df_property("sb_signoff", "hidden", 0);
 		frm.set_df_property("sb_status", "hidden", 0);
 	},
 
 	render_completed_banner(frm) {
 		const html = `
-			<div class="alert alert-success d-flex align-items-center justify-content-between p-3" style="border-radius: 8px; margin-bottom: 20px;">
+			<div class="alert alert-success d-flex align-items-center justify-content-between p-2 mb-2" style="border-radius: 6px;">
 				<div>
-					<h5 class="mb-1" style="font-weight: 600; color: #155724;"><i class="fa fa-check-circle mr-2 text-success"></i>${__("Vehicle Checked In")}</h5>
+					<h6 class="mb-0 font-weight-bold" style="color: #155724;"><i class="fa fa-check-circle mr-1 text-success"></i>${__("Vehicle Checked In")}</h6>
 					<div class="text-muted small">${__("Checked in on")} <strong>${frm.doc.checked_in_on || frm.doc.modified}</strong> ${__("by")} <strong>${frm.doc.checked_in_by || frm.doc.owner}</strong>. ${__("Arrival details and signature are locked.")}</div>
 				</div>
-				${frm.doc.service_order ? `<button class="btn btn-sm btn-primary" onclick="frappe.set_route('Form', 'Service Order', '${frm.doc.service_order}')"><i class="fa fa-wrench mr-1"></i>${__("View Service Order")} (${frm.doc.service_order})</button>` : ''}
+				${frm.doc.service_order ? `<button class="btn btn-xs btn-primary" onclick="frappe.set_route('Form', 'Service Order', '${frm.doc.service_order}')"><i class="fa fa-wrench mr-1"></i>${__("View Service Order")} (${frm.doc.service_order})</button>` : ''}
 			</div>
 		`;
 		frm.set_df_property("step_progress_html", "options", html);
@@ -141,18 +184,17 @@ frappe.ui.form.on("Vehicle Intake", {
 
 		// Toggle section visibility based on step
 		frm.set_df_property("sb_step_1_vehicle", "hidden", step === 1 ? 0 : 1);
-		frm.set_df_property("sb_step_2_customer", "hidden", step === 2 ? 0 : 1);
-		frm.set_df_property("sb_step_3_condition", "hidden", step === 3 ? 0 : 1);
-		frm.set_df_property("sb_photos", "hidden", step === 3 ? 0 : 1);
-		frm.set_df_property("sb_step_4_review", "hidden", step === 4 ? 0 : 1);
-		frm.set_df_property("sb_signoff", "hidden", step === 4 ? 0 : 1);
+		frm.set_df_property("sb_step_2_condition", "hidden", step === 2 ? 0 : 1);
+		frm.set_df_property("sb_photos", "hidden", step === 2 ? 0 : 1);
+		frm.set_df_property("sb_step_3_review", "hidden", step === 3 ? 0 : 1);
+		frm.set_df_property("sb_signoff", "hidden", step === 3 ? 0 : 1);
 		frm.set_df_property("sb_status", "hidden", 1); // keep status collapsed in wizard mode
 
 		// Render Stepper HTML
 		frm.trigger("render_stepper_indicator");
 
-		// If on Step 4, compile review summary
-		if (step === 4) {
+		// If on Step 3, compile review summary
+		if (step === 3) {
 			frm.trigger("render_review_card");
 		}
 	},
@@ -160,10 +202,9 @@ frappe.ui.form.on("Vehicle Intake", {
 	render_stepper_indicator(frm) {
 		const current = frm._current_step || 1;
 		const steps = [
-			{ num: 1, title: __("Vehicle Identification"), desc: __("Vehicle & Mileage") },
-			{ num: 2, title: __("Customer Details"), desc: __("Owner & Driver") },
-			{ num: 3, title: __("Condition & Scope"), desc: __("Complaint, Fuel & Photos") },
-			{ num: 4, title: __("Review & Sign-Off"), desc: __("Summary & Signature") }
+			{ num: 1, title: __("Vehicle & Customer"), desc: __("Vehicle & Owner Info") },
+			{ num: 2, title: __("Condition & Scope"), desc: __("Complaint, Fuel & Photos") },
+			{ num: 3, title: __("Review & Sign-Off"), desc: __("Summary & Signature") }
 		];
 
 		let stepsHtml = steps.map(s => {
@@ -188,7 +229,7 @@ frappe.ui.form.on("Vehicle Intake", {
 		}).join('<div class="step-connector"></div>');
 
 		let navButtonsHtml = `
-			<div class="intake-wizard-nav d-flex justify-content-between align-items-center mt-3 pt-3" style="border-top: 1px solid var(--border-color, #e2e8f0);">
+			<div class="intake-wizard-nav d-flex justify-content-between align-items-center mt-2 pt-2" style="border-top: 1px solid var(--border-color, #e2e8f0);">
 				<div>
 					${current > 1 ? `
 						<button class="btn btn-secondary btn-sm btn-wizard-back mr-2">
@@ -201,10 +242,10 @@ frappe.ui.form.on("Vehicle Intake", {
 					`}
 				</div>
 				<div class="text-muted small">
-					${__("Step {0} of {1}", [current, 4])}
+					${__("Step {0} of {1}", [current, 3])}
 				</div>
 				<div>
-					${current < 4 ? `
+					${current < 3 ? `
 						<button class="btn btn-primary btn-sm btn-wizard-next">
 							${__("Next Step")}<i class="fa fa-arrow-right ml-1"></i>
 						</button>
@@ -222,10 +263,10 @@ frappe.ui.form.on("Vehicle Intake", {
 				.intake-stepper-container {
 					background: var(--card-bg, #ffffff);
 					border: 1px solid var(--border-color, #e2e8f0);
-					border-radius: 8px;
-					padding: 16px 20px;
-					margin-bottom: 20px;
-					box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+					border-radius: 6px;
+					padding: 8px 12px;
+					margin-bottom: 8px;
+					box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 				}
 				.intake-stepper-header {
 					display: flex;
@@ -236,28 +277,28 @@ frappe.ui.form.on("Vehicle Intake", {
 					display: flex;
 					align-items: center;
 					cursor: pointer;
-					gap: 10px;
+					gap: 6px;
 					user-select: none;
 				}
 				.step-badge .step-num {
 					display: inline-flex;
 					align-items: center;
 					justify-content: center;
-					width: 32px;
-					height: 32px;
+					width: 26px;
+					height: 26px;
 					border-radius: 50%;
 					font-weight: 600;
-					font-size: 13px;
+					font-size: 11px;
 					background: var(--bg-light-gray, #f1f5f9);
 					color: var(--text-muted, #64748b);
-					border: 2px solid var(--border-color, #cbd5e1);
+					border: 1.5px solid var(--border-color, #cbd5e1);
 					transition: all 0.2s ease;
 				}
 				.intake-step-item.active .step-badge .step-num {
 					background: var(--primary, #1d4ed8);
 					color: #ffffff;
 					border-color: var(--primary, #1d4ed8);
-					box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.2);
+					box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.2);
 				}
 				.intake-step-item.completed .step-badge .step-num {
 					background: #10b981;
@@ -266,21 +307,21 @@ frappe.ui.form.on("Vehicle Intake", {
 				}
 				.intake-step-item .step-title {
 					font-weight: 600;
-					font-size: 13px;
+					font-size: 12px;
 					color: var(--text-color, #1e293b);
 				}
 				.intake-step-item.active .step-title {
 					color: var(--primary, #1d4ed8);
 				}
 				.intake-step-item .step-desc {
-					font-size: 11px;
-					line-height: 1.2;
+					font-size: 10px;
+					line-height: 1.1;
 				}
 				.step-connector {
 					flex: 1;
 					height: 2px;
 					background: var(--border-color, #e2e8f0);
-					margin: 0 12px;
+					margin: 0 8px;
 				}
 			</style>
 			<div class="intake-stepper-container">
@@ -312,7 +353,7 @@ frappe.ui.form.on("Vehicle Intake", {
 			$wrapper.off("click", ".btn-wizard-next").on("click", ".btn-wizard-next", function (e) {
 				e.preventDefault();
 				if (frm.trigger("validate_step", frm._current_step)) {
-					frm._current_step = Math.min(4, (frm._current_step || 1) + 1);
+					frm._current_step = Math.min(3, (frm._current_step || 1) + 1);
 					frm.trigger("render_wizard_view");
 				}
 			});
@@ -361,20 +402,17 @@ frappe.ui.form.on("Vehicle Intake", {
 				});
 				return false;
 			}
-		}
-
-		if (step === 2) {
 			if (!frm.doc.customer) {
 				frappe.msgprint({
 					title: __("Customer Required"),
-					message: __("Please select a Customer for this intake."),
+					message: __("Please select or confirm the Customer for this vehicle."),
 					indicator: "orange"
 				});
 				return false;
 			}
 		}
 
-		if (step === 3) {
+		if (step === 2) {
 			if (!frm.doc.customer_complaint || !frm.doc.customer_complaint.trim()) {
 				frappe.msgprint({
 					title: __("Customer Complaint Required"),
@@ -393,7 +431,7 @@ frappe.ui.form.on("Vehicle Intake", {
 			}
 		}
 
-		if (step === 4) {
+		if (step === 3) {
 			if (!frm.doc.intake_confirmed) {
 				frappe.msgprint({
 					title: __("Confirmation Required"),
@@ -418,8 +456,8 @@ frappe.ui.form.on("Vehicle Intake", {
 	render_review_card(frm) {
 		const photoCount = (frm.doc.intake_photos || []).length;
 		const html = `
-			<div class="card p-3 my-2" style="background: var(--bg-light-gray, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px;">
-				<h6 class="font-weight-bold text-uppercase mb-3" style="letter-spacing: 0.5px; color: var(--text-color, #1e293b);">
+			<div class="card p-2.5 my-1.5" style="background: var(--bg-light-gray, #f8fafc); border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px;">
+				<h6 class="font-weight-bold text-uppercase mb-2" style="letter-spacing: 0.5px; font-size: 12px; color: var(--text-color, #1e293b);">
 					<i class="fa fa-file-text-o mr-1"></i>${__("Vehicle Intake Summary")}
 				</h6>
 				<div class="row">
@@ -470,9 +508,17 @@ frappe.ui.form.on("Vehicle Intake", {
 	},
 
 	submit_complete_check_in(frm) {
-		if (!frm.trigger("validate_step", 4)) return;
+		if (!frm.trigger("validate_step", 3)) return;
 
-		frm.save().then(() => {
+		const proceed_with_finalize = () => {
+			if (frm.is_new()) {
+				frappe.msgprint({
+					title: __("Save Required"),
+					message: __("Please save the Vehicle Intake before completing check-in."),
+					indicator: "orange"
+				});
+				return;
+			}
 			frappe.confirm(
 				__("Are you sure you want to complete check-in? Arrival details and signature will be permanently locked."),
 				() => {
@@ -496,7 +542,17 @@ frappe.ui.form.on("Vehicle Intake", {
 					});
 				}
 			);
-		});
+		};
+
+		if (frm.is_new() || frm.is_dirty()) {
+			frm.save().then(() => {
+				if (!frm.is_new()) {
+					proceed_with_finalize();
+				}
+			});
+		} else {
+			proceed_with_finalize();
+		}
 	},
 
 	show_quick_register_dialog(frm) {
