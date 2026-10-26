@@ -25,6 +25,7 @@
   "cb_vehicle2",
   "current_location",
   "company",
+  "branch",
   "booking",
   "warranty_of",
   "sb_intake",
@@ -36,6 +37,8 @@
   "customer_complaint",
   "checked_in_on",
   "checked_in_by",
+  "work_started_on",
+  "work_completed_on",
   "sb_flags",
   "on_hold",
   "hold_reason",
@@ -238,6 +241,14 @@
    "read_only": 1
   },
   {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Branch",
+   "options": "Branch"
+  },
+  {
    "fieldname": "booking",
    "fieldtype": "Link",
    "label": "Booking",
@@ -308,6 +319,19 @@
    "fieldtype": "Link",
    "label": "Checked In By",
    "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "work_started_on",
+   "fieldtype": "Datetime",
+   "label": "Work Started On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "work_completed_on",
+   "fieldtype": "Datetime",
+   "in_standard_filter": 1,
+   "label": "Work Completed On",
    "read_only": 1
   },
   {

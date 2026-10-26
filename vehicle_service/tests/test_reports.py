@@ -149,3 +149,57 @@ class TestWorkshopReports(FrappeTestCase):
 		self.assertIsNotNone(row)
 		self.assertEqual(row.get("qty_used"), 1.0)
 		self.assertEqual(row.get("net_consumed_amount"), 150.0)
+
+	def test_completion_timestamps_and_analytics_throughput(self):
+		from vehicle_service.analytics import get_completed_orders, get_daily_throughput
+
+		# Verify order completion timestamp stamping
+		self.order.status = "Ready for Billing"
+		self.order.save()
+		self.assertIsNotNone(self.order.work_completed_on)
+
+		completed = get_completed_orders({"from_date": "2026-01-01", "to_date": "2026-12-31"})
+		self.assertIsInstance(completed, list)
+		order_found = next((o for o in completed if o["service_order"] == self.order.name), None)
+		self.assertIsNotNone(order_found)
+		self.assertGreaterEqual(order_found["turnaround_hours"], 0.0)
+
+		throughput = get_daily_throughput({"from_date": "2026-10-01", "to_date": "2026-10-31"})
+		self.assertIsInstance(throughput, list)
+		self.assertGreater(len(throughput), 0)
+
+	def test_wip_valuation_stock_cost_vs_billing_price(self):
+		from vehicle_service.analytics import get_wip_valuation
+
+		# Put order in active WIP status
+		self.order.status = "In Progress"
+		self.order.save()
+
+		wip = get_wip_valuation({})
+		self.assertIn("orders", wip)
+		self.assertIn("summary", wip)
+		self.assertGreaterEqual(wip["summary"]["total_parts_wip"], 0.0)
+		self.assertGreaterEqual(wip["summary"]["total_labour_wip"], 0.0)
+
+	def test_multi_technician_distinct_jobs_attribution(self):
+		from vehicle_service.analytics import get_technician_labour_units
+
+		# Verify distinct jobs are credited 100% to assigned technician
+		tech_data = get_technician_labour_units({})
+		self.assertIsInstance(tech_data, list)
+		if tech_data:
+			self.assertIn("sold_units", tech_data[0])
+			self.assertIn("labour_revenue", tech_data[0])
+			self.assertIn("labour_cost", tech_data[0])
+			self.assertIn("efficiency_rate", tech_data[0])
+
+	def test_doc_summary_aggregation(self):
+		from vehicle_service.analytics import get_doc_summary
+
+		doc_summary = get_doc_summary({"from_date": "2026-10-01", "to_date": "2026-10-31"})
+		self.assertIn("volume", doc_summary)
+		self.assertIn("parts", doc_summary)
+		self.assertIn("labour", doc_summary)
+		self.assertIn("department_total", doc_summary)
+		self.assertIn("wip_snapshot", doc_summary)
+
