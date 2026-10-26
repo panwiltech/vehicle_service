@@ -3,6 +3,31 @@
 
 frappe.ui.form.on("Service Order", {
 	refresh(frm) {
+		if (frm.is_new() && !frm.doc.vehicle_intake) {
+			frm.dashboard.set_headline_alert(
+				`<div class="d-flex align-items-center justify-content-between p-2">
+					<div>
+						<span class="indicator red mr-2"></span>
+						<strong>${__("Intake Required")}:</strong>
+						${__("Service Orders cannot be created directly without a prior Checked-In Vehicle Intake.")}
+					</div>
+					<div>
+						<button class="btn btn-primary btn-sm btn-start-intake">
+							<i class="fa fa-car mr-1"></i>${__("Start Vehicle Intake")}
+						</button>
+					</div>
+				</div>`,
+				"orange"
+			);
+			if (frm.dashboard.wrapper) {
+				frm.dashboard.wrapper.off("click", ".btn-start-intake").on("click", ".btn-start-intake", (e) => {
+					e.preventDefault();
+					frappe.new_doc("Vehicle Intake");
+				});
+			}
+			frm.disable_save();
+		}
+
 		frm.trigger("render_status_stepper");
 		frm.trigger("setup_jobs_tab_actions");
 		frm.trigger("setup_parts_tab_actions");
