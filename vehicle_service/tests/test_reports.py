@@ -241,4 +241,71 @@ class TestWorkshopReports(FrappeTestCase):
 		self.assertIn("wip", res["charts"])
 		self.assertIn("technician", res["charts"])
 
+	def test_wip_valuation_script_report(self):
+		from vehicle_service.vehicle_service.report.wip_valuation.wip_valuation import execute as execute_wip_valuation
+
+		# 1. Order Summary Mode
+		cols, data, msg, chart, summary = execute_wip_valuation({"view_mode": "Order Summary"})
+		self.assertGreater(len(cols), 0)
+		self.assertIsInstance(data, list)
+		self.assertIsNotNone(summary)
+
+		# 2. Parts Details Mode
+		cols_p, data_p, msg_p, chart_p, summary_p = execute_wip_valuation({"view_mode": "Parts Details"})
+		self.assertGreater(len(cols_p), 0)
+		self.assertIsInstance(data_p, list)
+		self.assertIsNotNone(summary_p)
+
+		# 3. Labour Details Mode
+		cols_l, data_l, msg_l, chart_l, summary_l = execute_wip_valuation({"view_mode": "Labour Details"})
+		self.assertGreater(len(cols_l), 0)
+		self.assertIsInstance(data_l, list)
+		self.assertIsNotNone(summary_l)
+
+		# 4. Branch Reconciliation Mode
+		cols_r, data_r, msg_r, chart_r, summary_r = execute_wip_valuation({"view_mode": "Branch Reconciliation"})
+		self.assertGreater(len(cols_r), 0)
+		self.assertIsInstance(data_r, list)
+		self.assertIsNotNone(summary_r)
+
+	def test_parts_sales_script_report(self):
+		from vehicle_service.vehicle_service.report.parts_sales.parts_sales import execute as execute_parts_sales
+
+		cols, data, msg, chart, summary = execute_parts_sales({"from_date": "2026-01-01", "to_date": "2026-12-31"})
+		self.assertGreater(len(cols), 0)
+		self.assertIsInstance(data, list)
+		self.assertIsNotNone(summary)
+
+	def test_technician_labour_units_script_report(self):
+		from vehicle_service.vehicle_service.report.technician_labour_units.technician_labour_units import (
+			execute as execute_tech_units,
+		)
+
+		cols, data, msg, chart, summary = execute_tech_units({"from_date": "2026-01-01", "to_date": "2026-12-31"})
+		self.assertGreater(len(cols), 0)
+		self.assertIsInstance(data, list)
+		self.assertIsNotNone(summary)
+
+	def test_doc_report_script_report(self):
+		from vehicle_service.vehicle_service.report.doc_report.doc_report import execute as execute_doc_report
+
+		# 1. Daily Operating Trend
+		cols_t, data_t, msg_t, chart_t, summary_t = execute_doc_report(
+			{"from_date": "2026-10-01", "to_date": "2026-10-31", "view_mode": "Daily Operating Trend"}
+		)
+		self.assertGreater(len(cols_t), 0)
+		self.assertIsInstance(data_t, list)
+		self.assertIsNotNone(summary_t)
+
+		# 2. Executive Summary Mode
+		cols_e, data_e, msg_e, chart_e, summary_e = execute_doc_report(
+			{"from_date": "2026-10-01", "to_date": "2026-10-31", "view_mode": "Executive Summary"}
+		)
+		self.assertGreater(len(cols_e), 0)
+		self.assertIsInstance(data_e, list)
+		self.assertIsNotNone(summary_e)
+
+
+
+
 

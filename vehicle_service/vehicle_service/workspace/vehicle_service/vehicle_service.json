@@ -86,6 +86,30 @@
    "label": "Reports Dashboard",
    "link_to": "reports-dashboard",
    "type": "Page"
+  },
+  {
+   "color": "Green",
+   "label": "WIP Valuation",
+   "link_to": "WIP Valuation",
+   "type": "Report"
+  },
+  {
+   "color": "Purple",
+   "label": "Parts Sales",
+   "link_to": "Parts Sales",
+   "type": "Report"
+  },
+  {
+   "color": "Orange",
+   "label": "Technician Labour Units",
+   "link_to": "Technician Labour Units",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "label": "Daily Operating Control",
+   "link_to": "Daily Operating Control",
+   "type": "Report"
   }
  ],
  "links": [
@@ -364,6 +388,50 @@
    "label": "Service Order Throughput",
    "link_count": 0,
    "link_to": "Service Order Throughput",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "WIP Valuation",
+   "link_count": 0,
+   "link_to": "WIP Valuation",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Sales Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Parts Sales",
+   "link_count": 0,
+   "link_to": "Parts Sales",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Job",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Technician Labour Units",
+   "link_count": 0,
+   "link_to": "Technician Labour Units",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Daily Operating Control",
+   "link_count": 0,
+   "link_to": "Daily Operating Control",
    "link_type": "Report",
    "onboard": 1,
    "type": "Link"
