@@ -81,7 +81,7 @@ def get_dashboard_data(filters=None):
 			),
 			"icon": "tool",
 			"color": "orange",
-			"report": "Completed Service Orders",
+			"report": "WIP Valuation",
 		},
 		{
 			"id": "parts_sold",
@@ -90,7 +90,7 @@ def get_dashboard_data(filters=None):
 			"subtitle": _("{0} units sold").format(int(parts_units_sold)),
 			"icon": "package",
 			"color": "purple",
-			"report": "Parts Consumption",
+			"report": "Parts Sales",
 		},
 		{
 			"id": "labour_sold",
@@ -99,7 +99,7 @@ def get_dashboard_data(filters=None):
 			"subtitle": _("Worked: {0} hrs").format(round(total_actual_hours, 1)),
 			"icon": "user-check",
 			"color": "teal",
-			"report": "Technician Performance",
+			"report": "Technician Labour Units",
 		},
 		{
 			"id": "doc_summary",
@@ -108,7 +108,7 @@ def get_dashboard_data(filters=None):
 			"subtitle": _("Overall Margin: {0}%").format(doc_summary["department_total"]["overall_gp_percent"]),
 			"icon": "activity",
 			"color": "cyan",
-			"report": "Workshop Performance",
+			"report": "Daily Operating Control",
 		},
 	]
 

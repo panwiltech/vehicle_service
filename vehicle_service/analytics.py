@@ -861,3 +861,99 @@ def get_doc_summary(filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 		},
 		"wip_snapshot": wip_data["summary"],
 	}
+
+
+def get_doc_daily_breakdown(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+	"""Calculates daily operational and commercial metrics for the DOC report."""
+	filters = enforce_branch_permission(filters or {})
+	from_date = filters.get("from_date") or frappe.utils.add_months(nowdate(), -1)
+	to_date = filters.get("to_date") or nowdate()
+	branch = filters.get("branch")
+
+	# 1. Daily Orders Completed
+	orders = get_completed_orders(filters)
+	orders_by_date = defaultdict(lambda: {"count": 0, "turnaround": []})
+	for o in orders:
+		if o.get("work_completed_on"):
+			dt_str = str(getdate(o["work_completed_on"]))
+			orders_by_date[dt_str]["count"] += 1
+			orders_by_date[dt_str]["turnaround"].append(flt(o.get("turnaround_hours", 0.0)))
+
+	# 2. Daily Parts Sales
+	parts = get_parts_sales(filters)
+	parts_by_date = defaultdict(lambda: {"revenue": 0.0, "cogs": 0.0, "gp": 0.0})
+	for p in parts:
+		dt_str = str(getdate(p.get("posting_date")))
+		parts_by_date[dt_str]["revenue"] += flt(p.get("net_sales", 0.0))
+		parts_by_date[dt_str]["cogs"] += flt(p.get("cogs", 0.0))
+		parts_by_date[dt_str]["gp"] += flt(p.get("gross_profit", 0.0))
+
+	# 3. Daily Labour Performance (from Service Jobs)
+	branch_cond = "AND so.branch = %(branch)s" if branch else ""
+	labour_rate_sql = get_labour_cost_rate_subquery("sj.technician")
+	job_query = f"""
+		SELECT
+			DATE(sj.completed_on) as date,
+			SUM(sj.estimated_hours) as sold_units,
+			SUM(sj.estimated_hours * sj.rate) as labour_rev,
+			SUM(sj.actual_hours) as actual_hours,
+			SUM(sj.actual_hours * {labour_rate_sql}) as labour_cost
+		FROM `tabService Job` sj
+		JOIN `tabService Order` so ON so.name = sj.service_order
+		WHERE sj.status NOT IN ('Cancelled', 'Declined')
+		  AND sj.completed_on IS NOT NULL
+		  AND DATE(sj.completed_on) BETWEEN %(from_date)s AND %(to_date)s
+		  {branch_cond}
+		GROUP BY DATE(sj.completed_on)
+	"""
+	default_cost_rate = get_default_labour_cost_rate()
+	job_params = {"from_date": from_date, "to_date": to_date, "branch": branch, "default_rate": default_cost_rate}
+	jobs_res = frappe.db.sql(job_query, job_params, as_dict=True)
+	labour_by_date = {str(r.date): r for r in jobs_res}
+
+	start_dt = getdate(from_date)
+	end_dt = getdate(to_date)
+	total_days = date_diff(end_dt, start_dt) + 1
+
+	daily_rows = []
+	for i in range(total_days):
+		cur_date = frappe.utils.add_days(start_dt, i)
+		cur_str = str(cur_date)
+
+		ord_info = orders_by_date.get(cur_str, {"count": 0, "turnaround": []})
+		comp_count = ord_info["count"]
+		avg_turn = round(sum(ord_info["turnaround"]) / comp_count, 1) if comp_count else 0.0
+
+		p_info = parts_by_date.get(cur_str, {"revenue": 0.0, "cogs": 0.0, "gp": 0.0})
+		p_rev = round(p_info["revenue"], 2)
+		p_gp = round(p_info["gp"], 2)
+
+		l_info = labour_by_date.get(cur_str, {})
+		l_sold = round(flt(l_info.get("sold_units", 0.0)), 2)
+		l_rev = round(flt(l_info.get("labour_rev", 0.0)), 2)
+		l_cost = round(flt(l_info.get("labour_cost", 0.0)), 2)
+		l_act = round(flt(l_info.get("actual_hours", 0.0)), 2)
+		l_gp = round(l_rev - l_cost, 2)
+
+		tot_rev = round(p_rev + l_rev, 2)
+		tot_gp = round(p_gp + l_gp, 2)
+		gp_pct = round((tot_gp / tot_rev * 100.0), 1) if tot_rev > 0 else 0.0
+
+		daily_rows.append({
+			"date": cur_str,
+			"branch": branch or _("All Branches"),
+			"orders_completed": comp_count,
+			"avg_turnaround_hours": avg_turn,
+			"parts_revenue": p_rev,
+			"parts_gross_profit": p_gp,
+			"labour_sold_units": l_sold,
+			"labour_actual_hours": l_act,
+			"labour_revenue": l_rev,
+			"labour_gross_profit": l_gp,
+			"total_revenue": tot_rev,
+			"total_gross_profit": tot_gp,
+			"overall_gp_percent": gp_pct,
+		})
+
+	return daily_rows
+
