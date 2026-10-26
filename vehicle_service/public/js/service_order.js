@@ -155,14 +155,7 @@ frappe.ui.form.on("Service Order", {
 		if (frm.doc.vehicle_intake) {
 			frm.add_custom_button(__("View Vehicle Intake"), () => {
 				frappe.set_route("Form", "Vehicle Intake", frm.doc.vehicle_intake);
-			}, __("Actions"));
-		}
-
-		// 2. Correct Intake Button (if intake frozen & active)
-		if (frm.doc.intake_frozen && frm.doc.status !== "Delivered" && frm.doc.status !== "Cancelled") {
-			frm.add_custom_button(__("Correct Intake"), () => {
-				frm.trigger("show_intake_correction_dialog");
-			}, __("Actions"));
+			});
 		}
 
 		// 3. One status-dependent quotation action:
@@ -381,48 +374,6 @@ frappe.ui.form.on("Service Order", {
 				);
 			}, __("Actions"));
 		}
-	},
-
-	show_check_in_dialog(frm) {
-		const d = new frappe.ui.Dialog({
-			title: __("Vehicle Check-in & Intake Intake"),
-			fields: [
-				{ fieldname: "odometer_in", label: __("Odometer In (km)"), fieldtype: "Int", reqd: 1, default: frm.doc.odometer_in },
-				{ fieldname: "fuel_level", label: __("Fuel Level"), fieldtype: "Select", options: "\nEmpty\n1/4\n1/2\n3/4\nFull", reqd: 1, default: frm.doc.fuel_level || "1/2" },
-				{ fieldname: "col_brk_1", fieldtype: "Column Break" },
-				{ fieldname: "customer_complaint", label: __("Customer Complaint"), fieldtype: "Small Text", reqd: 1, default: frm.doc.customer_complaint },
-				{ fieldname: "sec_brk_1", label: __("Vehicle Inspection on Arrival"), fieldtype: "Section Break" },
-				{ fieldname: "existing_damage", label: __("Existing Scratches / Dents / Damage"), fieldtype: "Small Text", default: frm.doc.existing_damage },
-				{ fieldname: "col_brk_2", fieldtype: "Column Break" },
-				{ fieldname: "vehicle_contents", label: __("Valuables / Spare Wheel / Tools Present"), fieldtype: "Small Text", default: frm.doc.vehicle_contents },
-				{ fieldname: "sec_brk_2", label: __("Confirmation"), fieldtype: "Section Break" },
-				{ fieldname: "intake_confirmed", label: __("Customer verbally agreed or confirmed condition"), fieldtype: "Check", default: 1 }
-			],
-			primary_action_label: __("Complete Check-In"),
-			primary_action: (values) => {
-				frappe.call({
-					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.check_in_vehicle",
-					args: {
-						order_name: frm.doc.name,
-						odometer_in: values.odometer_in,
-						fuel_level: values.fuel_level,
-						customer_complaint: values.customer_complaint,
-						existing_damage: values.existing_damage,
-						vehicle_contents: values.vehicle_contents,
-						intake_confirmed: values.intake_confirmed
-					},
-					freeze: true,
-					freeze_message: __("Processing Intake & Freezing Details..."),
-					callback: (r) => {
-						if (!r.exc) {
-							d.hide();
-							frm.reload_doc();
-						}
-					}
-				});
-			}
-		});
-		d.show();
 	},
 
 	show_intake_correction_dialog(frm) {

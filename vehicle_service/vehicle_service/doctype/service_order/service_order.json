@@ -27,6 +27,15 @@
   "company",
   "booking",
   "warranty_of",
+  "sb_intake",
+  "vehicle_intake",
+  "odometer_in",
+  "fuel_level",
+  "service_package",
+  "cb_intake",
+  "customer_complaint",
+  "checked_in_on",
+  "checked_in_by",
   "sb_flags",
   "on_hold",
   "hold_reason",
@@ -47,31 +56,16 @@
   "delivery_notes",
   "cancellation_reason",
   "activity_html",
-  "tab_intake",
-  "sb_intake",
-  "vehicle_intake",
-  "odometer_in",
-  "fuel_level",
-  "service_package",
-  "cb_intake",
-  "customer_complaint",
-  "sb_condition",
-  "existing_damage",
-  "cb_condition",
-  "vehicle_contents",
-  "sb_confirm",
-  "intake_confirmed",
-  "customer_signature",
-  "cb_confirm",
-  "intake_frozen",
-  "checked_in_on",
-  "checked_in_by",
-  "sb_corrections",
-  "corrections",
   "tab_jobs",
   "jobs",
   "tab_parts",
-  "parts"
+  "parts",
+  "existing_damage",
+  "vehicle_contents",
+  "intake_confirmed",
+  "customer_signature",
+  "intake_frozen",
+  "corrections"
  ],
  "fields": [
   {
@@ -260,6 +254,64 @@
   },
   {
    "collapsible": 1,
+   "fieldname": "sb_intake",
+   "fieldtype": "Section Break",
+   "label": "Vehicle Intake Reference"
+  },
+  {
+   "fieldname": "vehicle_intake",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Vehicle Intake",
+   "options": "Vehicle Intake",
+   "read_only": 1
+  },
+  {
+   "fieldname": "odometer_in",
+   "fieldtype": "Int",
+   "label": "Odometer In (km)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fuel_level",
+   "fieldtype": "Select",
+   "label": "Fuel Level",
+   "options": "\nEmpty\n1/4\n1/2\n3/4\nFull",
+   "read_only": 1
+  },
+  {
+   "fieldname": "service_package",
+   "fieldtype": "Link",
+   "label": "Service Package",
+   "options": "Service Package",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_intake",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer_complaint",
+   "fieldtype": "Small Text",
+   "label": "Customer Complaint / Scope",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checked_in_on",
+   "fieldtype": "Datetime",
+   "label": "Checked In On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "checked_in_by",
+   "fieldtype": "Link",
+   "label": "Checked In By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
    "collapsible_depends_on": "eval:doc.on_hold || doc.disputed",
    "fieldname": "sb_flags",
    "fieldtype": "Section Break",
@@ -396,128 +448,6 @@
    "label": "Activity"
   },
   {
-   "fieldname": "tab_intake",
-   "fieldtype": "Tab Break",
-   "label": "Intake"
-  },
-  {
-   "description": "Frozen at check-in. Use <b>Correct Intake</b> to change it after that.",
-   "fieldname": "sb_intake",
-   "fieldtype": "Section Break",
-   "label": "Vehicle Intake"
-  },
-  {
-   "fieldname": "vehicle_intake",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Vehicle Intake",
-   "options": "Vehicle Intake"
-  },
-  {
-   "fieldname": "odometer_in",
-   "fieldtype": "Int",
-   "label": "Odometer In (km)",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "fuel_level",
-   "fieldtype": "Select",
-   "label": "Fuel Level",
-   "options": "\nEmpty\n1/4\n1/2\n3/4\nFull",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "service_package",
-   "fieldtype": "Link",
-   "label": "Service Package",
-   "options": "Service Package"
-  },
-  {
-   "fieldname": "cb_intake",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "customer_complaint",
-   "fieldtype": "Small Text",
-   "label": "Customer Complaint",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "sb_condition",
-   "fieldtype": "Section Break",
-   "label": "Condition on Arrival"
-  },
-  {
-   "fieldname": "existing_damage",
-   "fieldtype": "Small Text",
-   "label": "Existing Damage",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "cb_condition",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "vehicle_contents",
-   "fieldtype": "Small Text",
-   "label": "Vehicle Contents",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "sb_confirm",
-   "fieldtype": "Section Break",
-   "label": "Customer Confirmation"
-  },
-  {
-   "fieldname": "intake_confirmed",
-   "fieldtype": "Check",
-   "label": "Customer confirmed intake details",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "customer_signature",
-   "fieldtype": "Signature",
-   "label": "Customer Signature",
-   "read_only_depends_on": "eval:doc.intake_frozen"
-  },
-  {
-   "fieldname": "cb_confirm",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "intake_frozen",
-   "fieldtype": "Check",
-   "label": "Intake Frozen",
-   "read_only": 1
-  },
-  {
-   "fieldname": "checked_in_on",
-   "fieldtype": "Datetime",
-   "label": "Checked In On",
-   "read_only": 1
-  },
-  {
-   "fieldname": "checked_in_by",
-   "fieldtype": "Link",
-   "label": "Checked In By",
-   "options": "User",
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "sb_corrections",
-   "fieldtype": "Section Break",
-   "label": "Intake Corrections"
-  },
-  {
-   "fieldname": "corrections",
-   "fieldtype": "Table",
-   "label": "Corrections",
-   "options": "Service Order Correction",
-   "read_only": 1
-  },
-  {
    "fieldname": "tab_jobs",
    "fieldtype": "Tab Break",
    "label": "Jobs"
@@ -538,6 +468,49 @@
    "fieldtype": "Table",
    "label": "Parts",
    "options": "Service Order Part"
+  },
+  {
+   "fieldname": "existing_damage",
+   "fieldtype": "Small Text",
+   "hidden": 1,
+   "label": "Existing Damage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vehicle_contents",
+   "fieldtype": "Small Text",
+   "hidden": 1,
+   "label": "Vehicle Contents",
+   "read_only": 1
+  },
+  {
+   "fieldname": "intake_confirmed",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Customer confirmed intake details",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer_signature",
+   "fieldtype": "Signature",
+   "hidden": 1,
+   "label": "Customer Signature",
+   "read_only": 1
+  },
+  {
+   "fieldname": "intake_frozen",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Intake Frozen",
+   "read_only": 1
+  },
+  {
+   "fieldname": "corrections",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Corrections",
+   "options": "Service Order Correction",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
