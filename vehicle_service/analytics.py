@@ -32,6 +32,31 @@ def get_default_labour_cost_rate() -> float:
 	return flt(getattr(settings, "default_labour_cost_rate", None)) or 40.0
 
 
+def get_labour_cost_rate_subquery(technician_expr: str = "sj.technician") -> str:
+	"""Safely constructs SQL expression for technician hourly cost rate, falling back to %(default_rate)s."""
+	try:
+		if frappe.db and frappe.db.has_column("Employee", "custom_hourly_cost_rate"):
+			return f"COALESCE((SELECT custom_hourly_cost_rate FROM `tabEmployee` WHERE name = {technician_expr}), %(default_rate)s)"
+	except Exception:
+		pass
+	return "%(default_rate)s"
+
+
+def get_technician_hourly_cost(emp_id: Optional[str] = None) -> float:
+	"""Safely fetches technician cost rate, falling back to default_labour_cost_rate."""
+	default_rate = get_default_labour_cost_rate()
+	if not emp_id:
+		return default_rate
+	try:
+		if frappe.db and frappe.db.has_column("Employee", "custom_hourly_cost_rate"):
+			val = frappe.db.get_value("Employee", emp_id, "custom_hourly_cost_rate")
+			if val:
+				return flt(val)
+	except Exception:
+		pass
+	return default_rate
+
+
 def resolve_branch_warehouses(branch: Optional[str] = None) -> Dict[str, Any]:
 	"""Returns the stores and WIP warehouses mapped to a branch."""
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
@@ -258,7 +283,7 @@ def get_wip_valuation(filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any
 				   COALESCE(
 				       (SELECT incoming_rate FROM `tabStock Ledger Entry`
 				        WHERE item_code = sop.item_code AND voucher_type = 'Stock Entry'
-				        ORDER BY timestamp DESC LIMIT 1),
+				        ORDER BY posting_datetime DESC, creation DESC LIMIT 1),
 				       (SELECT valuation_rate FROM `tabItem` WHERE name = sop.item_code),
 				       0.0
 				   ) as valuation_rate
@@ -275,13 +300,11 @@ def get_wip_valuation(filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any
 			parts_cost += net_qty * flt(p.valuation_rate)
 
 		# 2. Labour WIP (actual logged hours * internal labour cost rate)
+		labour_rate_sql = get_labour_cost_rate_subquery("sj.technician")
 		jobs = frappe.db.sql(
-			"""
+			f"""
 			SELECT sj.name, sj.technician, sj.actual_hours, sj.estimated_hours, sj.supplier_cost,
-			       COALESCE(
-			           (SELECT custom_hourly_cost_rate FROM `tabEmployee` WHERE name = sj.technician),
-			           %(default_rate)s
-			       ) as labour_cost_rate
+			       {labour_rate_sql} as labour_cost_rate
 			FROM `tabService Job` sj
 			WHERE sj.service_order = %(order_name)s AND sj.status NOT IN ('Cancelled', 'Declined')
 		""",
@@ -345,6 +368,212 @@ def get_wip_valuation(filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any
 			"total_wip": round(total_parts_wip + total_labour_wip + total_sublet_wip, 2),
 		},
 	}
+
+
+def get_detailed_wip_data(filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+	"""Returns comprehensive WIP breakdown:
+	1. Order-level WIP with aging buckets (0-7, 8-14, 15-30, 30+ days).
+	2. Parts-level itemized breakdown (qty issued, returned, net, unit valuation rate, cost).
+	3. Labour-level itemized breakdown (technician, logged hours, cost rate, labour cost).
+	4. Multi-Branch warehouse reconciliation (operational parts WIP vs ERPNext Stock Ledger balance in wip_warehouse).
+	"""
+	filters = enforce_branch_permission(filters or {})
+	active_statuses = ("Approved", "Waiting for Parts", "Ready for Work", "In Progress", "Paused", "QC", "Ready for Billing")
+	status_cond = "so.status IN %(statuses)s"
+
+	conditions = [status_cond, "so.status != 'Cancelled'"]
+	values = {"statuses": active_statuses}
+
+	if filters.get("branch"):
+		conditions.append("so.branch = %(branch)s")
+		values["branch"] = filters.get("branch")
+
+	if filters.get("status"):
+		conditions.append("so.status = %(status)s")
+		values["status"] = filters.get("status")
+
+	cond_str = " AND ".join(conditions)
+
+	order_query = f"""
+		SELECT
+			so.name, so.vehicle, so.vehicle_description, so.customer, so.customer_name,
+			so.branch, so.status, so.order_type, so.checked_in_on, so.work_started_on, so.company
+		FROM `tabService Order` so
+		WHERE {cond_str}
+		ORDER BY so.creation ASC
+	"""
+	orders = frappe.db.sql(order_query, values, as_dict=True)
+	default_cost_rate = get_default_labour_cost_rate()
+
+	order_rows = []
+	parts_detail_rows = []
+	labour_detail_rows = []
+	branch_wip_summary = defaultdict(lambda: {"parts": 0.0, "labour": 0.0, "sublet": 0.0, "total": 0.0, "orders_count": 0})
+	aging_summary = {"0-7 Days": 0, "8-14 Days": 0, "15-30 Days": 0, "30+ Days": 0}
+
+	for o in orders:
+		days_in_wip = date_diff(nowdate(), getdate(o.work_started_on or o.checked_in_on)) if (o.work_started_on or o.checked_in_on) else 0
+		days_in_wip = max(0, days_in_wip)
+
+		if days_in_wip <= 7:
+			aging_bucket = "0-7 Days"
+		elif days_in_wip <= 14:
+			aging_bucket = "8-14 Days"
+		elif days_in_wip <= 30:
+			aging_bucket = "15-30 Days"
+		else:
+			aging_bucket = "30+ Days"
+
+		aging_summary[aging_bucket] += 1
+
+		# 1. Parts WIP
+		parts = frappe.db.sql(
+			"""
+			SELECT sop.item_code, sop.item_name, sop.qty_issued, sop.qty_returned, sop.qty_used,
+				   COALESCE(
+				       (SELECT incoming_rate FROM `tabStock Ledger Entry`
+				        WHERE item_code = sop.item_code AND voucher_type = 'Stock Entry'
+				        ORDER BY posting_datetime DESC, creation DESC LIMIT 1),
+				       (SELECT valuation_rate FROM `tabItem` WHERE name = sop.item_code),
+				       0.0
+				   ) as valuation_rate
+			FROM `tabService Order Part` sop
+			WHERE sop.parent = %(order_name)s AND sop.approval_status = 'Approved'
+		""",
+			{"order_name": o.name},
+			as_dict=True,
+		)
+
+		parts_cost = 0.0
+		for p in parts:
+			net_qty = max(0.0, flt(p.qty_issued) - flt(p.qty_returned)) if p.qty_issued else flt(p.qty_used)
+			p_cost = net_qty * flt(p.valuation_rate)
+			parts_cost += p_cost
+
+			if net_qty > 0 or p.qty_issued:
+				parts_detail_rows.append({
+					"service_order": o.name,
+					"vehicle": o.vehicle,
+					"branch": o.branch or _("Unassigned"),
+					"item_code": p.item_code,
+					"item_name": p.item_name,
+					"qty_issued": flt(p.qty_issued),
+					"qty_returned": flt(p.qty_returned),
+					"net_consumed_qty": net_qty,
+					"unit_valuation_rate": round(flt(p.valuation_rate), 2),
+					"total_parts_cost": round(p_cost, 2),
+				})
+
+		# 2. Labour WIP
+		labour_rate_sql = get_labour_cost_rate_subquery("sj.technician")
+		jobs = frappe.db.sql(
+			f"""
+			SELECT sj.name, sj.job_title, sj.technician, sj.technician_name, sj.actual_hours,
+			       sj.estimated_hours, sj.supplier_cost,
+			       {labour_rate_sql} as labour_cost_rate
+			FROM `tabService Job` sj
+			WHERE sj.service_order = %(order_name)s AND sj.status NOT IN ('Cancelled', 'Declined')
+		""",
+			{"order_name": o.name, "default_rate": default_cost_rate},
+			as_dict=True,
+		)
+
+		labour_cost = 0.0
+		sublet_cost = 0.0
+		for j in jobs:
+			hrs = flt(j.actual_hours)
+			cost_rate = flt(j.labour_cost_rate)
+			j_labour_cost = hrs * cost_rate
+			labour_cost += j_labour_cost
+			sublet_cost += flt(j.supplier_cost)
+
+			if hrs > 0:
+				labour_detail_rows.append({
+					"service_order": o.name,
+					"vehicle": o.vehicle,
+					"branch": o.branch or _("Unassigned"),
+					"job_title": j.job_title,
+					"technician": j.technician_name or j.technician or _("Unassigned"),
+					"actual_hours": round(hrs, 2),
+					"labour_cost_rate": round(cost_rate, 2),
+					"total_labour_cost": round(j_labour_cost, 2),
+				})
+
+		total_order_wip = parts_cost + labour_cost + sublet_cost
+		br = o.branch or _("Unassigned")
+		branch_wip_summary[br]["parts"] += parts_cost
+		branch_wip_summary[br]["labour"] += labour_cost
+		branch_wip_summary[br]["sublet"] += sublet_cost
+		branch_wip_summary[br]["total"] += total_order_wip
+		branch_wip_summary[br]["orders_count"] += 1
+
+		# Filter by aging_bucket if specified
+		if filters.get("aging_bucket") and filters.get("aging_bucket") != aging_bucket:
+			continue
+
+		order_rows.append({
+			"service_order": o.name,
+			"vehicle": o.vehicle,
+			"make_model": o.vehicle_description,
+			"customer": o.customer_name or o.customer,
+			"branch": br,
+			"status": o.status,
+			"days_in_wip": days_in_wip,
+			"aging_bucket": aging_bucket,
+			"parts_wip_cost": round(parts_cost, 2),
+			"labour_wip_cost": round(labour_cost, 2),
+			"sublet_wip_cost": round(sublet_cost, 2),
+			"total_wip_cost": round(total_order_wip, 2),
+		})
+
+	# 3. Branch Warehouse Reconciliation
+	reconciliation_rows = []
+	for b, s in branch_wip_summary.items():
+		wh_info = resolve_branch_warehouses(b if b != _("Unassigned") else None)
+		wip_wh = wh_info.get("wip_warehouse")
+
+		gl_wip_stock_value = 0.0
+		if wip_wh:
+			res = frappe.db.sql(
+				"""
+				SELECT SUM(stock_value_difference) as total_val
+				FROM `tabStock Ledger Entry`
+				WHERE warehouse = %(wip_warehouse)s AND is_cancelled = 0
+			""",
+				{"wip_warehouse": wip_wh},
+				as_dict=True,
+			)
+			gl_wip_stock_value = flt(res[0].total_val) if res and res[0].total_val else 0.0
+
+		variance = round(s["parts"] - gl_wip_stock_value, 2)
+		reconciliation_rows.append({
+			"branch": b,
+			"wip_warehouse": wip_wh or _("Not Configured"),
+			"operational_parts_wip": round(s["parts"], 2),
+			"warehouse_stock_valuation": round(gl_wip_stock_value, 2),
+			"variance": variance,
+			"status": _("Reconciled") if abs(variance) < 0.01 else _("Variance Detected"),
+		})
+
+	total_parts = sum(r["parts_wip_cost"] for r in order_rows)
+	total_labour = sum(r["labour_wip_cost"] for r in order_rows)
+	total_sublet = sum(r["sublet_wip_cost"] for r in order_rows)
+
+	return {
+		"orders": order_rows,
+		"parts_details": parts_detail_rows,
+		"labour_details": labour_detail_rows,
+		"branch_reconciliation": reconciliation_rows,
+		"aging_summary": aging_summary,
+		"summary": {
+			"total_orders": len(order_rows),
+			"total_parts_wip": round(total_parts, 2),
+			"total_labour_wip": round(total_labour, 2),
+			"total_sublet_wip": round(total_sublet, 2),
+			"total_wip": round(total_parts + total_labour + total_sublet, 2),
+		},
+	}
+
 
 
 # ---------------------------------------------------------------- Technician Labour Units Attribution
