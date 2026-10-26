@@ -593,7 +593,7 @@ def get_technician_labour_units(filters: Optional[Dict[str, Any]] = None) -> Lis
 		conditions.append("sj.completed_on <= %(to_date)s")
 		values["to_date"] = f"{filters.get('to_date')} 23:59:59"
 	if filters.get("technician"):
-		conditions.append("(sj.technician = %(technician)s OR tl.technician = %(technician)s)")
+		conditions.append("(sj.technician = %(technician)s OR EXISTS (SELECT 1 FROM `tabService Job Time Log` WHERE parent = sj.name AND technician = %(technician)s))")
 		values["technician"] = filters.get("technician")
 	if filters.get("branch"):
 		conditions.append("so.branch = %(branch)s")
@@ -656,7 +656,7 @@ def get_technician_labour_units(filters: Optional[Dict[str, Any]] = None) -> Lis
 				share_ratio = flt(tl.logged_hours) / total_logged
 				t_units = billable_units * share_ratio
 				t_rev = job_rev * share_ratio
-				t_cost_rate = flt(frappe.db.get_value("Employee", t_id, "custom_hourly_cost_rate")) or default_cost_rate
+				t_cost_rate = get_technician_hourly_cost(t_id)
 
 				st = tech_stats[t_id]
 				st["technician"] = t_id
@@ -671,7 +671,7 @@ def get_technician_labour_units(filters: Optional[Dict[str, Any]] = None) -> Lis
 			# Single technician attribution (standard case)
 			t_id = j.primary_technician or (time_logs[0].technician if time_logs else None) or _("Unassigned")
 			t_name = j.technician_name or frappe.db.get_value("Employee", t_id, "employee_name") or t_id
-			t_cost_rate = flt(frappe.db.get_value("Employee", t_id, "custom_hourly_cost_rate")) or default_cost_rate
+			t_cost_rate = get_technician_hourly_cost(t_id)
 			act_hrs = flt(j.actual_hours) or (flt(time_logs[0].logged_hours) if time_logs else 0.0)
 
 			st = tech_stats[t_id]
@@ -707,6 +707,9 @@ def get_technician_labour_units(filters: Optional[Dict[str, Any]] = None) -> Lis
 			"efficiency_rate": eff,
 		})
 
+	if filters.get("technician"):
+		result = [r for r in result if r["technician"] == filters.get("technician")]
+
 	return sorted(result, key=lambda x: x["sold_units"], reverse=True)
 
 
@@ -724,8 +727,18 @@ def get_parts_sales(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, 
 		conditions.append("si.posting_date <= %(to_date)s")
 		values["to_date"] = filters.get("to_date")
 	if filters.get("branch"):
-		conditions.append("si.branch = %(branch)s")
+		conditions.append("COALESCE(so.branch, (SELECT bwm.branch FROM `tabBranch Warehouse Mapping` bwm WHERE bwm.stores_warehouse = sii.warehouse LIMIT 1)) = %(branch)s")
 		values["branch"] = filters.get("branch")
+	if filters.get("customer"):
+		conditions.append("si.customer = %(customer)s")
+		values["customer"] = filters.get("customer")
+	if filters.get("item_code"):
+		conditions.append("sii.item_code = %(item_code)s")
+		values["item_code"] = filters.get("item_code")
+	if filters.get("sale_type") == "Workshop Repair":
+		conditions.append("si.vs_service_order IS NOT NULL AND si.vs_service_order != ''")
+	elif filters.get("sale_type") == "Over-the-Counter":
+		conditions.append("(si.vs_service_order IS NULL OR si.vs_service_order = '')")
 
 	cond_str = " AND ".join(conditions)
 
@@ -735,7 +748,7 @@ def get_parts_sales(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, 
 			si.posting_date,
 			si.customer,
 			si.customer_name,
-			si.branch,
+			COALESCE(so.branch, (SELECT bwm.branch FROM `tabBranch Warehouse Mapping` bwm WHERE bwm.stores_warehouse = sii.warehouse LIMIT 1)) AS branch,
 			si.vs_service_order,
 			sii.item_code,
 			sii.item_name,
@@ -751,6 +764,7 @@ def get_parts_sales(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, 
 				0.0
 			) as cogs_rate
 		FROM `tabSales Invoice` si
+		LEFT JOIN `tabService Order` so ON so.name = si.vs_service_order
 		JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
 		JOIN `tabItem` itm ON itm.name = sii.item_code
 		WHERE {cond_str} AND itm.is_stock_item = 1
@@ -761,10 +775,12 @@ def get_parts_sales(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, 
 	for itm in items:
 		qty = flt(itm.qty)
 		net = flt(itm.net_sales)
-		cogs = qty * flt(itm.cogs_rate)
+		cogs_rate = flt(itm.cogs_rate)
+		cogs = qty * cogs_rate
 		gp = net - cogs
 		gp_pct = round((gp / net * 100.0), 1) if net > 0 else 0.0
 
+		itm["unit_cost"] = round(cogs_rate, 2)
 		itm["sale_type"] = _("Workshop Repair") if itm.vs_service_order else _("Over-the-Counter")
 		itm["cogs"] = round(cogs, 2)
 		itm["gross_profit"] = round(gp, 2)
