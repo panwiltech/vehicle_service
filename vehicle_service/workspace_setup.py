@@ -64,6 +64,13 @@ def setup_production_workspaces():
 	"""Synchronizes Vehicle Service workspaces for production readiness."""
 	frappe.flags.in_patch = True
 
+	# 0. Ensure Desk pages referenced by workspace shortcuts exist before workspace reload
+	for page_file in ("vehicle_service_history",):
+		try:
+			frappe.reload_doc("vehicle_service", "page", page_file, force=True)
+		except Exception as e:
+			frappe.logger("vehicle_service").warning(f"Could not reload page {page_file}: {e}")
+
 	# 1. Reload and synchronize Vehicle Service workspaces from JSON files
 	for ws_conf in VEHICLE_SERVICE_WORKSPACES:
 		ws_name = ws_conf["name"]

@@ -83,6 +83,7 @@ def _mirror_job_to_order(job, order=None):
 			row.bay = job.bay
 			row.source = job.source
 			row.reason_for_adding = job.reason_for_adding
+			row.follows_up_job = job.follows_up_job
 			found = True
 			break
 
@@ -105,6 +106,7 @@ def _mirror_job_to_order(job, order=None):
 				"bay": job.bay,
 				"source": job.source,
 				"reason_for_adding": job.reason_for_adding,
+				"follows_up_job": job.follows_up_job,
 			},
 		)
 
@@ -130,6 +132,7 @@ def add_job(
 	supplier: str | None = None,
 	supplier_cost: float | None = None,
 	supplier_invoice_ref: str | None = None,
+	follows_up_job: str | None = None,
 ):
 	_require_job_controller()
 	order = frappe.get_doc("Service Order", service_order)
@@ -154,6 +157,7 @@ def add_job(
 	job.amount = calc_amount
 	job.description = description
 	job.reason_for_adding = reason
+	job.follows_up_job = follows_up_job or None
 	job.source = source
 	job.raised_by = frappe.session.user
 	job.status = "Approved"

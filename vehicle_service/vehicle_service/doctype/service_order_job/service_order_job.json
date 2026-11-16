@@ -20,6 +20,7 @@
   "cb_1",
   "source",
   "service_job",
+  "follows_up_job",
   "quotation",
   "quotation_item",
   "reason_for_adding",
@@ -144,6 +145,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "follows_up_job",
+   "fieldtype": "Link",
+   "label": "Follows Up Recommendation / Job",
+   "options": "Service Job",
+   "read_only": 1
+  },
+  {
    "fieldname": "quotation",
    "fieldtype": "Link",
    "label": "Quotation",
@@ -186,7 +194,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-10-12 15:15:00.000000",
+ "modified": "2026-11-16 14:35:00.000000",
  "modified_by": "Administrator",
  "module": "Vehicle Service",
  "name": "Service Order Job",

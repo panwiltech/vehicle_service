@@ -13,6 +13,7 @@
  "indicator_color": "blue",
  "is_hidden": 0,
  "label": "Vehicle Service",
+ "modified": "2026-11-16 16:30:00.000000",
  "module": "Vehicle Service",
  "name": "Vehicle Service",
  "parent_page": "",
@@ -52,6 +53,12 @@
    "color": "Green",
    "label": "Parts Control",
    "link_to": "parts-control",
+   "type": "Page"
+  },
+  {
+   "color": "Cyan",
+   "label": "Vehicle Service History",
+   "link_to": "vehicle-service-history",
    "type": "Page"
   },
   {

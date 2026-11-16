@@ -300,6 +300,7 @@ class ServiceOrder(Document):
 				"quotation",
 				"quotation_item",
 				"reason_for_adding",
+				"follows_up_job",
 			],
 		)
 		existing_sj_map = {sj.name: sj for sj in existing_sjs}
@@ -331,6 +332,7 @@ class ServiceOrder(Document):
 						"quotation": sj.quotation,
 						"quotation_item": sj.quotation_item,
 						"reason_for_adding": sj.reason_for_adding,
+						"follows_up_job": sj.follows_up_job,
 					},
 				)
 				linked_sj_names.add(sj_name)
@@ -359,6 +361,7 @@ class ServiceOrder(Document):
 				sj.bay = row.bay
 				sj.source = row.source or "Manually Added"
 				sj.reason_for_adding = row.reason_for_adding
+				sj.follows_up_job = row.follows_up_job or None
 				if row.quotation:
 					sj.quotation = row.quotation
 				if row.quotation_item:
@@ -403,6 +406,20 @@ class ServiceOrder(Document):
 						fields_to_update["source"] = row.source
 					if row.reason_for_adding != sj.reason_for_adding:
 						fields_to_update["reason_for_adding"] = row.reason_for_adding
+
+					row_follows_up = row.follows_up_job or None
+					sj_follows_up = sj.follows_up_job or None
+					if row_follows_up != sj_follows_up:
+						row_prev = row.get_doc_before_save()
+						row_changed = (
+							(row_prev.follows_up_job or None) != row_follows_up
+							if row_prev is not None
+							else bool(row_follows_up and not sj_follows_up)
+						)
+						if row_changed:
+							fields_to_update["follows_up_job"] = row_follows_up
+						else:
+							row.follows_up_job = sj.follows_up_job
 
 					row.actual_hours = flt(sj.actual_hours or 0.0)
 					if sj.status and row.status != sj.status and not getattr(row, "__status_modified_by_user", False):
@@ -642,6 +659,7 @@ class ServiceOrder(Document):
 				sj.bay = row.bay
 				sj.source = row.source or "Manually Added"
 				sj.reason_for_adding = row.reason_for_adding
+				sj.follows_up_job = row.follows_up_job or None
 				if row.quotation:
 					sj.quotation = row.quotation
 				if row.quotation_item:

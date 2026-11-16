@@ -314,7 +314,18 @@ def setup_roles():
 
 def setup_job_controller_permissions():
 	"""Ensures Custom DocPerm records exist for Job Controller on supporting DocTypes."""
-	core_doctypes = ["Employee", "Customer", "Item", "Service Vehicle", "Workshop Location"]
+	# Remove legacy lone Job Controller Custom DocPerm on Service Vehicle so standard DocPerm rules remain authoritative,
+	# while preserving legitimate site-administrator permission customizations when other roles are present.
+	existing_roles = frappe.get_all(
+		"Custom DocPerm",
+		filters={"parent": "Service Vehicle"},
+		pluck="role",
+	)
+	if existing_roles and set(existing_roles) == {"Job Controller"}:
+		frappe.db.delete("Custom DocPerm", {"parent": "Service Vehicle"})
+		frappe.clear_cache(doctype="Service Vehicle")
+
+	core_doctypes = ["Employee", "Customer", "Item", "Workshop Location"]
 	for dt in core_doctypes:
 		if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": "Job Controller"}):
 			try:
