@@ -64,20 +64,22 @@ def pause_job(job_name: str, reason: str | None = None):
 
 @frappe.whitelist()
 def complete_job(job_name: str):
-	job = frappe.get_doc("Service Job", job_name)
-	order = frappe.get_doc("Service Order", job.service_order)
-	now = now_datetime()
-	for row in job.get("time_logs", []):
-		if row.from_time and not row.to_time:
-			row.to_time = now
-			row.hours = round(flt(time_diff_in_hours(row.to_time, row.from_time)), 2)
-	job.status = JOB_COMPLETED
-	job.completed_on = now
-	job.calculate_actual_hours()
-	job.flags.ignore_job_lock = True
-	job.save(ignore_permissions=True)
-	order.sync_status_from_jobs_and_parts()
-	return {"status": "success", "job_status": job.status, "order_status": order.status}
+	from vehicle_service.job_control import _complete_jobs
+
+	job = frappe.db.get_value("Service Job", job_name, ["service_order", "technician"], as_dict=True)
+	if not job:
+		frappe.throw(_("Service Job {0} not found.").format(job_name))
+
+	user = frappe.session.user
+	roles = set(frappe.get_roles(user))
+	is_controller = user == "Administrator" or bool(roles & {"Job Controller", "Workshop Supervisor", "Service Manager", "System Manager"})
+	if not is_controller:
+		emp = frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
+		if not emp or emp != job.technician:
+			frappe.throw(_("Access denied: only Job Controllers or the assigned technician can complete this job."), frappe.PermissionError)
+
+	res = _complete_jobs(job.service_order, [job_name])
+	return {"status": "success", "job_status": JOB_COMPLETED, "order_status": res["order_status"]}
 
 
 @frappe.whitelist()

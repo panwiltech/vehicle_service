@@ -191,6 +191,36 @@ def compute_operational_status(jobs: Iterable[Any], parts: Iterable[Any]) -> str
 	return APPROVED
 
 
+JOB_STARTABLE_ACTION = frozenset({JOB_APPROVED, JOB_ASSIGNED, JOB_PAUSED, JOB_QC_FAILED})
+JOB_COMPLETABLE = frozenset({JOB_APPROVED, JOB_ASSIGNED, JOB_IN_PROGRESS, JOB_PAUSED, JOB_QC_FAILED})
+JOB_ACTION_STATUSES = {
+	"start": JOB_STARTABLE_ACTION,
+	"pause": frozenset({JOB_IN_PROGRESS}),
+	"complete": JOB_COMPLETABLE,
+}
+
+
+def job_action_block_reason(action: str, job: Any, order_status: str | None, on_hold: bool = False) -> str | None:
+	"""Why `job` cannot take `action` ("start" | "pause" | "complete"); None when it can.
+
+	Shared by the Job Control Board dialogs and the batch endpoints so both agree.
+	"""
+	statuses = JOB_ACTION_STATUSES.get(action)
+	if statuses is None:
+		return "Unknown action"
+	if order_status in COMPLETED_STATES or order_status == CANCELLED:
+		return "Order is locked"
+	status = _get(job, "status")
+	if status not in statuses:
+		return f"Job is {status}"
+	if action == "start":
+		if not _get(job, "technician"):
+			return "No technician assigned"
+		if on_hold:
+			return "Order is on hold"
+	return None
+
+
 def compute_part_status(row: Any) -> str:
 	"""Derive a part line's status from approval and quantities (design §3.3)."""
 	if _get(row, "substituted_by"):
