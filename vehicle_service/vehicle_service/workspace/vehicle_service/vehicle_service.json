@@ -1,7 +1,7 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[{\"id\":\"header1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Vehicle Service & Workshop Command Center</b></span>\",\"col\":12}},{\"id\":\"shortcuts_block\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_reception\",\"type\":\"card\",\"data\":{\"card_name\":\"Reception & Intake\",\"col\":4}},{\"id\":\"card_workshop\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Execution\",\"col\":4}},{\"id\":\"card_parts\",\"type\":\"card\",\"data\":{\"card_name\":\"Parts & Materials\",\"col\":4}},{\"id\":\"card_qc\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Control\",\"col\":4}},{\"id\":\"card_billing\",\"type\":\"card\",\"data\":{\"card_name\":\"Billing & Finance\",\"col\":4}},{\"id\":\"card_analytics\",\"type\":\"card\",\"data\":{\"card_name\":\"Analytics & Reports\",\"col\":4}},{\"id\":\"card_settings\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings & Masters\",\"col\":4}}]",
+ "content": "[{\"id\":\"header1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Vehicle Service & Workshop Command Center</b></span>\",\"col\":12}},{\"id\":\"sc_workshop_ctrl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Workshop Control\",\"col\":3}},{\"id\":\"sc_parts_ctrl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Parts Control\",\"col\":3}},{\"id\":\"sc_vehicle_history\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Vehicle Service History\",\"col\":3}},{\"id\":\"sc_reports_dash\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Reports Dashboard\",\"col\":3}},{\"id\":\"card_reception\",\"type\":\"card\",\"data\":{\"card_name\":\"Reception & Intake\",\"col\":4}},{\"id\":\"card_workshop\",\"type\":\"card\",\"data\":{\"card_name\":\"Workshop Execution\",\"col\":4}},{\"id\":\"card_parts\",\"type\":\"card\",\"data\":{\"card_name\":\"Parts & Materials\",\"col\":4}},{\"id\":\"card_qc\",\"type\":\"card\",\"data\":{\"card_name\":\"Quality Control\",\"col\":4}},{\"id\":\"card_billing\",\"type\":\"card\",\"data\":{\"card_name\":\"Billing & Finance\",\"col\":4}},{\"id\":\"card_analytics\",\"type\":\"card\",\"data\":{\"card_name\":\"Analytics & Reports\",\"col\":4}},{\"id\":\"card_settings\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings & Masters\",\"col\":4}}]",
  "creation": "2026-10-03 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,7 +13,7 @@
  "indicator_color": "blue",
  "is_hidden": 0,
  "label": "Vehicle Service",
- "modified": "2026-11-16 16:30:00.000000",
+ "modified": "2026-11-16 18:55:00.000000",
  "module": "Vehicle Service",
  "name": "Vehicle Service",
  "parent_page": "",
@@ -158,6 +158,17 @@
    "link_count": 0,
    "link_to": "Service Vehicle",
    "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle Service History",
+   "link_count": 0,
+   "link_to": "vehicle-service-history",
+   "link_type": "Page",
    "onboard": 1,
    "type": "Link"
   },
