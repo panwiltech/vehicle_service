@@ -201,6 +201,7 @@ def search_vehicles(query: str, limit: int = 10) -> list[dict]:
 		"stripped_query": stripped_query,
 		"stripped_prefix": f"{escaped_stripped}%",
 		"stripped_like": f"%{escaped_stripped}%",
+		"prev_exact_like": f"%,{escaped_stripped},%",
 		"clean_like": f"%{escaped_clean}%",
 		"sql_limit": sql_limit,
 	}
@@ -223,9 +224,10 @@ def search_vehicles(query: str, limit: int = 10) -> list[dict]:
 				WHEN {reg_expr} = %(stripped_query)s OR {vin_expr} = %(stripped_query)s THEN 0
 				WHEN {reg_expr} LIKE %(stripped_prefix)s ESCAPE '\\\\'
 				  OR {vin_expr} LIKE %(stripped_prefix)s ESCAPE '\\\\' THEN 1
-				ELSE 2
+				WHEN CONCAT(',', {prev_expr}, ',') LIKE %(prev_exact_like)s ESCAPE '\\\\' THEN 2
+				ELSE 3
 			END,
-			sv.modified DESC
+			sv.registration_no ASC
 		LIMIT %(sql_limit)s
 		""",
 		params,
@@ -252,7 +254,8 @@ def search_vehicles(query: str, limit: int = 10) -> list[dict]:
 				WHEN {vi_plate_expr} = %(stripped_query)s OR {vi_vin_expr} = %(stripped_query)s THEN 0
 				ELSE 1
 			END,
-			vi.creation DESC
+			vi.modified DESC,
+			sv.registration_no ASC
 		LIMIT %(sql_limit)s
 		""",
 		params,
@@ -283,7 +286,8 @@ def search_vehicles(query: str, limit: int = 10) -> list[dict]:
 				ELSE 1
 			END,
 			si.posting_date DESC,
-			si.creation DESC
+			si.modified DESC,
+			sv.registration_no ASC
 		LIMIT %(sql_limit)s
 		""",
 		params,

@@ -363,3 +363,79 @@ class TestServiceHistorySearch(FrappeTestCase):
 		self.assertTrue(any(r["name"] == other_veh for r in search_vehicles(other_veh)))
 		with self.assertRaises(frappe.PermissionError):
 			resolve_vehicle_cluster("ABC 1234")
+
+	def test_search_vehicles_exact_match_with_many_substrings_and_multi_prev_plates(self):
+		from vehicle_service.service_history import search_vehicles
+
+		# Create >25 substring matches before the exact match so deterministic SQL ORDER BY is exercised.
+		for idx in range(30):
+			self._ensure_vehicle(f"SUB-{idx:02d}-AB12", f"VIN-SUB-{idx:02d}-0000")
+		self._ensure_vehicle("AB 12", "VIN-EXACT-AB12", prev="OLD 1, XYZ 9001, PREV-88")
+
+		exact_only = search_vehicles("AB12", limit=1)
+		self.assertEqual(len(exact_only), 1)
+		self.assertEqual(exact_only[0]["name"], "AB 12")
+		self.assertEqual(exact_only[0]["match_source"], "Registration")
+
+		for prev_token in ("old1", "xyz 9001", "prev-88"):
+			prev_matches = search_vehicles(prev_token)
+			self.assertTrue(
+				any(r["name"] == "AB 12" and r["match_source"] == "Previous Registration" for r in prev_matches),
+				f"Expected AB 12 via Previous Registration for token {prev_token!r}",
+			)
+
+
+class TestServiceHistoryPermissionsSetup(FrappeTestCase):
+	def test_setup_job_controller_permissions_preserves_custom_perms(self):
+		from vehicle_service.install import setup_job_controller_permissions
+
+		frappe.set_user("Administrator")
+		original_rows = frappe.get_all(
+			"Custom DocPerm",
+			filters={"parent": "Service Vehicle"},
+			fields=["role", "read", "write", "create", "delete", "email", "export", "print", "report", "share"],
+		)
+		try:
+			# Case 1: Lone legacy Job Controller Custom DocPerm is cleaned up
+			frappe.db.delete("Custom DocPerm", {"parent": "Service Vehicle"})
+			cdp = frappe.new_doc("Custom DocPerm")
+			cdp.parent = "Service Vehicle"
+			cdp.parenttype = "DocType"
+			cdp.parentfield = "permissions"
+			cdp.role = "Job Controller"
+			cdp.read = 1
+			cdp.insert(ignore_permissions=True)
+
+			setup_job_controller_permissions()
+			self.assertEqual(
+				frappe.get_all("Custom DocPerm", filters={"parent": "Service Vehicle"}, pluck="role"),
+				[],
+			)
+
+			# Case 2: Legitimate customizations with additional roles are preserved
+			for role in ("Job Controller", "Service Advisor"):
+				c = frappe.new_doc("Custom DocPerm")
+				c.parent = "Service Vehicle"
+				c.parenttype = "DocType"
+				c.parentfield = "permissions"
+				c.role = role
+				c.read = 1
+				c.insert(ignore_permissions=True)
+
+			setup_job_controller_permissions()
+			remaining_roles = set(
+				frappe.get_all("Custom DocPerm", filters={"parent": "Service Vehicle"}, pluck="role")
+			)
+			self.assertEqual(remaining_roles, {"Job Controller", "Service Advisor"})
+		finally:
+			frappe.db.delete("Custom DocPerm", {"parent": "Service Vehicle"})
+			for row in original_rows:
+				c = frappe.new_doc("Custom DocPerm")
+				c.parent = "Service Vehicle"
+				c.parenttype = "DocType"
+				c.parentfield = "permissions"
+				for k, v in row.items():
+					setattr(c, k, v)
+				c.insert(ignore_permissions=True)
+			frappe.clear_cache(doctype="Service Vehicle")
+			frappe.db.commit()
