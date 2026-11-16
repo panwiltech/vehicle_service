@@ -85,3 +85,11 @@ class TestWorkspaceSetup(FrappeTestCase):
 		app_titles = [app["app_title"] for app in bootinfo.app_data]
 		self.assertNotIn("CRM", app_titles)
 
+	def test_vehicle_service_history_workspace_shortcuts(self):
+		"""Vehicle Service and Service Advisor workspaces must expose the Vehicle Service History page shortcut."""
+		for ws_name in ("Vehicle Service", "Service Advisor"):
+			ws = frappe.get_doc("Workspace", ws_name)
+			shortcuts = [s for s in ws.shortcuts if s.type == "Page" and s.link_to == "vehicle-service-history"]
+			self.assertTrue(len(shortcuts) > 0, f"Missing Vehicle Service History shortcut in {ws_name}")
+
+

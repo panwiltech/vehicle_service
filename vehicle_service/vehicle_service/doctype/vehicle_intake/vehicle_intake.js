@@ -91,6 +91,14 @@ frappe.ui.form.on("Vehicle Intake", {
 			}
 		}
 
+		// Vehicle Service History Button
+		if (frm.doc.vehicle && (!frm.custom_buttons || !frm.custom_buttons[__("Vehicle Service History")])) {
+			frm.add_custom_button(__("Vehicle Service History"), () => {
+				frappe.route_options = { vehicle: frm.doc.vehicle };
+				frappe.set_route("vehicle-service-history");
+			});
+		}
+
 		// Read-only controls when checked in
 		if (frm.doc.status === "Checked In" || frm.doc.intake_frozen) {
 			frm.set_df_property("odometer_in", "read_only", 1);

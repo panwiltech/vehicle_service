@@ -208,3 +208,23 @@ class TestWorkshopControlPages(FrappeTestCase):
 		mr = frappe.get_doc("Material Request", mr_name)
 		self.assertEqual(mr.items[0].item_code, "BRAKE-PAD-TEST")
 		self.assertEqual(mr.items[0].qty, 5.0)
+
+	def test_vehicle_service_history_page_and_api(self):
+		from vehicle_service.service_history import HISTORY_VIEWER_ROLES, get_vehicle_service_history, search_vehicles
+
+		self.assertTrue(frappe.db.exists("Page", "vehicle-service-history"))
+		self.assertEqual(frappe.db.get_value("Page", "vehicle-service-history", "module"), "Vehicle Service")
+
+		page_doc = frappe.get_doc("Page", "vehicle-service-history")
+		page_roles = {r.role for r in (page_doc.roles or [])}
+		self.assertTrue(HISTORY_VIEWER_ROLES.issubset(page_roles))
+
+		matches = search_vehicles("BOARD 101")
+		self.assertTrue(any(m["name"] == "BOARD 101" for m in matches))
+
+		history = get_vehicle_service_history("BOARD 101")
+		self.assertIn("overview_stats", history)
+		self.assertIn("timeline", history)
+		self.assertIn("recommendations", history)
+		self.assertIn("permissions", history)
+

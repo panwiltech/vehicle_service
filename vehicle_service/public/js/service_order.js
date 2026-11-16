@@ -183,6 +183,14 @@ frappe.ui.form.on("Service Order", {
 			});
 		}
 
+		// 2. Vehicle Service History Button
+		if (frm.doc.vehicle && (!frm.custom_buttons || !frm.custom_buttons[__("Vehicle Service History")])) {
+			frm.add_custom_button(__("Vehicle Service History"), () => {
+				frappe.route_options = { vehicle: frm.doc.vehicle };
+				frappe.set_route("vehicle-service-history");
+			});
+		}
+
 		// 3. One status-dependent quotation action:
 		//    no quotation -> Create Quotation (initial)
 		//    quotation exists + un-estimated pending work -> Estimate Additional Work (supplementary)

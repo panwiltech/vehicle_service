@@ -13,6 +13,7 @@
  "indicator_color": "orange",
  "is_hidden": 0,
  "label": "Service Advisor",
+ "modified": "2026-11-16 16:30:00.000000",
  "module": "Vehicle Service",
  "name": "Service Advisor",
  "parent_page": "Vehicle Service",
@@ -75,6 +76,12 @@
    "color": "Purple",
    "label": "Job Control Board",
    "link_to": "job-board",
+   "type": "Page"
+  },
+  {
+   "color": "Cyan",
+   "label": "Vehicle Service History",
+   "link_to": "vehicle-service-history",
    "type": "Page"
   }
  ],
