@@ -545,6 +545,15 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		this.load_vehicle(item.name);
 	}
 
+	_clear_selected_vehicle() {
+		this.vehicle = null;
+		this.data = null;
+		this.editable_open_order = null;
+		if (this.on_vehicle_selected) {
+			this.on_vehicle_selected(null);
+		}
+	}
+
 	search_and_resolve(rawQuery) {
 		const query = String(rawQuery || "").trim();
 		clearTimeout(this.search_timer);
@@ -570,13 +579,12 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 				if (seq !== this._search_seq) return;
 				const matches = r.message || [];
 				if (!matches.length) {
-					this.vehicle = null;
-					this.data = null;
+					this._clear_selected_vehicle();
 					this._render_no_match(query);
-					if (this.on_vehicle_selected) this.on_vehicle_selected(null);
 				} else if (matches.length === 1) {
 					this.load_vehicle(matches[0].name);
 				} else {
+					this._clear_selected_vehicle();
 					this.search_results = matches;
 					this._render_disambiguation(query, matches);
 				}

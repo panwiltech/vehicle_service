@@ -1557,3 +1557,69 @@ class TestServiceHistoryPrintExport(FrappeTestCase):
 		self.assertNotIn("<script>window.__xss=1</script>", html)
 		self.assertNotIn('<img src=x onerror="alert(1)">', html)
 		self.assertIn("&lt;script&gt;window.__xss=1&lt;/script&gt;", html)
+
+	def test_print_cancelled_completion_label_and_overdue_days_wording(self):
+		import re
+		from frappe.utils import add_days, nowdate
+		from vehicle_service.service_history import render_vehicle_service_history_print
+
+		frappe.db.set_value(
+			"Service Vehicle",
+			self.vehicle_reg,
+			"next_service_date",
+			add_days(nowdate(), -5),
+			update_modified=False,
+		)
+		overdue_html = render_vehicle_service_history_print(
+			self.vehicle_reg,
+			mode="internal",
+			include_financials=1,
+			filters={"include_cancelled": 1},
+		)
+		self.assertRegex(
+			overdue_html,
+			re.compile(r'<td class="kv-label">Completed / Delivered:</td>\s*<td>Cancelled</td>'),
+		)
+		self.assertNotIn("<td>In Progress</td>", overdue_html)
+		self.assertIn("(5 days overdue)", overdue_html)
+		self.assertNotIn("-5 days remaining", overdue_html)
+
+		frappe.db.set_value(
+			"Service Vehicle",
+			self.vehicle_reg,
+			"next_service_date",
+			add_days(nowdate(), 4),
+			update_modified=False,
+		)
+		upcoming_html = render_vehicle_service_history_print(
+			self.vehicle_reg,
+			mode="internal",
+			include_financials=1,
+			filters={"include_cancelled": 1},
+		)
+		self.assertIn("(4 days remaining)", upcoming_html)
+
+		# An active order without completion/delivery timestamps still falls back to "In Progress"
+		active_order = frappe.new_doc("Service Order")
+		active_order.vehicle = self.vehicle_reg
+		active_order.customer = self.customer
+		active_order.company = self.company
+		active_order.branch = self.branch
+		active_order.order_type = "Customer"
+		active_order.status = "In Progress"
+		active_order.odometer_in = 25100
+		active_order.checked_in_on = "2026-10-20 09:00:00"
+		active_order.order_date = "2026-10-20"
+		active_order.flags.ignore_open_order_validation = True
+		active_order.insert(ignore_permissions=True)
+
+		active_html = render_vehicle_service_history_print(
+			self.vehicle_reg,
+			mode="internal",
+			include_financials=1,
+			filters={"include_cancelled": 1},
+		)
+		self.assertRegex(
+			active_html,
+			re.compile(r'<td class="kv-label">Completed / Delivered:</td>\s*<td>In Progress</td>'),
+		)

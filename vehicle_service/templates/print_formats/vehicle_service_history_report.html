@@ -278,11 +278,12 @@
 			border-radius: 6px;
 			margin-bottom: 14px;
 			background: #ffffff;
-			overflow: hidden;
+			page-break-inside: auto;
 		}
 		.visit-header {
 			background: #f1f5f9;
 			border-bottom: 1px solid #cbd5e1;
+			border-radius: 5px 5px 0 0;
 			padding: 7px 10px;
 			page-break-after: avoid;
 		}
@@ -563,7 +564,7 @@
 					{% if item.metric == "Date" %}
 						{{ item.due_date }}
 						{% if item.days_remaining is not none %}
-							<span class="muted">({{ item.days_remaining }} days remaining)</span>
+							<span class="muted">({% if item.days_remaining < 0 %}{{ item.days_remaining | abs }} days overdue{% else %}{{ item.days_remaining }} days remaining{% endif %})</span>
 						{% endif %}
 					{% else %}
 						{{ "{:,}".format((item.target_mileage or 0) | int) }} km
@@ -716,7 +717,7 @@
 				</tr>
 				<tr>
 					<td class="kv-label">Completed / Delivered:</td>
-					<td>{{ visit.work_completed_on or visit.delivered_on or "In Progress" }}</td>
+					<td>{{ visit.work_completed_on or visit.delivered_on or ("Cancelled" if visit.status == "Cancelled" else "In Progress") }}</td>
 					<td class="kv-label">Fuel Level:</td>
 					<td>{{ visit.fuel_level or "N/A" }}</td>
 				</tr>
