@@ -1106,3 +1106,454 @@ class TestServiceHistoryAggregationAndSecurity(FrappeTestCase):
 		frappe.set_user(self.no_role_user)
 		with self.assertRaises(frappe.PermissionError):
 			get_vehicle_service_history(self.vehicle_reg)
+
+
+class TestServiceHistoryPrintExport(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+		from vehicle_service.job_control import complete_service_order
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+			create_sales_invoice_from_order,
+			issue_parts_to_workshop,
+		)
+
+		settings = frappe.get_single("Vehicle Service Settings")
+		self.company = settings.company or frappe.get_all("Company", pluck="name")[0]
+		self.parts_warehouse = settings.parts_warehouse
+		self.wip_warehouse = settings.wip_warehouse
+
+		self.customer = "Print Export Customer"
+		if not frappe.db.exists("Customer", self.customer):
+			c = frappe.new_doc("Customer")
+			c.customer_name = self.customer
+			c.customer_type = "Individual"
+			c.insert(ignore_permissions=True)
+
+		if not frappe.db.exists("Item", "LABOUR"):
+			it = frappe.new_doc("Item")
+			it.item_code = "LABOUR"
+			it.item_name = "Workshop Labour"
+			it.item_group = "Services"
+			it.is_stock_item = 0
+			it.insert(ignore_permissions=True)
+
+		self.stock_item = "HIST-PRINT-FILTER"
+		if not frappe.db.exists("Item", self.stock_item):
+			it = frappe.new_doc("Item")
+			it.item_code = self.stock_item
+			it.item_name = "Print Test Oil Filter"
+			it.item_group = "Products"
+			it.is_stock_item = 1
+			it.stock_uom = "Nos"
+			it.valuation_rate = 30.0
+			it.insert(ignore_permissions=True)
+
+		self.declined_item = "HIST-PRINT-WIPER"
+		if not frappe.db.exists("Item", self.declined_item):
+			it = frappe.new_doc("Item")
+			it.item_code = self.declined_item
+			it.item_name = "Declined Wiper Blade"
+			it.item_group = "Products"
+			it.is_stock_item = 1
+			it.stock_uom = "Nos"
+			it.valuation_rate = 20.0
+			it.insert(ignore_permissions=True)
+
+		self.branch = "Print Export Branch"
+		if not frappe.db.exists("Branch", self.branch):
+			b = frappe.new_doc("Branch")
+			b.branch = self.branch
+			b.insert(ignore_permissions=True)
+
+		emp_name = frappe.db.get_value(
+			"Employee",
+			{"first_name": "PrintTech", "last_name": "Specialist"},
+			"name",
+		)
+		if emp_name:
+			self.emp = frappe.get_doc("Employee", emp_name)
+		else:
+			self.emp = frappe.new_doc("Employee")
+			self.emp.first_name = "PrintTech"
+			self.emp.last_name = "Specialist"
+			self.emp.company = self.company
+			self.emp.gender = "Male"
+			self.emp.date_of_birth = "1992-05-14"
+			self.emp.date_of_joining = "2021-01-10"
+			self.emp.insert(ignore_permissions=True)
+		self.tech_name = self.emp.employee_name or "PrintTech Specialist"
+
+		self.tech_user = "hist.print.tech@example.com"
+		self._ensure_user(self.tech_user, ["Workshop Technician"])
+		self.no_role_user = "hist.print.norole@example.com"
+		self._ensure_user(self.no_role_user, ["Stock User"])
+		frappe.db.delete("User Permission", {"user": self.tech_user})
+		frappe.defaults.clear_default("branch", parent=self.tech_user)
+		frappe.cache.hdel("user_permissions", self.tech_user)
+
+		self.vehicle_reg = f"PRT-{frappe.generate_hash(length=5).upper()}"
+		v = frappe.new_doc("Service Vehicle")
+		v.registration_no = self.vehicle_reg
+		v.vin = f"VIN-{self.vehicle_reg}"
+		v.make = "Toyota"
+		v.model = "Fortuner"
+		v.year = 2023
+		v.customer = self.customer
+		v.current_mileage = 25000
+		v.insert(ignore_permissions=True)
+
+		order = frappe.new_doc("Service Order")
+		order.vehicle = self.vehicle_reg
+		order.customer = self.customer
+		order.company = self.company
+		order.branch = self.branch
+		order.order_type = "Customer"
+		order.status = "In Progress"
+		order.service_advisor = "Administrator"
+		order.odometer_in = 25000
+		order.checked_in_on = "2026-10-15 09:00:00"
+		order.order_date = "2026-10-15"
+		order.customer_complaint = "Engine rattle at idle"
+		order.hold_reason = "INTERNAL_HOLD_SECRET"
+		order.dispute_notes = "INTERNAL_DISPUTE_SECRET"
+		order.pause_reason = "Technical Consultation"
+		order.delivery_notes = "Check coolant level at next visit."
+		order.flags.ignore_open_order_validation = True
+		order.insert(ignore_permissions=True)
+		self.order = order
+
+		if order.vehicle_intake:
+			frappe.db.set_value(
+				"Vehicle Intake",
+				order.vehicle_intake,
+				"reception_notes",
+				"INTERNAL_RECEPTION_SECRET",
+				update_modified=False,
+			)
+
+		completed_job = add_job(
+			order.name,
+			job_title="Completed Oil Service",
+			description="Full synthetic oil and filter replacement",
+			technician=self.emp.name,
+			estimated_hours=1.5,
+			rate=100.0,
+			reason="INTERNAL_ADD_REASON",
+		)
+		frappe.db.set_value(
+			"Service Job",
+			completed_job["job"],
+			{
+				"qc_fail_reason": "INTERNAL_QC_FAIL_REASON",
+				"pause_reason": "INTERNAL_PAUSE_SECRET",
+			},
+			update_modified=False,
+		)
+
+		declined_job = add_job(
+			order.name,
+			job_title="Declined Extra Job",
+			technician=self.emp.name,
+			estimated_hours=1.0,
+			category="Recommended",
+			reason="INTERNAL_DECLINED_REASON",
+		)
+		frappe.db.set_value("Service Job", declined_job["job"], "status", "Declined", update_modified=False)
+		frappe.db.set_value(
+			"Service Order Job",
+			{"parent": order.name, "service_job": declined_job["job"]},
+			"status",
+			"Declined",
+			update_modified=False,
+		)
+
+		import json
+
+		make_stock_entry(
+			item_code=self.stock_item,
+			to_warehouse=self.parts_warehouse,
+			qty=3.0,
+			rate=30.0,
+			purpose="Material Receipt",
+			company=self.company,
+		)
+		order.reload()
+		approved_part = order.append(
+			"parts",
+			{
+				"item_code": self.stock_item,
+				"qty_required": 1.0,
+				"rate": 55.0,
+				"approval_status": "Approved",
+			},
+		)
+		declined_part = order.append(
+			"parts",
+			{
+				"item_code": self.declined_item,
+				"qty_required": 1.0,
+				"rate": 40.0,
+				"approval_status": "Declined",
+				"part_status": "Declined",
+				"reason_for_adding": "INTERNAL_PART_REASON",
+			},
+		)
+		order.flags.ignore_open_order_validation = True
+		order.save(ignore_permissions=True)
+		issue_parts_to_workshop(
+			order_name=order.name,
+			items_json=json.dumps([{"part_row": approved_part.name, "qty": 1.0}]),
+		)
+		order.reload()
+		for row in order.parts:
+			if row.name == approved_part.name:
+				row.qty_used = 1.0
+			elif row.name == declined_part.name:
+				row.approval_status = "Declined"
+				row.part_status = "Declined"
+		order.flags.ignore_open_order_validation = True
+		order.save(ignore_permissions=True)
+
+		complete_service_order(order.name)
+		frappe.db.set_value(
+			"Service Order",
+			order.name,
+			"pause_reason",
+			"Technical Consultation",
+			update_modified=False,
+		)
+
+		qc_fail = frappe.new_doc("Service QC")
+		qc_fail.service_order = order.name
+		qc_fail.vehicle = self.vehicle_reg
+		qc_fail.inspector = "Administrator"
+		qc_fail.inspected_on = "2026-10-15 13:00:00"
+		qc_fail.result = "Fail"
+		qc_fail.fail_reason = "INTERNAL_QC_REWORK_SECRET"
+		qc_fail.findings = "Initial oil filter gasket weeping."
+		qc_fail.append("failed_jobs", {"job": completed_job["job"]})
+		qc_fail.insert(ignore_permissions=True)
+
+		qc_pass = frappe.new_doc("Service QC")
+		qc_pass.service_order = order.name
+		qc_pass.vehicle = self.vehicle_reg
+		qc_pass.inspector = "Administrator"
+		qc_pass.inspected_on = "2026-10-15 15:00:00"
+		qc_pass.result = "Pass"
+		qc_pass.road_test_done = 1
+		qc_pass.road_test_km = 5.0
+		qc_pass.findings = "Road test completed cleanly."
+		qc_pass.append("checklist", {"check_item": "Oil pressure & leak check", "passed": 1, "remarks": "Dry"})
+		qc_pass.insert(ignore_permissions=True)
+
+		inv_res = create_sales_invoice_from_order(order.name)
+		si = frappe.get_doc("Sales Invoice", inv_res["sales_invoice"])
+		si.submit()
+		self.invoice_name = si.name
+
+		# Cancelled order to ensure customer mode strips cancelled visits even if requested via filter
+		cancelled_order = frappe.new_doc("Service Order")
+		cancelled_order.vehicle = self.vehicle_reg
+		cancelled_order.customer = self.customer
+		cancelled_order.company = self.company
+		cancelled_order.branch = self.branch
+		cancelled_order.order_type = "Customer"
+		cancelled_order.status = "In Progress"
+		cancelled_order.odometer_in = 24900
+		cancelled_order.checked_in_on = "2026-10-01 08:00:00"
+		cancelled_order.order_date = "2026-10-01"
+		cancelled_order.flags.ignore_open_order_validation = True
+		cancelled_order.insert(ignore_permissions=True)
+		add_job(cancelled_order.name, job_title="CANCELLED_ORDER_JOB", technician=self.emp.name, estimated_hours=1.0)
+		frappe.db.set_value("Service Order", cancelled_order.name, "status", "Cancelled", update_modified=False)
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def _ensure_user(self, email: str, roles: list[str]):
+		if frappe.db.exists("User", email):
+			user = frappe.get_doc("User", email)
+		else:
+			user = frappe.new_doc("User")
+			user.email = email
+			user.first_name = email.split("@")[0]
+			user.last_name = "Tester"
+			user.enabled = 1
+			user.user_type = "System User"
+		user.roles = []
+		for role in roles:
+			user.append("roles", {"role": role})
+		user.save(ignore_permissions=True)
+
+	def test_print_internal_vs_customer_sanitization(self):
+		from vehicle_service.service_history import render_vehicle_service_history_print
+
+		internal_html = render_vehicle_service_history_print(
+			self.vehicle_reg,
+			mode="internal",
+			include_financials=1,
+			filters={"include_cancelled": 1},
+		)
+		self.assertIn(self.vehicle_reg, internal_html)
+		self.assertIn("INTERNAL_HOLD_SECRET", internal_html)
+		self.assertIn("INTERNAL_RECEPTION_SECRET", internal_html)
+		self.assertIn("INTERNAL_DISPUTE_SECRET", internal_html)
+		self.assertIn("INTERNAL_PAUSE_SECRET", internal_html)
+		self.assertIn("Technical Consultation", internal_html)
+		self.assertIn("INTERNAL_QC_FAIL_REASON", internal_html)
+		self.assertIn("INTERNAL_QC_REWORK_SECRET", internal_html)
+		self.assertIn("INTERNAL_ADD_REASON", internal_html)
+		self.assertIn("INTERNAL_DECLINED_REASON", internal_html)
+		self.assertIn("INTERNAL_PART_REASON", internal_html)
+		self.assertIn("Declined Extra Job", internal_html)
+		self.assertIn("Declined Wiper Blade", internal_html)
+		self.assertIn("CANCELLED_ORDER_JOB", internal_html)
+		self.assertIn(self.tech_name, internal_html)
+		self.assertIn(self.invoice_name, internal_html)
+		self.assertIn("/assets/vehicle_service/images/vehicle-service-logo.svg", internal_html)
+
+		customer_html = render_vehicle_service_history_print(
+			self.vehicle_reg,
+			mode="customer",
+			include_financials=1,
+			filters={"include_cancelled": 1},
+		)
+		self.assertIn(self.vehicle_reg, customer_html)
+		self.assertIn("Completed Oil Service", customer_html)
+		self.assertIn("Print Test Oil Filter", customer_html)
+		self.assertIn("Road test completed cleanly.", customer_html)
+		self.assertNotIn("INTERNAL_HOLD_SECRET", customer_html)
+		self.assertNotIn("INTERNAL_RECEPTION_SECRET", customer_html)
+		self.assertNotIn("INTERNAL_DISPUTE_SECRET", customer_html)
+		self.assertNotIn("INTERNAL_PAUSE_SECRET", customer_html)
+		self.assertNotIn("Technical Consultation", customer_html)
+		self.assertNotIn("INTERNAL_QC_FAIL_REASON", customer_html)
+		self.assertNotIn("INTERNAL_QC_REWORK_SECRET", customer_html)
+		self.assertNotIn("INTERNAL_ADD_REASON", customer_html)
+		self.assertNotIn("INTERNAL_DECLINED_REASON", customer_html)
+		self.assertNotIn("INTERNAL_PART_REASON", customer_html)
+		self.assertNotIn("Declined Extra Job", customer_html)
+		self.assertNotIn("Declined Wiper Blade", customer_html)
+		self.assertNotIn("CANCELLED_ORDER_JOB", customer_html)
+		self.assertNotIn(self.tech_name, customer_html)
+		self.assertNotIn(self.emp.name, customer_html)
+		self.assertIn(self.invoice_name, customer_html)
+
+	def test_sanitize_visit_for_customer_helper(self):
+		from vehicle_service.service_history import _sanitize_visit_for_customer
+
+		self.assertEqual(_sanitize_visit_for_customer({"status": "Cancelled"}), {})
+
+		sample = {
+			"status": "Delivered",
+			"reception_notes": "sec1",
+			"hold_reason": "sec2",
+			"dispute_notes": "sec3",
+			"pause_reason": "sec4",
+			"service_advisor": "adv@example.com",
+			"service_advisor_name": "Advisor One",
+			"intake": {"reception_notes": "sec5", "checked_in_by": "staff@example.com", "fuel_level": "1/2"},
+			"jobs": [
+				{
+					"name": "J1",
+					"job_title": "Good Job",
+					"status": "Completed",
+					"technician": "EMP-1",
+					"technician_name": "Tech A",
+					"reason_for_adding": "sec6",
+					"qc_fail_reason": "sec7",
+				},
+				{"name": "J2", "job_title": "Declined Job", "status": "Declined"},
+			],
+			"parts": [
+				{"item_code": "P1", "part_status": "Issued", "approval_status": "Approved", "reason_for_adding": "sec8"},
+				{"item_code": "P2", "part_status": "Issued", "approval_status": "Approved", "job": "J2"},
+				{"item_code": "P3", "part_status": "Declined", "approval_status": "Declined"},
+			],
+			"qc_inspections": [
+				{"name": "QC-2", "result": "Pass", "inspector": "qc@example.com", "findings": "OK"},
+				{"name": "QC-1", "result": "Fail", "fail_reason": "sec9", "inspector": "qc@example.com"},
+			],
+		}
+		sanitized = _sanitize_visit_for_customer(sample)
+		self.assertNotIn("reception_notes", sanitized)
+		self.assertNotIn("hold_reason", sanitized)
+		self.assertNotIn("dispute_notes", sanitized)
+		self.assertNotIn("pause_reason", sanitized)
+		self.assertNotIn("service_advisor", sanitized)
+		self.assertEqual(sanitized["service_advisor_name"], "Advisor One")
+		self.assertNotIn("reception_notes", sanitized["intake"])
+		self.assertEqual([j["job_title"] for j in sanitized["jobs"]], ["Good Job"])
+		self.assertNotIn("technician", sanitized["jobs"][0])
+		self.assertNotIn("technician_name", sanitized["jobs"][0])
+		self.assertNotIn("reason_for_adding", sanitized["jobs"][0])
+		self.assertNotIn("qc_fail_reason", sanitized["jobs"][0])
+		self.assertEqual([p["item_code"] for p in sanitized["parts"]], ["P1"])
+		self.assertNotIn("reason_for_adding", sanitized["parts"][0])
+		self.assertEqual(len(sanitized["qc_inspections"]), 1)
+		self.assertEqual(sanitized["qc_inspections"][0]["name"], "QC-2")
+		self.assertNotIn("inspector", sanitized["qc_inspections"][0])
+		self.assertEqual(sanitized["qc"]["name"], "QC-2")
+		# Input dict must not be mutated
+		self.assertEqual(len(sample["jobs"]), 2)
+		self.assertIn("reception_notes", sample)
+
+	def test_print_financial_toggle_and_technician_bypass_blocked(self):
+		from vehicle_service.service_history import render_vehicle_service_history_print
+
+		customer_no_fin = render_vehicle_service_history_print(self.vehicle_reg, mode="customer", include_financials=0)
+		self.assertNotIn("Total Invoice Value", customer_no_fin)
+		self.assertNotIn("Total Historical Service Value", customer_no_fin)
+		self.assertNotIn(self.invoice_name, customer_no_fin)
+
+		customer_str_false = render_vehicle_service_history_print(
+			self.vehicle_reg, mode="customer", include_financials="0"
+		)
+		self.assertNotIn("Total Invoice Value", customer_str_false)
+		self.assertNotIn(self.invoice_name, customer_str_false)
+
+		frappe.set_user(self.tech_user)
+		tech_html = render_vehicle_service_history_print(self.vehicle_reg, mode="customer", include_financials=1)
+		self.assertNotIn("Total Invoice Value", tech_html)
+		self.assertNotIn("Total Historical Service Value", tech_html)
+		self.assertNotIn(self.invoice_name, tech_html)
+
+		frappe.set_user("Administrator")
+		with self.assertRaises(frappe.ValidationError):
+			render_vehicle_service_history_print(self.vehicle_reg, mode="invalid_mode")
+
+		frappe.set_user(self.no_role_user)
+		with self.assertRaises(frappe.PermissionError):
+			render_vehicle_service_history_print(self.vehicle_reg, mode="customer")
+
+	def test_download_pdf_generates_valid_pdf_bytes(self):
+		from vehicle_service.service_history import download_vehicle_service_history_pdf
+
+		download_vehicle_service_history_pdf(self.vehicle_reg, mode="customer", include_financials=1)
+		self.assertEqual(frappe.local.response.get("type"), "pdf")
+		self.assertTrue((frappe.local.response.get("filename") or "").endswith("-customer.pdf"))
+		pdf_bytes = frappe.local.response.get("filecontent") or b""
+		self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+		download_vehicle_service_history_pdf(self.vehicle_reg, mode="internal", include_financials=1)
+		self.assertEqual(frappe.local.response.get("type"), "pdf")
+		self.assertTrue((frappe.local.response.get("filename") or "").endswith("-internal.pdf"))
+		internal_pdf_bytes = frappe.local.response.get("filecontent") or b""
+		self.assertTrue(internal_pdf_bytes.startswith(b"%PDF"))
+
+	def test_print_escapes_html_injection_payloads(self):
+		from vehicle_service.service_history import render_vehicle_service_history_print
+
+		xss_payload = '<script>window.__xss=1</script><img src=x onerror="alert(1)">'
+		frappe.db.set_value(
+			"Service Order",
+			self.order.name,
+			"customer_complaint",
+			xss_payload,
+			update_modified=False,
+		)
+		html = render_vehicle_service_history_print(self.vehicle_reg, mode="customer", include_financials=0)
+		self.assertNotIn("<script>window.__xss=1</script>", html)
+		self.assertNotIn('<img src=x onerror="alert(1)">', html)
+		self.assertIn("&lt;script&gt;window.__xss=1&lt;/script&gt;", html)

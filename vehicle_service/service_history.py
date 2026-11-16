@@ -1,12 +1,26 @@
 # Copyright (c) 2026, Azazel and contributors
 # For license information, please see license.txt
 
+import base64
+import copy
+import os
 import re
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, cint, date_diff, flt, get_datetime, getdate, nowdate
+from frappe.utils import (
+	add_days,
+	cint,
+	date_diff,
+	flt,
+	format_datetime,
+	get_datetime,
+	get_fullname,
+	getdate,
+	now_datetime,
+	nowdate,
+)
 
 HISTORY_VIEWER_ROLES: set[str] = {
 	"System Manager",
@@ -1737,3 +1751,338 @@ def get_vehicle_service_history(vehicle: str, filters: dict | str | None = None)
 		"timeline": timeline,
 		"filter_options": filter_options,
 	}
+
+
+_PRINT_TEMPLATE_PATH = "vehicle_service/templates/print_formats/vehicle_service_history_report.html"
+_LOGO_ASSET_URL = "/assets/vehicle_service/images/vehicle-service-logo.svg"
+_INTERNAL_VISIT_FIELDS = (
+	"reception_notes",
+	"hold_reason",
+	"dispute_notes",
+	"pause_reason",
+	"cancellation_reason",
+	"board_status",
+	"current_location",
+)
+_INTERNAL_INTAKE_FIELDS = ("reception_notes", "checked_in_by")
+_INTERNAL_JOB_FIELDS = (
+	"technician",
+	"technician_name",
+	"technician_user",
+	"raised_by",
+	"bay",
+	"reason_for_adding",
+	"pause_reason",
+	"qc_fail_reason",
+	"variance_hours",
+	"supplier",
+	"supplier_cost",
+	"supplier_invoice_ref",
+)
+_INTERNAL_PART_FIELDS = ("reason_for_adding",)
+_INTERNAL_QC_FIELDS = ("fail_reason", "inspector")
+_CUSTOMER_EXCLUDED_STATUSES = {"Declined", "Cancelled"}
+
+
+def _parse_include_financials(value) -> bool:
+	if value is None:
+		return True
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, int | float):
+		return bool(cint(value))
+	text = str(value).strip().lower()
+	if text in ("1", "true", "yes", "on"):
+		return True
+	if text in ("0", "false", "no", "off", ""):
+		return False
+	return bool(cint(value))
+
+
+def _sanitize_visit_for_customer(visit: dict) -> dict:
+	"""Return a customer-safe deep copy of a visit, or `{}` for cancelled visits."""
+	if not visit or visit.get("status") == "Cancelled":
+		return {}
+
+	sanitized = copy.deepcopy(visit)
+	for field in _INTERNAL_VISIT_FIELDS:
+		sanitized.pop(field, None)
+	sanitized.pop("service_advisor", None)
+
+	if isinstance(sanitized.get("intake"), dict):
+		for field in _INTERNAL_INTAKE_FIELDS:
+			sanitized["intake"].pop(field, None)
+
+	removed_job_ids: set[str] = set()
+	kept_jobs: list[dict] = []
+	for job in sanitized.get("jobs") or []:
+		if job.get("status") in _CUSTOMER_EXCLUDED_STATUSES:
+			for key in ("name", "service_job", "order_job_row"):
+				if job.get(key):
+					removed_job_ids.add(job[key])
+			continue
+		for field in _INTERNAL_JOB_FIELDS:
+			job.pop(field, None)
+		kept_jobs.append(job)
+	sanitized["jobs"] = kept_jobs
+
+	kept_parts: list[dict] = []
+	for part in sanitized.get("parts") or []:
+		if (
+			part.get("part_status") in _CUSTOMER_EXCLUDED_STATUSES
+			or part.get("approval_status") in _CUSTOMER_EXCLUDED_STATUSES
+			or (part.get("job") and part.get("job") in removed_job_ids)
+		):
+			continue
+		for field in _INTERNAL_PART_FIELDS:
+			part.pop(field, None)
+		kept_parts.append(part)
+	sanitized["parts"] = kept_parts
+
+	raw_qcs = sanitized.get("qc_inspections")
+	if raw_qcs is None and isinstance(sanitized.get("qc"), dict):
+		raw_qcs = [sanitized["qc"]]
+
+	kept_qcs: list[dict] = []
+	for qc in raw_qcs or []:
+		if qc.get("result") == "Fail":
+			continue
+		for field in _INTERNAL_QC_FIELDS:
+			qc.pop(field, None)
+		kept_qcs.append(qc)
+
+	sanitized["qc_inspections"] = kept_qcs
+	sanitized["qc"] = kept_qcs[0] if kept_qcs else None
+
+	return sanitized
+
+
+def _sanitize_recommendations_for_customer(recommendations: dict, raw_timeline: list[dict]) -> dict:
+	"""Filter declined/cancelled items, failed QC advisories, and internal reasons from recommendations."""
+	sanitized = copy.deepcopy(recommendations or {})
+
+	job_has_desc: dict[str, bool] = {}
+	qc_result_map: dict[str, str | None] = {}
+	for visit in raw_timeline:
+		for job in visit.get("jobs") or []:
+			has_desc = bool((job.get("description") or "").strip())
+			for key in (job.get("service_job"), job.get("name")):
+				if key:
+					job_has_desc[key] = has_desc
+		for qc in visit.get("qc_inspections") or []:
+			if qc.get("name"):
+				qc_result_map[qc["name"]] = qc.get("result")
+
+	missing_job_ids = {
+		item.get("source_id")
+		for bucket in ("outstanding", "completed")
+		for item in (sanitized.get(bucket) or [])
+		if item.get("source_type") == "Job"
+		and item.get("source_id")
+		and item.get("source_id") not in job_has_desc
+		and item.get("original_status") not in _CUSTOMER_EXCLUDED_STATUSES
+	}
+	if missing_job_ids:
+		rows = frappe.get_all(
+			"Service Job",
+			filters={"name": ["in", list(missing_job_ids)]},
+			fields=["name", "description"],
+		)
+		for row in rows:
+			job_has_desc[row["name"]] = bool((row.get("description") or "").strip())
+
+	for bucket in ("outstanding", "completed"):
+		filtered: list[dict] = []
+		for item in sanitized.get(bucket) or []:
+			if item.get("original_status") in _CUSTOMER_EXCLUDED_STATUSES:
+				continue
+			if item.get("source_type") == "Part":
+				item["description"] = None
+			elif item.get("source_type") == "Job" and not job_has_desc.get(item.get("source_id") or "", False):
+				item["description"] = None
+			filtered.append(item)
+		sanitized[bucket] = filtered
+
+	missing_qc_ids = {
+		adv.get("source_id")
+		for adv in (sanitized.get("advisory_notes") or [])
+		if adv.get("source_doctype") == "Service QC"
+		and adv.get("source_id")
+		and adv.get("source_id") not in qc_result_map
+	}
+	if missing_qc_ids:
+		qc_rows = frappe.get_all(
+			"Service QC",
+			filters={"name": ["in", list(missing_qc_ids)]},
+			fields=["name", "result"],
+		)
+		for row in qc_rows:
+			qc_result_map[row["name"]] = row.get("result")
+
+	sanitized["advisory_notes"] = [
+		adv
+		for adv in (sanitized.get("advisory_notes") or [])
+		if not (
+			adv.get("source_doctype") == "Service QC"
+			and qc_result_map.get(adv.get("source_id") or "") == "Fail"
+		)
+	]
+
+	return sanitized
+
+
+def _get_print_company_info(visits: list[dict]) -> dict:
+	company_name = next((v.get("company") for v in visits if v.get("company")), None)
+	if not company_name:
+		company_name = (
+			frappe.db.get_single_value("Vehicle Service Settings", "company")
+			or frappe.db.get_default("company")
+			or "Vehicle Service Workshop"
+		)
+
+	info = {
+		"company": company_name,
+		"company_name": company_name,
+		"tax_id": None,
+		"phone_no": None,
+		"email": None,
+		"website": None,
+		"default_currency": frappe.db.get_default("currency") or "ZMW",
+	}
+	if company_name and frappe.db.exists("Company", company_name):
+		row = frappe.db.get_value(
+			"Company",
+			company_name,
+			["company_name", "tax_id", "phone_no", "email", "website", "default_currency"],
+			as_dict=True,
+		)
+		if row:
+			info.update({k: v for k, v in row.items() if v is not None})
+	return info
+
+
+def _format_applied_filters(filters: dict, is_customer_mode: bool, include_financials: bool) -> str:
+	parts: list[str] = []
+	if filters.get("from_date"):
+		parts.append(f"From {filters['from_date']}")
+	if filters.get("to_date"):
+		parts.append(f"To {filters['to_date']}")
+	if filters.get("status"):
+		parts.append(f"Status: {filters['status']}")
+	if filters.get("order_type"):
+		parts.append(f"Type: {filters['order_type']}")
+	if not is_customer_mode and filters.get("technician"):
+		parts.append(f"Technician: {filters['technician']}")
+	if filters.get("service_advisor"):
+		advisor_label = (
+			(get_fullname(filters["service_advisor"]) or filters["service_advisor"])
+			if is_customer_mode
+			else filters["service_advisor"]
+		)
+		parts.append(f"Advisor: {advisor_label}")
+	if include_financials and filters.get("invoice_status"):
+		parts.append(f"Invoice: {filters['invoice_status']}")
+	return ", ".join(parts)
+
+
+def _inline_logo_for_pdf(html: str) -> str:
+	"""Embed the local SVG logo as a data URI so wkhtmltopdf needs no HTTP round-trip."""
+	logo_path = frappe.get_app_path("vehicle_service", "public", "images", "vehicle-service-logo.svg")
+	if not os.path.exists(logo_path):
+		return html
+	with open(logo_path, "rb") as logo_file:
+		encoded = base64.b64encode(logo_file.read()).decode("ascii")
+	data_uri = f"data:image/svg+xml;base64,{encoded}"
+	return html.replace(f'src="{_LOGO_ASSET_URL}"', f'src="{data_uri}"', 1)
+
+
+@frappe.whitelist()
+def render_vehicle_service_history_print(
+	vehicle: str,
+	mode: str = "internal",
+	include_financials: int = 1,
+	filters: dict | str | None = None,
+) -> str:
+	"""Render print-ready Vehicle Service History HTML for internal or customer mode."""
+	if mode not in ("internal", "customer"):
+		frappe.throw(_("Invalid print mode '{0}'. Expected 'internal' or 'customer'.").format(mode))
+
+	parsed_filters = _parse_filters(filters)
+	payload = get_vehicle_service_history(vehicle=vehicle, filters=parsed_filters)
+
+	effective_include_financials = _parse_include_financials(include_financials) and bool(
+		payload["permissions"]["can_view_financials"]
+	)
+
+	if not effective_include_financials:
+		payload["overview_stats"]["total_historical_service_value"] = None
+		for visit in payload["timeline"]:
+			_redact_visit_financials(visit)
+
+	is_customer_mode = mode == "customer"
+	if is_customer_mode:
+		raw_timeline = payload["timeline"]
+		payload["timeline"] = [
+			sanitized
+			for visit in raw_timeline
+			if (sanitized := _sanitize_visit_for_customer(visit))
+		]
+		payload["recommendations"] = _sanitize_recommendations_for_customer(
+			payload["recommendations"],
+			raw_timeline,
+		)
+		payload["vehicle"].pop("current_location", None)
+		payload["vehicle"].pop("current_service_order", None)
+
+	company_info = _get_print_company_info(payload["timeline"])
+	report_title = _("Customer Service History") if is_customer_mode else _("Complete Service History")
+
+	context = {
+		"mode": mode,
+		"is_customer_mode": is_customer_mode,
+		"report_title": report_title,
+		"include_financials": effective_include_financials,
+		"logo_src": _LOGO_ASSET_URL,
+		"company_info": company_info,
+		"currency": company_info.get("default_currency") or "ZMW",
+		"generated_on": format_datetime(now_datetime(), "dd-MMM-yyyy HH:mm"),
+		"generated_by": get_fullname(frappe.session.user) or frappe.session.user,
+		"applied_filters": _format_applied_filters(
+			parsed_filters,
+			is_customer_mode=is_customer_mode,
+			include_financials=effective_include_financials,
+		),
+		"vehicle": payload["vehicle"],
+		"customer": payload["customer"],
+		"overview_stats": payload["overview_stats"],
+		"recommendations": payload["recommendations"],
+		"timeline": payload["timeline"],
+	}
+	return frappe.render_template(_PRINT_TEMPLATE_PATH, context)
+
+
+@frappe.whitelist()
+def download_vehicle_service_history_pdf(
+	vehicle: str,
+	mode: str = "internal",
+	include_financials: int = 1,
+	filters: dict | str | None = None,
+) -> None:
+	"""Generate Vehicle Service History PDF and write it to `frappe.local.response`."""
+	from frappe.utils.pdf import get_pdf
+
+	html = render_vehicle_service_history_print(
+		vehicle=vehicle,
+		mode=mode,
+		include_financials=include_financials,
+		filters=filters,
+	)
+	pdf_html = _inline_logo_for_pdf(html)
+	pdf_bytes = get_pdf(pdf_html)
+
+	reg_no = frappe.db.get_value("Service Vehicle", vehicle, "registration_no") or vehicle or "vehicle"
+	safe_reg = re.sub(r"[^A-Za-z0-9._-]+", "-", str(reg_no).strip()).strip("-") or "vehicle"
+
+	frappe.local.response.filename = f"Service-History-{safe_reg}-{mode}.pdf"
+	frappe.local.response.filecontent = pdf_bytes
+	frappe.local.response.type = "pdf"

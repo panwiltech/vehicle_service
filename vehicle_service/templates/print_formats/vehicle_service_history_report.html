@@ -1,0 +1,965 @@
+{% autoescape true %}<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>{{ report_title }} - {{ vehicle.registration_no or vehicle.name }}</title>
+	<style>
+		@page {
+			size: A4;
+			margin: 12mm;
+		}
+		* {
+			box-sizing: border-box;
+		}
+		body {
+			margin: 0;
+			padding: 0;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+			color: #1f2937;
+			background: #ffffff;
+			font-size: 9.5pt;
+			line-height: 1.4;
+			-webkit-print-color-adjust: exact;
+			print-color-adjust: exact;
+		}
+		.report-container {
+			max-width: 900px;
+			margin: 0 auto;
+			padding: 16px;
+		}
+		.header-table {
+			width: 100%;
+			border-collapse: collapse;
+			border-bottom: 2px solid #1e3a8a;
+			margin-bottom: 14px;
+		}
+		.header-table td {
+			vertical-align: top;
+			padding-bottom: 12px;
+		}
+		.brand-wrap {
+			display: table;
+		}
+		.brand-logo-cell {
+			display: table-cell;
+			vertical-align: top;
+			padding-right: 12px;
+			width: 56px;
+		}
+		.brand-logo {
+			width: 48px;
+			height: 48px;
+			display: block;
+		}
+		.brand-text-cell {
+			display: table-cell;
+			vertical-align: top;
+		}
+		.brand-title {
+			font-size: 16pt;
+			font-weight: 800;
+			color: #1e3a8a;
+			margin: 0;
+			letter-spacing: -0.3px;
+		}
+		.brand-sub {
+			font-size: 8pt;
+			color: #64748b;
+			text-transform: uppercase;
+			letter-spacing: 0.7px;
+			margin-top: 2px;
+		}
+		.company-meta {
+			font-size: 8pt;
+			color: #475569;
+			margin-top: 4px;
+			line-height: 1.45;
+		}
+		.header-right {
+			text-align: right;
+			width: 310px;
+		}
+		.mode-badge {
+			display: inline-block;
+			padding: 4px 10px;
+			border-radius: 4px;
+			font-size: 8.5pt;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			margin-bottom: 6px;
+		}
+		.mode-internal {
+			background: #1e3a8a;
+			color: #ffffff;
+		}
+		.mode-customer {
+			background: #0f766e;
+			color: #ffffff;
+		}
+		.report-heading {
+			font-size: 13pt;
+			font-weight: 700;
+			color: #0f172a;
+			margin: 0 0 6px 0;
+		}
+		.meta-box {
+			background: #f8fafc;
+			border: 1px solid #e2e8f0;
+			border-radius: 5px;
+			padding: 6px 10px;
+			text-align: left;
+			font-size: 8pt;
+		}
+		.meta-table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+		.meta-table td {
+			padding: 1.5px 0;
+			border: none;
+		}
+		.meta-label {
+			color: #64748b;
+			font-weight: 600;
+			width: 42%;
+		}
+		.meta-val {
+			color: #0f172a;
+			font-weight: 600;
+			text-align: right;
+		}
+		.section-title {
+			font-size: 9.5pt;
+			font-weight: 700;
+			color: #1e3a8a;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+			border-bottom: 1px solid #cbd5e1;
+			padding-bottom: 4px;
+			margin: 14px 0 8px 0;
+			page-break-after: avoid;
+		}
+		.two-col-table {
+			width: 100%;
+			border-collapse: separate;
+			border-spacing: 10px 0;
+			margin: 0 -10px 10px -10px;
+		}
+		.two-col-cell {
+			width: 50%;
+			vertical-align: top;
+		}
+		.panel {
+			border: 1px solid #e2e8f0;
+			border-radius: 5px;
+			background: #ffffff;
+			margin-bottom: 10px;
+		}
+		.panel-head {
+			background: #f8fafc;
+			border-bottom: 1px solid #e2e8f0;
+			padding: 5px 10px;
+			font-size: 8.5pt;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.4px;
+			color: #334155;
+		}
+		.panel-body {
+			padding: 8px 10px;
+		}
+		.kv-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 8.5pt;
+		}
+		.kv-table td {
+			padding: 2.5px 0;
+			vertical-align: top;
+		}
+		.kv-label {
+			color: #64748b;
+			font-weight: 500;
+			width: 42%;
+		}
+		.kv-value {
+			color: #0f172a;
+			font-weight: 600;
+			text-align: right;
+		}
+		.kpi-table {
+			width: 100%;
+			border-collapse: separate;
+			border-spacing: 6px;
+			margin: 0 -6px 10px -6px;
+		}
+		.kpi-card {
+			border: 1px solid #e2e8f0;
+			border-radius: 5px;
+			background: #f8fafc;
+			padding: 7px 8px;
+			text-align: center;
+			vertical-align: middle;
+		}
+		.kpi-label {
+			font-size: 7.5pt;
+			color: #64748b;
+			text-transform: uppercase;
+			letter-spacing: 0.4px;
+			font-weight: 600;
+			margin-bottom: 3px;
+		}
+		.kpi-value {
+			font-size: 11pt;
+			color: #0f172a;
+			font-weight: 700;
+		}
+		.kpi-highlight {
+			background: #eff6ff;
+			border-color: #bfdbfe;
+		}
+		.kpi-highlight .kpi-value {
+			color: #1e3a8a;
+		}
+		table.data-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 8.5pt;
+			margin-bottom: 10px;
+		}
+		table.data-table thead {
+			display: table-header-group;
+		}
+		table.data-table th {
+			background: #f1f5f9;
+			color: #334155;
+			font-weight: 700;
+			text-align: left;
+			padding: 5px 7px;
+			border: 1px solid #cbd5e1;
+			font-size: 8pt;
+		}
+		table.data-table td {
+			padding: 5px 7px;
+			border: 1px solid #e2e8f0;
+			vertical-align: top;
+			color: #1f2937;
+		}
+		table.data-table tr {
+			page-break-inside: avoid;
+		}
+		.text-right {
+			text-align: right !important;
+		}
+		.text-center {
+			text-align: center !important;
+		}
+		.muted {
+			color: #64748b;
+			font-size: 8pt;
+		}
+		.pill {
+			display: inline-block;
+			padding: 1.5px 6px;
+			border-radius: 3px;
+			font-size: 7.5pt;
+			font-weight: 700;
+			text-transform: uppercase;
+		}
+		.pill-blue { background: #dbeafe; color: #1e40af; }
+		.pill-green { background: #dcfce7; color: #166534; }
+		.pill-amber { background: #fef3c7; color: #92400e; }
+		.pill-red { background: #fee2e2; color: #991b1b; }
+		.pill-slate { background: #e2e8f0; color: #334155; }
+		.visit-block {
+			border: 1px solid #cbd5e1;
+			border-radius: 6px;
+			margin-bottom: 14px;
+			background: #ffffff;
+			overflow: hidden;
+		}
+		.visit-header {
+			background: #f1f5f9;
+			border-bottom: 1px solid #cbd5e1;
+			padding: 7px 10px;
+			page-break-after: avoid;
+		}
+		.visit-header-table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+		.visit-ref {
+			font-size: 10.5pt;
+			font-weight: 700;
+			color: #1e3a8a;
+		}
+		.visit-body {
+			padding: 9px 10px;
+		}
+		.sub-heading {
+			font-size: 8.5pt;
+			font-weight: 700;
+			color: #334155;
+			text-transform: uppercase;
+			letter-spacing: 0.4px;
+			margin: 8px 0 4px 0;
+			page-break-after: avoid;
+		}
+		.notes-box {
+			background: #f8fafc;
+			border: 1px solid #e2e8f0;
+			border-radius: 4px;
+			padding: 6px 8px;
+			font-size: 8.5pt;
+			margin-bottom: 8px;
+			white-space: pre-wrap;
+		}
+		.internal-box {
+			background: #fffbeb;
+			border: 1px solid #fde68a;
+			border-radius: 4px;
+			padding: 6px 8px;
+			font-size: 8.5pt;
+			margin-bottom: 8px;
+			color: #78350f;
+		}
+		.fin-box {
+			background: #f8fafc;
+			border: 1px solid #cbd5e1;
+			border-radius: 5px;
+			padding: 7px 10px;
+			margin-top: 6px;
+			page-break-inside: avoid;
+		}
+		.fin-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 8.5pt;
+		}
+		.fin-table td {
+			padding: 2px 6px;
+		}
+		.fin-total-row td {
+			border-top: 1.5px solid #1e3a8a;
+			padding-top: 4px;
+			font-weight: 700;
+			color: #1e3a8a;
+			font-size: 9.5pt;
+		}
+		.empty-state {
+			border: 1px dashed #cbd5e1;
+			border-radius: 5px;
+			padding: 10px;
+			color: #64748b;
+			text-align: center;
+			font-size: 8.5pt;
+			margin-bottom: 10px;
+		}
+		.footer-note {
+			margin-top: 16px;
+			padding-top: 8px;
+			border-top: 1px solid #e2e8f0;
+			font-size: 7.5pt;
+			color: #64748b;
+			text-align: center;
+		}
+		@media print {
+			.report-container {
+				max-width: 100%;
+				padding: 0;
+			}
+		}
+	</style>
+</head>
+<body>
+<div class="report-container">
+	<!-- Branding & Metadata Header -->
+	<table class="header-table">
+		<tr>
+			<td>
+				<div class="brand-wrap">
+					<div class="brand-logo-cell">
+						<img src="{{ logo_src or '/assets/vehicle_service/images/vehicle-service-logo.svg' }}" alt="Vehicle Service Logo" class="brand-logo" />
+					</div>
+					<div class="brand-text-cell">
+						<h1 class="brand-title">{{ company_info.company_name or "Vehicle Service Workshop" }}</h1>
+						<div class="brand-sub">Automotive Maintenance &amp; Service History</div>
+						<div class="company-meta">
+							{% if company_info.tax_id %}<span><strong>Tax ID:</strong> {{ company_info.tax_id }}</span>{% endif %}
+							{% if company_info.phone_no %}<span>{% if company_info.tax_id %} &bull; {% endif %}<strong>Tel:</strong> {{ company_info.phone_no }}</span>{% endif %}
+							{% if company_info.email %}<span>{% if company_info.tax_id or company_info.phone_no %} &bull; {% endif %}<strong>Email:</strong> {{ company_info.email }}</span>{% endif %}
+						</div>
+					</div>
+				</div>
+			</td>
+			<td class="header-right">
+				<span class="mode-badge {{ 'mode-customer' if is_customer_mode else 'mode-internal' }}">
+					{{ report_title }}
+				</span>
+				<div class="meta-box">
+					<table class="meta-table">
+						<tr>
+							<td class="meta-label">Generated On:</td>
+							<td class="meta-val">{{ generated_on }}</td>
+						</tr>
+						<tr>
+							<td class="meta-label">Generated By:</td>
+							<td class="meta-val">{{ generated_by }}</td>
+						</tr>
+						<tr>
+							<td class="meta-label">Report Mode:</td>
+							<td class="meta-val">{{ "Customer Copy" if is_customer_mode else "Internal Copy" }}</td>
+						</tr>
+						{% if include_financials %}
+						<tr>
+							<td class="meta-label">Currency:</td>
+							<td class="meta-val">{{ currency }}</td>
+						</tr>
+						{% endif %}
+						{% if applied_filters %}
+						<tr>
+							<td class="meta-label">Filters Applied:</td>
+							<td class="meta-val">{{ applied_filters }}</td>
+						</tr>
+						{% endif %}
+					</table>
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	<!-- Vehicle & Customer Profile -->
+	<div class="section-title">Vehicle &amp; Customer Profile</div>
+	<table class="two-col-table">
+		<tr>
+			<td class="two-col-cell">
+				<div class="panel">
+					<div class="panel-head">Vehicle Identification</div>
+					<div class="panel-body">
+						<table class="kv-table">
+							<tr>
+								<td class="kv-label">Registration No:</td>
+								<td class="kv-value" style="color: #1e3a8a; font-size: 9.5pt;">{{ vehicle.registration_no or vehicle.name }}</td>
+							</tr>
+							{% if vehicle.previous_registration_nos %}
+							<tr>
+								<td class="kv-label">Previous Plates:</td>
+								<td class="kv-value">{{ vehicle.previous_registration_nos }}</td>
+							</tr>
+							{% endif %}
+							<tr>
+								<td class="kv-label">VIN / Chassis No:</td>
+								<td class="kv-value">{{ vehicle.vin or "N/A" }}</td>
+							</tr>
+							<tr>
+								<td class="kv-label">Make / Model / Year:</td>
+								<td class="kv-value">{{ ((vehicle.make or "") ~ " " ~ (vehicle.model or "")) | trim or "N/A" }}{% if vehicle.year %} ({{ vehicle.year }}){% endif %}</td>
+							</tr>
+							<tr>
+								<td class="kv-label">Colour / Fuel / Trans:</td>
+								<td class="kv-value">{{ vehicle.colour or "N/A" }} / {{ vehicle.fuel_type or "N/A" }} / {{ vehicle.transmission or "N/A" }}</td>
+							</tr>
+							<tr>
+								<td class="kv-label">Engine No:</td>
+								<td class="kv-value">{{ vehicle.engine_no or "N/A" }}</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+			</td>
+			<td class="two-col-cell">
+				<div class="panel">
+					<div class="panel-head">Owner &amp; Service Status</div>
+					<div class="panel-body">
+						<table class="kv-table">
+							<tr>
+								<td class="kv-label">Customer:</td>
+								<td class="kv-value">{{ customer.customer_name or vehicle.customer_name or vehicle.customer or "N/A" }}</td>
+							</tr>
+							{% if customer.mobile_no or vehicle.driver_phone %}
+							<tr>
+								<td class="kv-label">Contact Phone:</td>
+								<td class="kv-value">{{ customer.mobile_no or vehicle.driver_phone }}</td>
+							</tr>
+							{% endif %}
+							<tr>
+								<td class="kv-label">Vehicle Status:</td>
+								<td class="kv-value">{{ vehicle.vehicle_status or "N/A" }}</td>
+							</tr>
+							<tr>
+								<td class="kv-label">Current Mileage:</td>
+								<td class="kv-value">{{ "{:,}".format((vehicle.current_mileage or 0) | int) }} km</td>
+							</tr>
+							<tr>
+								<td class="kv-label">Last Service Date:</td>
+								<td class="kv-value">{{ overview_stats.last_service_date or vehicle.last_service_date or "N/A" }}</td>
+							</tr>
+							<tr>
+								<td class="kv-label">Next Service Due:</td>
+								<td class="kv-value">
+									{{ vehicle.next_service_date or "N/A" }}
+									{% if vehicle.next_service_mileage %} / {{ "{:,}".format(vehicle.next_service_mileage | int) }} km{% endif %}
+								</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	<!-- Overview Statistics -->
+	<div class="section-title">Overview Summary</div>
+	<table class="kpi-table">
+		<tr>
+			<td class="kpi-card">
+				<div class="kpi-label">Total Visits</div>
+				<div class="kpi-value">{{ overview_stats.total_visits or 0 }}</div>
+			</td>
+			<td class="kpi-card">
+				<div class="kpi-label">Service Orders</div>
+				<div class="kpi-value">{{ overview_stats.total_service_orders or 0 }}</div>
+			</td>
+			<td class="kpi-card">
+				<div class="kpi-label">Completed Repairs</div>
+				<div class="kpi-value">{{ overview_stats.total_completed_repairs or 0 }}</div>
+			</td>
+			<td class="kpi-card">
+				<div class="kpi-label">Last Recorded Mileage</div>
+				<div class="kpi-value">{{ "{:,}".format((overview_stats.last_recorded_mileage or 0) | int) }} km</div>
+			</td>
+			<td class="kpi-card">
+				<div class="kpi-label">Outstanding Orders</div>
+				<div class="kpi-value">{{ overview_stats.outstanding_service_orders or 0 }}</div>
+			</td>
+			{% if include_financials and overview_stats.total_historical_service_value is not none %}
+			<td class="kpi-card kpi-highlight">
+				<div class="kpi-label">Total Historical Service Value</div>
+				<div class="kpi-value">{{ currency }} {{ "{:,.2f}".format(overview_stats.total_historical_service_value or 0) }}</div>
+			</td>
+			{% endif %}
+		</tr>
+	</table>
+
+	<!-- Maintenance Recommendations & Scheduled Intervals -->
+	<div class="section-title">Maintenance Recommendations &amp; Scheduled Service</div>
+	{% if recommendations.scheduled %}
+	<div class="sub-heading">Scheduled Maintenance Intervals</div>
+	<table class="data-table">
+		<thead>
+			<tr>
+				<th>Interval</th>
+				<th>Target / Due</th>
+				<th style="width: 110px;">Status</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for item in recommendations.scheduled %}
+			<tr>
+				<td><strong>{{ item.title }}</strong></td>
+				<td>
+					{% if item.metric == "Date" %}
+						{{ item.due_date }}
+						{% if item.days_remaining is not none %}
+							<span class="muted">({{ item.days_remaining }} days remaining)</span>
+						{% endif %}
+					{% else %}
+						{{ "{:,}".format((item.target_mileage or 0) | int) }} km
+						<span class="muted">(Current: {{ "{:,}".format((item.current_mileage or 0) | int) }} km)</span>
+					{% endif %}
+				</td>
+				<td>
+					<span class="pill {{ 'pill-red' if item.status == 'Overdue' else ('pill-amber' if item.status == 'Due' else 'pill-blue') }}">
+						{{ item.status }}
+					</span>
+				</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	{% endif %}
+
+	{% if recommendations.outstanding %}
+	<div class="sub-heading">Outstanding Recommendations</div>
+	<table class="data-table">
+		<thead>
+			<tr>
+				<th style="width: 28px;" class="text-center">#</th>
+				<th style="width: 70px;">Type</th>
+				<th>Recommendation</th>
+				<th style="width: 95px;">Recommended On</th>
+				<th style="width: 120px;">Origin Order</th>
+				<th style="width: 105px;">Status</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for rec in recommendations.outstanding %}
+			<tr>
+				<td class="text-center">{{ loop.index }}</td>
+				<td>{{ rec.source_type }}</td>
+				<td>
+					<strong>{{ rec.title }}</strong>
+					{% if rec.description %}
+					<div class="muted">{{ rec.description }}</div>
+					{% endif %}
+				</td>
+				<td>{{ rec.recommended_on or "N/A" }}</td>
+				<td>{{ rec.origin_order or "N/A" }}</td>
+				<td><span class="pill pill-amber">{{ rec.original_status or rec.status }}</span></td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	{% endif %}
+
+	{% if recommendations.completed %}
+	<div class="sub-heading">Completed Recommendations</div>
+	<table class="data-table">
+		<thead>
+			<tr>
+				<th style="width: 28px;" class="text-center">#</th>
+				<th style="width: 70px;">Type</th>
+				<th>Recommendation</th>
+				<th style="width: 115px;">Origin Order</th>
+				<th style="width: 130px;">Linked Completion</th>
+				<th style="width: 95px;">Status</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for rec in recommendations.completed %}
+			<tr>
+				<td class="text-center">{{ loop.index }}</td>
+				<td>{{ rec.source_type }}</td>
+				<td>
+					<strong>{{ rec.title }}</strong>
+					{% if rec.description %}
+					<div class="muted">{{ rec.description }}</div>
+					{% endif %}
+				</td>
+				<td>{{ rec.origin_order or "N/A" }}</td>
+				<td>{{ rec.linked_completion_order or "N/A" }}{% if rec.linked_completion_job %} ({{ rec.linked_completion_job }}){% endif %}</td>
+				<td><span class="pill pill-green">{{ rec.status }}</span></td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	{% endif %}
+
+	{% if recommendations.advisory_notes %}
+	<div class="sub-heading">Advisory Notes</div>
+	<table class="data-table">
+		<thead>
+			<tr>
+				<th style="width: 95px;">Recorded On</th>
+				<th style="width: 120px;">Order</th>
+				<th style="width: 170px;">Source</th>
+				<th>Note</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for adv in recommendations.advisory_notes %}
+			<tr>
+				<td>{{ adv.recorded_on or "N/A" }}</td>
+				<td>{{ adv.origin_order or "N/A" }}</td>
+				<td>{{ adv.title }}</td>
+				<td>{{ adv.note }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	{% endif %}
+
+	{% if not recommendations.scheduled and not recommendations.outstanding and not recommendations.completed and not recommendations.advisory_notes %}
+	<div class="empty-state">No maintenance recommendations or scheduled service alerts recorded.</div>
+	{% endif %}
+
+	<!-- Chronological Service Visits -->
+	<div class="section-title">Chronological Service Visits ({{ timeline | length }})</div>
+	{% if not timeline %}
+	<div class="empty-state">No service visits match the selected criteria.</div>
+	{% endif %}
+
+	{% for visit in timeline %}
+	<div class="visit-block">
+		<div class="visit-header">
+			<table class="visit-header-table">
+				<tr>
+					<td>
+						<span class="visit-ref">{{ visit.service_order or visit.vehicle_intake }}</span>
+						<span class="muted"> &bull; {{ visit.visit_type }}</span>
+						{% if visit.order_type %}<span class="muted"> &bull; {{ visit.order_type }}</span>{% endif %}
+						{% if visit.branch %}<span class="muted"> &bull; {{ visit.branch }}</span>{% endif %}
+					</td>
+					<td class="text-right">
+						<span class="muted" style="margin-right: 6px;">Visit Date: <strong>{{ visit.visit_date or "N/A" }}</strong></span>
+						<span class="pill {{ 'pill-red' if visit.status == 'Cancelled' else ('pill-green' if visit.status in ('Delivered', 'Ready for Collection', 'Invoiced', 'Ready for Billing') else 'pill-blue') }}">
+							{{ visit.status or "Open" }}
+						</span>
+					</td>
+				</tr>
+			</table>
+		</div>
+
+		<div class="visit-body">
+			<!-- Visit Info -->
+			<table class="kv-table" style="margin-bottom: 6px;">
+				<tr>
+					<td class="kv-label" style="width: 18%;">Checked In:</td>
+					<td style="width: 32%;">{{ visit.checked_in_on or "N/A" }}</td>
+					<td class="kv-label" style="width: 18%;">Odometer In / Out:</td>
+					<td style="width: 32%;">
+						{{ "{:,}".format((visit.odometer_in or 0) | int) }} km
+						{% if visit.odometer_out %} / {{ "{:,}".format(visit.odometer_out | int) }} km{% endif %}
+					</td>
+				</tr>
+				<tr>
+					<td class="kv-label">Completed / Delivered:</td>
+					<td>{{ visit.work_completed_on or visit.delivered_on or "In Progress" }}</td>
+					<td class="kv-label">Fuel Level:</td>
+					<td>{{ visit.fuel_level or "N/A" }}</td>
+				</tr>
+				<tr>
+					<td class="kv-label">Service Advisor:</td>
+					<td>{{ visit.service_advisor_name or "Not Assigned" }}</td>
+					<td class="kv-label">Collected By:</td>
+					<td>{{ visit.collected_by or "N/A" }}</td>
+				</tr>
+				{% if visit.intake_photos %}
+				<tr>
+					<td class="kv-label">Intake Photos:</td>
+					<td colspan="3">
+						{{ visit.intake_photos | length }} photo(s) recorded
+						{% set ns = namespace(has_desc=false) %}
+						{% for ph in visit.intake_photos %}
+							{% if ph.description %}
+								{% if not ns.has_desc %} ({% set ns.has_desc = true %}{% else %}; {% endif %}{{ ph.description }}
+							{% endif %}
+						{% endfor %}
+						{% if ns.has_desc %}){% endif %}
+					</td>
+				</tr>
+				{% endif %}
+			</table>
+
+			{% if visit.customer_complaint or visit.existing_damage or visit.vehicle_contents or visit.delivery_notes %}
+			<div class="notes-box">
+				{% if visit.customer_complaint %}<div><strong>Customer Complaint:</strong> {{ visit.customer_complaint }}</div>{% endif %}
+				{% if visit.existing_damage %}<div><strong>Existing Damage:</strong> {{ visit.existing_damage }}</div>{% endif %}
+				{% if visit.vehicle_contents %}<div><strong>Declared Contents:</strong> {{ visit.vehicle_contents }}</div>{% endif %}
+				{% if visit.delivery_notes %}<div><strong>Delivery Notes:</strong> {{ visit.delivery_notes }}</div>{% endif %}
+			</div>
+			{% endif %}
+
+			{% if not is_customer_mode and (visit.reception_notes or visit.hold_reason or visit.pause_reason or visit.dispute_notes or visit.cancellation_reason) %}
+			<div class="internal-box">
+				<strong>Internal Workshop Notes:</strong>
+				{% if visit.reception_notes %}<div><strong>Reception Notes:</strong> {{ visit.reception_notes }}</div>{% endif %}
+				{% if visit.hold_reason %}<div><strong>Hold Reason:</strong> {{ visit.hold_reason }}</div>{% endif %}
+				{% if visit.pause_reason %}<div><strong>Pause Reason:</strong> {{ visit.pause_reason }}</div>{% endif %}
+				{% if visit.dispute_notes %}<div><strong>Dispute Notes:</strong> {{ visit.dispute_notes }}</div>{% endif %}
+				{% if visit.cancellation_reason %}<div><strong>Cancellation Reason:</strong> {{ visit.cancellation_reason }}</div>{% endif %}
+			</div>
+			{% endif %}
+
+			<!-- Jobs & Labour -->
+			{% if visit.jobs %}
+			<div class="sub-heading">Work Performed / Jobs &amp; Labour</div>
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th style="width: 26px;" class="text-center">#</th>
+						<th>Job / Service Description</th>
+						<th style="width: 85px;">Category</th>
+						<th style="width: 85px;">Status</th>
+						{% if not is_customer_mode %}
+						<th style="width: 115px;">Technician</th>
+						{% endif %}
+						<th style="width: 55px;" class="text-right">Hours</th>
+						{% if include_financials %}
+						<th style="width: 75px;" class="text-right">Rate</th>
+						<th style="width: 80px;" class="text-right">Amount</th>
+						{% endif %}
+					</tr>
+				</thead>
+				<tbody>
+					{% for job in visit.jobs %}
+					<tr>
+						<td class="text-center">{{ loop.index }}</td>
+						<td>
+							<strong>{{ job.job_title }}</strong>
+							{% if job.description %}
+							<div class="muted">{{ job.description }}</div>
+							{% endif %}
+							{% if not is_customer_mode %}
+								{% if job.reason_for_adding %}<div class="muted"><em>Reason Added:</em> {{ job.reason_for_adding }}</div>{% endif %}
+								{% if job.pause_reason %}<div class="muted"><em>Pause Reason:</em> {{ job.pause_reason }}</div>{% endif %}
+								{% if job.qc_fail_reason %}<div class="muted" style="color: #991b1b;"><em>QC Fail Reason:</em> {{ job.qc_fail_reason }}</div>{% endif %}
+							{% endif %}
+						</td>
+						<td>{{ job.category or "Standard" }}</td>
+						<td>{{ job.status or "Open" }}</td>
+						{% if not is_customer_mode %}
+						<td>{{ job.technician_name or job.technician or "Unassigned" }}</td>
+						{% endif %}
+						<td class="text-right">{{ "{:,.2f}".format(job.actual_hours if (job.actual_hours or 0) > 0 else (job.estimated_hours or 0)) }}</td>
+						{% if include_financials %}
+						<td class="text-right">{{ "{:,.2f}".format(job.rate or 0) }}</td>
+						<td class="text-right">{{ "{:,.2f}".format(job.amount or 0) }}</td>
+						{% endif %}
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+			{% endif %}
+
+			<!-- Parts Used / Issued -->
+			{% if visit.parts %}
+			<div class="sub-heading">Parts &amp; Materials</div>
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th style="width: 26px;" class="text-center">#</th>
+						<th>Part / Item</th>
+						<th style="width: 85px;">Status</th>
+						<th style="width: 50px;" class="text-right">Req</th>
+						<th style="width: 50px;" class="text-right">Issued</th>
+						<th style="width: 50px;" class="text-right">Ret</th>
+						<th style="width: 50px;" class="text-right">Used</th>
+						{% if include_financials %}
+						<th style="width: 80px;" class="text-right">Rate</th>
+						{% endif %}
+					</tr>
+				</thead>
+				<tbody>
+					{% for part in visit.parts %}
+					<tr>
+						<td class="text-center">{{ loop.index }}</td>
+						<td>
+							<strong>{{ part.item_name or part.item_code }}</strong>
+							{% if part.item_code and part.item_name and part.item_code != part.item_name %}
+							<span class="muted"> ({{ part.item_code }})</span>
+							{% endif %}
+							{% if not is_customer_mode and part.reason_for_adding %}
+							<div class="muted"><em>Reason Added:</em> {{ part.reason_for_adding }}</div>
+							{% endif %}
+						</td>
+						<td>{{ part.part_status or part.approval_status or "Required" }}</td>
+						<td class="text-right">{{ "{:,.2f}".format(part.qty_required or 0) }}</td>
+						<td class="text-right">{{ "{:,.2f}".format(part.qty_issued or 0) }}</td>
+						<td class="text-right">{{ "{:,.2f}".format(part.qty_returned or 0) }}</td>
+						<td class="text-right">{{ "{:,.2f}".format(part.qty_used or 0) }}</td>
+						{% if include_financials %}
+						<td class="text-right">{{ "{:,.2f}".format(part.rate or 0) }}</td>
+						{% endif %}
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+			{% endif %}
+
+			<!-- QC Inspection Summary -->
+			{% if visit.qc_inspections %}
+			<div class="sub-heading">Quality Control Inspection</div>
+			<table class="data-table">
+				<thead>
+					<tr>
+						<th style="width: 110px;">QC Ref</th>
+						<th style="width: 75px;">Result</th>
+						<th style="width: 120px;">Inspected On</th>
+						<th style="width: 95px;">Road Test</th>
+						<th>Findings &amp; Checklist</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for qc in visit.qc_inspections %}
+					<tr>
+						<td>{{ qc.name }}</td>
+						<td>
+							<span class="pill {{ 'pill-green' if qc.result == 'Pass' else 'pill-red' }}">{{ qc.result }}</span>
+						</td>
+						<td>{{ qc.inspected_on or "N/A" }}</td>
+						<td>
+							{% if qc.road_test_done %}
+								Yes{% if qc.road_test_km %} ({{ "{:,.1f}".format(qc.road_test_km) }} km){% endif %}
+							{% else %}
+								No
+							{% endif %}
+						</td>
+						<td>
+							{% if qc.findings %}<div>{{ qc.findings }}</div>{% endif %}
+							{% if not is_customer_mode and qc.inspector %}
+							<div class="muted"><em>Inspector:</em> {{ qc.inspector }}</div>
+							{% endif %}
+							{% if not is_customer_mode and qc.fail_reason %}
+							<div class="muted" style="color: #991b1b;"><em>Fail Reason:</em> {{ qc.fail_reason }}</div>
+							{% endif %}
+							{% if qc.checklist %}
+							<div class="muted">
+								Checklist:
+								{% for chk in qc.checklist %}
+									{{ chk.check_item }} ({{ "Pass" if chk.passed else "Fail" }}{% if chk.remarks %}: {{ chk.remarks }}{% endif %}){% if not loop.last %}; {% endif %}
+								{% endfor %}
+							</div>
+							{% endif %}
+						</td>
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+			{% endif %}
+
+			<!-- Financial Summary (only when include_financials is enabled & authorized) -->
+			{% if include_financials and visit.financials %}
+			<div class="fin-box">
+				<div class="sub-heading" style="margin-top: 0;">Financial Summary</div>
+				<table class="fin-table">
+					<tr>
+						<td class="kv-label" style="width: 22%;">Invoice Number:</td>
+						<td style="width: 28%; font-weight: 600;">
+							{{ visit.financials.invoice_number or "Not Invoiced" }}
+							{% if visit.financials.credit_notes %}
+								<span class="muted"> (Credit Notes: {{ visit.financials.credit_notes | join(", ") }})</span>
+							{% endif %}
+						</td>
+						<td class="kv-label" style="width: 22%;">Payment Status:</td>
+						<td style="width: 28%; font-weight: 600;">{{ visit.financials.payment_status or "Not Invoiced" }}</td>
+					</tr>
+					<tr>
+						<td class="kv-label">Labour Charges:</td>
+						<td>{{ currency }} {{ "{:,.2f}".format(visit.financials.labour_charges or 0) }}</td>
+						<td class="kv-label">Parts Charges:</td>
+						<td>{{ currency }} {{ "{:,.2f}".format(visit.financials.parts_charges or 0) }}</td>
+					</tr>
+					<tr>
+						<td class="kv-label">Additional / Taxes:</td>
+						<td>{{ currency }} {{ "{:,.2f}".format(visit.financials.additional_charges or 0) }}</td>
+						<td class="kv-label">Discounts:</td>
+						<td>{{ currency }} {{ "{:,.2f}".format(visit.financials.discounts or 0) }}</td>
+					</tr>
+					<tr>
+						<td class="kv-label">Paid Amount:</td>
+						<td>{{ currency }} {{ "{:,.2f}".format(visit.financials.paid_amount or 0) }}</td>
+						<td class="kv-label">Outstanding Amount:</td>
+						<td>{{ currency }} {{ "{:,.2f}".format(visit.financials.outstanding_amount or 0) }}</td>
+					</tr>
+					<tr class="fin-total-row">
+						<td>Total Invoice Value:</td>
+						<td colspan="3">{{ currency }} {{ "{:,.2f}".format(visit.financials.total_invoice_value or 0) }}</td>
+					</tr>
+				</table>
+			</div>
+			{% endif %}
+		</div>
+	</div>
+	{% endfor %}
+
+	<div class="footer-note">
+		{{ company_info.company_name or "Vehicle Service Workshop" }} &bull;
+		Generated from authoritative workshop records on {{ generated_on }}.
+	</div>
+</div>
+</body>
+</html>
+{% endautoescape %}
