@@ -145,6 +145,7 @@ def setup_production_workspaces():
 		"ERPNext",
 		"Framework",
 		"Frappe Framework",
+		"CRM",
 	]
 	for label in sub_pages_to_hide:
 		if frappe.db.exists("Desktop Icon", label):
@@ -173,15 +174,16 @@ def setup_production_workspaces():
 		crm_icon.link_type = "Workspace Sidebar"
 		crm_icon.link_to = "CRM"
 		crm_icon.icon = "handshake"
-		crm_icon.hidden = 0
+		crm_icon.hidden = 1
 		crm_icon.parent_icon = None
 		crm_icon.app = "erpnext"
 		crm_icon.insert(ignore_permissions=True)
+	else:
+		frappe.db.set_value("Desktop Icon", "CRM", "hidden", 1, update_modified=False)
 
 	primary_workspaces = [
 		("Vehicle Service", "car"),
 		("Job Control Board", "circle-gauge"),
-		("CRM", "handshake"),
 		("Service Advisor", "clipboard-list"),
 		("Technician Portal", "wrench"),
 		("Quality Control", "clipboard-check"),
