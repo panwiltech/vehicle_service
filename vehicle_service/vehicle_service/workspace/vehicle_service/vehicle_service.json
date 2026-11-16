@@ -55,6 +55,13 @@
    "type": "Page"
   },
   {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Vehicle Intakes",
+   "link_to": "Vehicle Intake",
+   "type": "DocType"
+  },
+  {
    "color": "Orange",
    "doc_view": "List",
    "label": "Service Orders",
@@ -83,6 +90,17 @@
    "link_count": 0,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle Intakes",
+   "link_count": 0,
+   "link_to": "Vehicle Intake",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
   },
   {
    "dependencies": "",

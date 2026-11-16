@@ -1,0 +1,50 @@
+{
+ "actions": [],
+ "creation": "2026-10-24 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "photo",
+  "description",
+  "taken_on"
+ ],
+ "fields": [
+  {
+   "columns": 4,
+   "fieldname": "photo",
+   "fieldtype": "Attach Image",
+   "in_list_view": 1,
+   "label": "Photo",
+   "reqd": 1
+  },
+  {
+   "columns": 4,
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Description"
+  },
+  {
+   "columns": 3,
+   "default": "now",
+   "fieldname": "taken_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Taken On"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-24 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Vehicle Service",
+ "name": "Vehicle Intake Photo",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
