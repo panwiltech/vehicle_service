@@ -439,3 +439,670 @@ class TestServiceHistoryPermissionsSetup(FrappeTestCase):
 				c.insert(ignore_permissions=True)
 			frappe.clear_cache(doctype="Service Vehicle")
 			frappe.db.commit()
+
+
+class TestServiceHistoryAggregationAndSecurity(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+		from vehicle_service.job_control_setup import create_all_test_users
+
+		self.all_test_users = create_all_test_users()
+		settings = frappe.get_single("Vehicle Service Settings")
+		self.company = settings.company or frappe.get_all("Company", pluck="name")[0]
+		self.parts_warehouse = settings.parts_warehouse
+		self.wip_warehouse = settings.wip_warehouse
+
+		self.customer = self._ensure_customer("History Aggregation Customer")
+		self.stock_item = self._ensure_stock_item("HIST-BRAKE-PAD", "History Test Brake Pad")
+		self._ensure_labour_item("LABOUR")
+		self.branch_a = self._ensure_branch("Hist Branch A")
+		self.branch_b = self._ensure_branch("Hist Branch B")
+		self.emp = self._ensure_employee("Hist", "Tech One")
+		self.emp_2 = self._ensure_employee("Hist", "Tech Two")
+
+		self.tech_user = self._ensure_test_user("hist.agg.tech@example.com", ["Workshop Technician"])
+		self.branch_advisor_user = self._ensure_test_user("hist.agg.branch.advisor@example.com", ["Service Advisor"])
+		self.manager_user = self._ensure_test_user("hist.agg.manager@example.com", ["Service Manager"])
+		self.no_role_user = self._ensure_test_user("hist.agg.norole@example.com", ["Stock User"])
+
+		frappe.db.delete("User Permission", {"user": self.branch_advisor_user})
+		frappe.db.delete("User Permission", {"user": self.manager_user})
+		frappe.cache.hdel("user_permissions", self.branch_advisor_user)
+		frappe.cache.hdel("user_permissions", self.manager_user)
+		frappe.defaults.set_user_default("branch", self.branch_a, user=self.branch_advisor_user)
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def _ensure_customer(self, name: str) -> str:
+		if not frappe.db.exists("Customer", name):
+			c = frappe.new_doc("Customer")
+			c.customer_name = name
+			c.customer_type = "Individual"
+			c.insert(ignore_permissions=True)
+		return name
+
+	def _ensure_labour_item(self, item_code: str) -> str:
+		if not frappe.db.exists("Item", item_code):
+			it = frappe.new_doc("Item")
+			it.item_code = item_code
+			it.item_name = "Workshop Labour"
+			it.item_group = "Services"
+			it.is_stock_item = 0
+			it.insert(ignore_permissions=True)
+		return item_code
+
+	def _ensure_stock_item(self, item_code: str, item_name: str) -> str:
+		if not frappe.db.exists("Item", item_code):
+			it = frappe.new_doc("Item")
+			it.item_code = item_code
+			it.item_name = item_name
+			it.item_group = "Products"
+			it.is_stock_item = 1
+			it.stock_uom = "Nos"
+			it.valuation_rate = 40.0
+			it.insert(ignore_permissions=True)
+		return item_code
+
+	def _ensure_branch(self, branch_name: str) -> str:
+		if not frappe.db.exists("Branch", branch_name):
+			b = frappe.new_doc("Branch")
+			b.branch = branch_name
+			b.insert(ignore_permissions=True)
+		return branch_name
+
+	def _ensure_employee(self, first_name: str, last_name: str):
+		existing = frappe.db.get_value("Employee", {"first_name": first_name, "last_name": last_name}, "name")
+		if existing:
+			return frappe.get_doc("Employee", existing)
+		emp = frappe.new_doc("Employee")
+		emp.first_name = first_name
+		emp.last_name = last_name
+		emp.company = self.company
+		emp.gender = "Male"
+		emp.date_of_birth = "1991-03-10"
+		emp.date_of_joining = "2020-02-01"
+		emp.insert(ignore_permissions=True)
+		return emp
+
+	def _ensure_test_user(self, email: str, roles: list[str]) -> str:
+		if frappe.db.exists("User", email):
+			user = frappe.get_doc("User", email)
+		else:
+			user = frappe.new_doc("User")
+			user.email = email
+			user.first_name = email.split("@")[0]
+			user.last_name = "Tester"
+			user.enabled = 1
+			user.user_type = "System User"
+		user.roles = []
+		for role in roles:
+			user.append("roles", {"role": role})
+		user.save(ignore_permissions=True)
+		return user.name
+
+	def _create_vehicle(self, reg_no: str, vin: str, mileage: int = 45000, **kwargs):
+		v = frappe.new_doc("Service Vehicle")
+		v.registration_no = reg_no
+		v.vin = vin
+		v.make = "Toyota"
+		v.model = "Hilux"
+		v.year = 2022
+		v.customer = self.customer
+		v.current_mileage = mileage
+		for k, val in kwargs.items():
+			setattr(v, k, val)
+		v.insert(ignore_permissions=True)
+		return v
+
+	def _create_order(
+		self,
+		vehicle: str,
+		*,
+		status: str = "In Progress",
+		order_type: str = "Customer",
+		branch: str | None = None,
+		service_advisor: str | None = None,
+		checked_in_on: str | None = None,
+		order_date: str | None = None,
+		odometer_in: int = 45000,
+		odometer_out: int = 0,
+		delivery_notes: str | None = None,
+	):
+		so = frappe.new_doc("Service Order")
+		so.vehicle = vehicle
+		so.customer = self.customer
+		so.company = self.company
+		so.branch = branch or self.branch_a
+		so.order_type = order_type
+		so.status = status
+		so.service_advisor = service_advisor or "Administrator"
+		so.odometer_in = odometer_in
+		if odometer_out:
+			so.odometer_out = odometer_out
+		if checked_in_on:
+			so.checked_in_on = checked_in_on
+		if order_date:
+			so.order_date = order_date
+		if delivery_notes:
+			so.delivery_notes = delivery_notes
+		so.flags.ignore_open_order_validation = True
+		so.insert(ignore_permissions=True)
+		return so
+
+	def _issue_and_use_part(self, order, item_code: str, qty: float = 1.0, rate: float = 65.0):
+		import json
+		from erpnext.stock.doctype.stock_entry.stock_entry_utils import make_stock_entry
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import issue_parts_to_workshop
+
+		make_stock_entry(
+			item_code=item_code,
+			to_warehouse=self.parts_warehouse,
+			qty=qty + 2.0,
+			rate=40.0,
+			purpose="Material Receipt",
+			company=self.company,
+		)
+		order.reload()
+		part_row = order.append(
+			"parts",
+			{
+				"item_code": item_code,
+				"qty_required": qty,
+				"rate": rate,
+				"approval_status": "Approved",
+			},
+		)
+		order.flags.ignore_open_order_validation = True
+		order.save(ignore_permissions=True)
+		issue_parts_to_workshop(
+			order_name=order.name,
+			items_json=json.dumps([{"part_row": part_row.name, "qty": qty}]),
+		)
+		order.reload()
+		p = next(row for row in order.parts if row.name == part_row.name)
+		p.qty_used = qty
+		order.flags.ignore_open_order_validation = True
+		order.save(ignore_permissions=True)
+		return p
+
+	def _pay_invoice(self, si):
+		from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
+		from frappe.utils import nowdate
+
+		pe = get_payment_entry("Sales Invoice", si.name)
+		cash_acc = frappe.db.get_value("Company", self.company, "default_cash_account")
+		if cash_acc:
+			pe.paid_to = cash_acc
+		pe.reference_no = f"PAY-{si.name}"
+		pe.reference_date = nowdate()
+		pe.insert(ignore_permissions=True)
+		pe.submit()
+		return pe
+
+	def test_overview_stats_excludes_draft_cancelled_and_deducts_credit_notes(self):
+		from erpnext.controllers.sales_and_purchase_return import make_return_doc
+		from frappe.utils import nowdate
+		from vehicle_service.job_control import complete_service_order
+		from vehicle_service.service_history import get_vehicle_service_history
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+			create_sales_invoice_from_order,
+			deliver_vehicle,
+		)
+
+		self.vehicle_reg = f"STAT-{frappe.generate_hash(length=5).upper()}"
+		self._create_vehicle(self.vehicle_reg, f"VIN-{self.vehicle_reg}", mileage=45000)
+
+		# 1. Delivered + Paid order with Labour, Stock Part, and QC
+		paid_order = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			order_type="Warranty",
+			branch=self.branch_a,
+			checked_in_on="2026-10-05 09:00:00",
+			order_date="2026-10-05",
+			odometer_in=45000,
+		)
+		add_job(paid_order.name, job_title="Brake Service", technician=self.emp.name, estimated_hours=2.0)
+		frappe.db.set_value("Service Job", {"service_order": paid_order.name}, "rate", 100.0)
+		self._issue_and_use_part(paid_order, self.stock_item, qty=1.0, rate=65.0)
+		complete_service_order(paid_order.name)
+
+		qc = frappe.new_doc("Service QC")
+		qc.service_order = paid_order.name
+		qc.vehicle = self.vehicle_reg
+		qc.inspector = "Administrator"
+		qc.inspected_on = "2026-10-05 14:00:00"
+		qc.result = "Pass"
+		qc.road_test_done = 1
+		qc.road_test_km = 4.5
+		qc.findings = "Brakes tested cleanly."
+		qc.append("checklist", {"check_item": "Brake fluid level", "passed": 1, "remarks": "Full"})
+		qc.insert(ignore_permissions=True)
+
+		inv_res_1 = create_sales_invoice_from_order(paid_order.name)
+		self.si_paid = frappe.get_doc("Sales Invoice", inv_res_1["sales_invoice"])
+		self.si_paid.submit()
+		self._pay_invoice(self.si_paid)
+		deliver_vehicle(paid_order.name, odometer_out=45120, collected_by="Owner", delivery_notes="All good.")
+
+		# 2. Delivered order whose Sales Invoice was reversed by a Credit Note (vs_service_order cleared)
+		self.credited_order = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			order_type="Customer",
+			branch=self.branch_b,
+			checked_in_on="2026-10-02 09:00:00",
+			order_date="2026-10-02",
+			odometer_in=44800,
+		)
+		add_job(self.credited_order.name, job_title="Diagnostic Scan", technician=self.emp.name, estimated_hours=1.0)
+		complete_service_order(self.credited_order.name)
+		inv_res_2 = create_sales_invoice_from_order(self.credited_order.name)
+		si_2 = frappe.get_doc("Sales Invoice", inv_res_2["sales_invoice"])
+		si_2.submit()
+
+		cn_2 = make_return_doc("Sales Invoice", si_2.name)
+		cn_2.posting_date = nowdate()
+		cn_2.vs_service_order = None  # Verify fallback capture via return_against
+		cn_2.insert(ignore_permissions=True)
+		cn_2.submit()
+
+		frappe.db.set_value(
+			"Service Order",
+			self.credited_order.name,
+			{"status": "Delivered", "delivered_on": "2026-10-02 16:00:00", "odometer_out": 44810},
+		)
+
+		# 3. Active In Progress order (Not Invoiced)
+		in_prog = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			order_type="Customer",
+			branch=self.branch_a,
+			checked_in_on="2026-10-10 08:30:00",
+			order_date="2026-10-10",
+			odometer_in=45100,
+		)
+		add_job(in_prog.name, job_title="Wheel Alignment", technician=self.emp.name, estimated_hours=1.5)
+
+		# 4. Cancelled order (excluded from overview stats and default timeline)
+		cancelled = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			branch=self.branch_a,
+			checked_in_on="2026-09-20 10:00:00",
+			order_date="2026-09-20",
+			odometer_in=44500,
+		)
+		add_job(cancelled.name, job_title="Cancelled Job", estimated_hours=2.0)
+		frappe.db.set_value("Service Order", cancelled.name, "status", "Cancelled")
+
+		# 5. Draft order (always excluded)
+		self._create_order(
+			self.vehicle_reg,
+			status="Draft",
+			branch=self.branch_a,
+			checked_in_on="2026-10-11 10:00:00",
+			order_date="2026-10-11",
+			odometer_in=45110,
+		)
+
+		data = get_vehicle_service_history(self.vehicle_reg)
+		stats = data["overview_stats"]
+		self.assertEqual(stats["total_service_orders"], 3)
+		self.assertEqual(stats["total_visits"], 3)
+		self.assertEqual(stats["outstanding_service_orders"], 1)
+		self.assertEqual(stats["completed_orders_count"], 2)
+		self.assertEqual(stats["total_completed_repairs"], 2)
+		self.assertEqual(stats["last_recorded_mileage"], 45120)
+		self.assertAlmostEqual(stats["total_historical_service_value"], float(self.si_paid.grand_total), places=2)
+
+		credited_visit = next(v for v in data["timeline"] if v["service_order"] == self.credited_order.name)
+		self.assertEqual(credited_visit["financials"]["payment_status"], "Credited")
+		self.assertAlmostEqual(credited_visit["financials"]["total_invoice_value"], 0.0, places=2)
+		self.assertIn(cn_2.name, credited_visit["financials"]["credit_notes"])
+
+		paid_visit = next(v for v in data["timeline"] if v["service_order"] == paid_order.name)
+		self.assertEqual(paid_visit["financials"]["payment_status"], "Paid")
+		self.assertGreater(paid_visit["financials"]["labour_charges"], 0)
+		self.assertGreater(paid_visit["financials"]["parts_charges"], 0)
+		self.assertEqual(len(paid_visit["financials"]["payments"]), 1)
+
+		# Standalone Checked In Vehicle Intake increases total_visits without increasing total_service_orders
+		standalone_intake = frappe.new_doc("Vehicle Intake")
+		standalone_intake.vehicle = self.vehicle_reg
+		standalone_intake.customer = self.customer
+		standalone_intake.company = self.company
+		standalone_intake.status = "Checked In"
+		standalone_intake.odometer_in = 45200
+		standalone_intake.checked_in_on = "2026-10-12 08:00:00"
+		standalone_intake.insert(ignore_permissions=True)
+
+		with_intake = get_vehicle_service_history(self.vehicle_reg)
+		self.assertEqual(with_intake["overview_stats"]["total_service_orders"], 3)
+		self.assertEqual(with_intake["overview_stats"]["total_visits"], 4)
+		self.assertEqual(with_intake["overview_stats"]["last_recorded_mileage"], 45200)
+		self.assertTrue(any(v["visit_type"] == "Vehicle Intake" for v in with_intake["timeline"]))
+
+	def test_recommendations_completion_requires_linked_completed_job(self):
+		from frappe.utils import add_days, nowdate
+		from vehicle_service.service_history import get_vehicle_service_history
+
+		self.vehicle_reg = f"REC-{frappe.generate_hash(length=5).upper()}"
+		self._create_vehicle(self.vehicle_reg, f"VIN-{self.vehicle_reg}", mileage=50000)
+		frappe.db.set_value(
+			"Service Vehicle",
+			self.vehicle_reg,
+			{"next_service_date": add_days(nowdate(), -5), "next_service_mileage": 50500},
+			update_modified=False,
+		)
+
+		order_1 = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			checked_in_on="2026-09-10 09:00:00",
+			order_date="2026-09-10",
+			delivery_notes="Monitor rear shock absorbers.",
+		)
+		rec_res = add_job(order_1.name, job_title="Replace Rear Shock Absorbers", category="Recommended")
+		self.rec_job = frappe.get_doc("Service Job", rec_res["job"])
+		self.rec_job.status = "Declined"
+		self.rec_job.save(ignore_permissions=True)
+
+		# Standalone declined recommended part (not linked to rec_job)
+		order_1.reload()
+		rec_part = order_1.append(
+			"parts",
+			{
+				"item_code": self.stock_item,
+				"qty_required": 2.0,
+				"rate": 55.0,
+				"category": "Recommended",
+				"approval_status": "Declined",
+			},
+		)
+		order_1.status = "Delivered"
+		order_1.flags.ignore_open_order_validation = True
+		order_1.flags.ignore_job_lock = True
+		order_1.save(ignore_permissions=True)
+
+		qc_1 = frappe.new_doc("Service QC")
+		qc_1.service_order = order_1.name
+		qc_1.vehicle = self.vehicle_reg
+		qc_1.inspector = "Administrator"
+		qc_1.inspected_on = "2026-09-10 15:00:00"
+		qc_1.result = "Pass"
+		qc_1.findings = "Minor oil seep at timing cover."
+		qc_1.insert(ignore_permissions=True)
+
+		# Cancelled order with completed follow-up must NEVER mark rec_job completed
+		cancelled_order = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			checked_in_on="2026-09-25 09:00:00",
+			order_date="2026-09-25",
+		)
+		cancelled_follow = add_job(
+			cancelled_order.name,
+			job_title="Cancelled Follow-up",
+			follows_up_job=self.rec_job.name,
+		)
+		frappe.db.set_value("Service Job", cancelled_follow["job"], "status", "Completed")
+		frappe.db.set_value("Service Order", cancelled_order.name, "status", "Cancelled")
+
+		self.order_2 = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			checked_in_on="2026-10-15 09:00:00",
+			order_date="2026-10-15",
+		)
+		follow_res = add_job(
+			self.order_2.name,
+			job_title="Replace Rear Shock Absorbers (Follow-Up)",
+			follows_up_job=self.rec_job.name,
+		)
+		self.follow_job = frappe.get_doc("Service Job", follow_res["job"])
+		frappe.db.set_value("Service Job", self.follow_job.name, "status", "Pending Approval")
+
+		before = get_vehicle_service_history(self.vehicle_reg)
+		self.assertTrue(any(r["source_id"] == self.rec_job.name for r in before["recommendations"]["outstanding"]))
+		self.assertFalse(any(r["source_id"] == self.rec_job.name for r in before["recommendations"]["completed"]))
+		self.assertTrue(any(r["source_id"] == rec_part.name for r in before["recommendations"]["outstanding"]))
+
+		# Uncompleted active follow-up job ("In Progress") still leaves recommendation Outstanding
+		frappe.db.set_value("Service Job", self.follow_job.name, "status", "In Progress")
+		in_progress_check = get_vehicle_service_history(self.vehicle_reg)
+		self.assertTrue(
+			any(r["source_id"] == self.rec_job.name for r in in_progress_check["recommendations"]["outstanding"])
+		)
+		self.assertFalse(
+			any(r["source_id"] == self.rec_job.name for r in in_progress_check["recommendations"]["completed"])
+		)
+
+		# Completing linked follow-up job moves recommendation to Completed with attribution
+		frappe.db.set_value("Service Job", self.follow_job.name, "status", "Completed")
+		after = get_vehicle_service_history(self.vehicle_reg)
+		self.assertFalse(any(r["source_id"] == self.rec_job.name for r in after["recommendations"]["outstanding"]))
+		comp = next(r for r in after["recommendations"]["completed"] if r["source_id"] == self.rec_job.name)
+		self.assertEqual(comp["linked_completion_job"], self.follow_job.name)
+		self.assertEqual(comp["linked_completion_order"], self.order_2.name)
+
+		# Advisory notes & scheduled maintenance evaluated accurately
+		advisory_texts = [a["note"] for a in after["recommendations"]["advisory_notes"]]
+		self.assertIn("Monitor rear shock absorbers.", advisory_texts)
+		self.assertIn("Minor oil seep at timing cover.", advisory_texts)
+		self.assertTrue(any(s["status"] == "Overdue" for s in after["recommendations"]["scheduled"]))
+		self.assertTrue(any(s["status"] == "Due" for s in after["recommendations"]["scheduled"]))
+		self.assertTrue(any(r["source_id"] == rec_part.name for r in after["recommendations"]["outstanding"]))
+
+		# Part recommendation becomes Completed only when qty_used > 0 on a completed order
+		frappe.db.set_value("Service Order Part", rec_part.name, "qty_used", 2.0)
+		part_done = get_vehicle_service_history(self.vehicle_reg)
+		self.assertFalse(any(r["source_id"] == rec_part.name for r in part_done["recommendations"]["outstanding"]))
+		self.assertTrue(any(r["source_id"] == rec_part.name for r in part_done["recommendations"]["completed"]))
+
+	def test_timeline_ordering_details_and_filters(self):
+		from vehicle_service.job_control import complete_service_order
+		from vehicle_service.service_history import get_vehicle_service_history
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+			create_sales_invoice_from_order,
+			deliver_vehicle,
+		)
+
+		shared_vin = f"VIN-CLST-{frappe.generate_hash(length=6).upper()}"
+		self.vehicle_reg = f"TL1-{frappe.generate_hash(length=5).upper()}"
+		other_reg = f"TL2-{frappe.generate_hash(length=5).upper()}"
+		self._create_vehicle(self.vehicle_reg, shared_vin, mileage=60000)
+		self._create_vehicle(other_reg, shared_vin, mileage=62000)
+
+		# Order 1 on first plate: Warranty, Paid, emp, Service Advisor
+		o1 = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			order_type="Warranty",
+			branch=self.branch_a,
+			service_advisor=self.branch_advisor_user,
+			checked_in_on="2026-09-01 09:00:00",
+			order_date="2026-09-01",
+			odometer_in=60000,
+		)
+		frappe.db.set_value(
+			"Service Order",
+			o1.name,
+			{"existing_damage": "Scratch on left fender", "vehicle_contents": "Spare wheel & jack"},
+		)
+		if o1.vehicle_intake:
+			intake_doc = frappe.get_doc("Vehicle Intake", o1.vehicle_intake)
+			intake_doc.existing_damage = "Scratch on left fender"
+			intake_doc.vehicle_contents = "Spare wheel & jack"
+			intake_doc.append(
+				"intake_photos",
+				{"photo": "/files/test-intake-photo.jpg", "description": "Left fender scratch"},
+			)
+			intake_doc.save(ignore_permissions=True)
+
+		add_job(o1.name, job_title="Warranty Alternator Replace", technician=self.emp.name, estimated_hours=2.0)
+		self._issue_and_use_part(o1, self.stock_item, qty=1.0, rate=75.0)
+		complete_service_order(o1.name)
+
+		qc1 = frappe.new_doc("Service QC")
+		qc1.service_order = o1.name
+		qc1.vehicle = self.vehicle_reg
+		qc1.inspector = "Administrator"
+		qc1.inspected_on = "2026-09-01 16:00:00"
+		qc1.result = "Pass"
+		qc1.road_test_done = 1
+		qc1.road_test_km = 6.0
+		qc1.findings = "Charging voltage normal."
+		qc1.append("checklist", {"check_item": "Alternator output", "passed": 1, "remarks": "14.2V"})
+		qc1.insert(ignore_permissions=True)
+
+		inv1_res = create_sales_invoice_from_order(o1.name)
+		si1 = frappe.get_doc("Sales Invoice", inv1_res["sales_invoice"])
+		si1.submit()
+		self._pay_invoice(si1)
+		deliver_vehicle(o1.name, odometer_out=60010, collected_by="Driver One")
+
+		# Order 2 on second plate sharing VIN: Customer, Not Invoiced, emp_2
+		o2 = self._create_order(
+			other_reg,
+			status="In Progress",
+			order_type="Customer",
+			branch=self.branch_a,
+			service_advisor="Administrator",
+			checked_in_on="2026-10-15 10:00:00",
+			order_date="2026-10-15",
+			odometer_in=62000,
+		)
+		add_job(o2.name, job_title="Customer Oil Change", technician=self.emp_2.name, estimated_hours=1.0)
+
+		desc_data = get_vehicle_service_history(self.vehicle_reg)
+		self.assertEqual(set(desc_data["vehicle_ids"]), {self.vehicle_reg, other_reg})
+		self.assertEqual(len(desc_data["timeline"]), 2)
+		dates_desc = [v["visit_date"] for v in desc_data["timeline"]]
+		self.assertEqual(dates_desc, sorted(dates_desc, reverse=True))
+
+		paid_visit = next(v for v in desc_data["timeline"] if v["service_order"] == o1.name)
+		self.assertIn("jobs", paid_visit)
+		self.assertIn("parts", paid_visit)
+		self.assertIn("qc", paid_visit)
+		self.assertEqual(paid_visit["existing_damage"], "Scratch on left fender")
+		self.assertEqual(paid_visit["vehicle_contents"], "Spare wheel & jack")
+		self.assertEqual(len(paid_visit["intake_photos"]), 1)
+		self.assertEqual(paid_visit["qc"]["result"], "Pass")
+		self.assertEqual(len(paid_visit["qc"]["checklist"]), 1)
+		self.assertEqual(paid_visit["parts"][0]["qty_used"], 1.0)
+
+		asc_data = get_vehicle_service_history(self.vehicle_reg, filters={"sort_order": "asc"})
+		self.assertEqual([v["visit_date"] for v in asc_data["timeline"]], list(reversed(dates_desc)))
+
+		filtered = get_vehicle_service_history(
+			self.vehicle_reg,
+			filters={"order_type": "Warranty", "technician": self.emp.name, "invoice_status": "Paid"},
+		)
+		self.assertEqual(len(filtered["timeline"]), 1)
+		self.assertEqual(filtered["timeline"][0]["service_order"], o1.name)
+		self.assertTrue(all(v["order_type"] == "Warranty" for v in filtered["timeline"]))
+
+		date_filtered = get_vehicle_service_history(
+			self.vehicle_reg,
+			filters={"from_date": "2026-10-01", "to_date": "2026-10-31", "service_advisor": "Administrator"},
+		)
+		self.assertEqual([v["service_order"] for v in date_filtered["timeline"]], [o2.name])
+
+	def test_role_financial_redaction_and_branch_isolation(self):
+		from vehicle_service.job_control import complete_service_order
+		from vehicle_service.service_history import get_vehicle_service_history
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+			create_sales_invoice_from_order,
+			deliver_vehicle,
+		)
+
+		self.vehicle_reg = f"SEC-{frappe.generate_hash(length=5).upper()}"
+		self._create_vehicle(self.vehicle_reg, f"VIN-{self.vehicle_reg}", mileage=30000)
+
+		# Branch A order (Paid, with Sublet cost fields + Part rate)
+		order_a = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			branch=self.branch_a,
+			checked_in_on="2026-10-01 09:00:00",
+			order_date="2026-10-01",
+			odometer_in=30000,
+		)
+		job_a = add_job(order_a.name, job_title="Branch A Service", technician=self.emp.name, estimated_hours=1.5)
+		frappe.db.set_value(
+			"Service Job",
+			job_a["job"],
+			{"rate": 120.0, "amount": 180.0, "supplier_cost": 80.0, "supplier_invoice_ref": "SUP-INV-01"},
+		)
+		self._issue_and_use_part(order_a, self.stock_item, qty=1.0, rate=95.0)
+		complete_service_order(order_a.name)
+		inv_a = frappe.get_doc("Sales Invoice", create_sales_invoice_from_order(order_a.name)["sales_invoice"])
+		inv_a.submit()
+		self._pay_invoice(inv_a)
+		deliver_vehicle(order_a.name, odometer_out=30050, collected_by="Branch A Driver")
+
+		# Branch B order
+		order_b = self._create_order(
+			self.vehicle_reg,
+			status="In Progress",
+			branch=self.branch_b,
+			checked_in_on="2026-10-05 10:00:00",
+			order_date="2026-10-05",
+			odometer_in=30060,
+		)
+		add_job(order_b.name, job_title="Branch B Inspection", technician=self.emp_2.name, estimated_hours=1.0)
+
+		# 1. Workshop Technician: financial redaction enforced
+		frappe.set_user(self.tech_user)
+		tech_data = get_vehicle_service_history(self.vehicle_reg, filters={"invoice_status": "Paid"})
+		self.assertFalse(tech_data["permissions"]["can_view_financials"])
+		self.assertIsNone(tech_data["overview_stats"]["total_historical_service_value"])
+		self.assertEqual(tech_data["filter_options"]["invoice_statuses"], [])
+		self.assertEqual(len(tech_data["timeline"]), 2)
+		for v in tech_data["timeline"]:
+			self.assertIsNone(v["financials"])
+			for j in v["jobs"]:
+				self.assertNotIn("rate", j)
+				self.assertNotIn("amount", j)
+				self.assertNotIn("supplier_cost", j)
+				self.assertNotIn("supplier_invoice_ref", j)
+			for p in v["parts"]:
+				self.assertNotIn("rate", p)
+				self.assertNotIn("amount", p)
+
+		# 2. Branch-scoped Service Advisor: sees only Branch A
+		frappe.set_user(self.branch_advisor_user)
+		branch_data = get_vehicle_service_history(self.vehicle_reg)
+		self.assertTrue(branch_data["permissions"]["can_view_financials"])
+		self.assertFalse(branch_data["permissions"]["is_cross_branch"])
+		self.assertEqual(branch_data["permissions"]["allowed_branches"], [self.branch_a])
+		self.assertEqual(len(branch_data["timeline"]), 1)
+		self.assertTrue(all(v["branch"] == self.branch_a for v in branch_data["timeline"]))
+		self.assertEqual(branch_data["overview_stats"]["total_service_orders"], 1)
+
+		# 3. Cross-branch Service Manager sees all branches unless restricted by User Permission
+		frappe.set_user(self.manager_user)
+		mgr_data = get_vehicle_service_history(self.vehicle_reg)
+		self.assertTrue(mgr_data["permissions"]["is_cross_branch"])
+		self.assertIsNone(mgr_data["permissions"]["allowed_branches"])
+		self.assertEqual({v["branch"] for v in mgr_data["timeline"]}, {self.branch_a, self.branch_b})
+
+		frappe.set_user("Administrator")
+		up = frappe.new_doc("User Permission")
+		up.user = self.manager_user
+		up.allow = "Branch"
+		up.for_value = self.branch_b
+		up.insert(ignore_permissions=True)
+
+		frappe.set_user(self.manager_user)
+		restricted_mgr_data = get_vehicle_service_history(self.vehicle_reg)
+		self.assertEqual(restricted_mgr_data["permissions"]["allowed_branches"], [self.branch_b])
+		self.assertEqual([v["branch"] for v in restricted_mgr_data["timeline"]], [self.branch_b])
+
+		# 4. Unauthorized Desk user without any HISTORY_VIEWER_ROLES is rejected
+		frappe.set_user(self.no_role_user)
+		with self.assertRaises(frappe.PermissionError):
+			get_vehicle_service_history(self.vehicle_reg)
