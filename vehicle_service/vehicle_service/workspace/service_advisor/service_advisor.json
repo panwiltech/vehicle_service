@@ -1,7 +1,7 @@
 {
  "app": "vehicle_service",
  "charts": [],
- "content": "[{\"id\":\"header_adv\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Service Advisor Portal</b></span>\",\"col\":12}},{\"id\":\"shortcuts_adv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Shortcuts\",\"col\":12}},{\"id\":\"card_intake\",\"type\":\"card\",\"data\":{\"card_name\":\"Intake & Reception\",\"col\":4}},{\"id\":\"card_estimates\",\"type\":\"card\",\"data\":{\"card_name\":\"Estimates & Approvals\",\"col\":4}},{\"id\":\"card_handover\",\"type\":\"card\",\"data\":{\"card_name\":\"Billing & Handover\",\"col\":4}}]",
+ "content": "[{\"id\":\"header_adv\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Service Advisor Portal</b></span>\",\"col\":12}},{\"id\":\"sc_adv_intakes\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Vehicle Intakes\",\"col\":3}},{\"id\":\"sc_adv_orders\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Service Orders\",\"col\":3}},{\"id\":\"sc_adv_vehicles\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Vehicles\",\"col\":3}},{\"id\":\"sc_adv_history\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Vehicle Service History\",\"col\":3}},{\"id\":\"card_intake\",\"type\":\"card\",\"data\":{\"card_name\":\"Intake & Reception\",\"col\":4}},{\"id\":\"card_estimates\",\"type\":\"card\",\"data\":{\"card_name\":\"Estimates & Approvals\",\"col\":4}},{\"id\":\"card_handover\",\"type\":\"card\",\"data\":{\"card_name\":\"Billing & Handover\",\"col\":4}}]",
  "creation": "2026-10-03 10:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -13,7 +13,7 @@
  "indicator_color": "orange",
  "is_hidden": 0,
  "label": "Service Advisor",
- "modified": "2026-11-16 16:30:00.000000",
+ "modified": "2026-11-16 18:55:00.000000",
  "module": "Vehicle Service",
  "name": "Service Advisor",
  "parent_page": "Vehicle Service",
@@ -135,6 +135,17 @@
    "link_count": 0,
    "link_to": "Service Vehicle",
    "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle Service History",
+   "link_count": 0,
+   "link_to": "vehicle-service-history",
+   "link_type": "Page",
    "onboard": 1,
    "type": "Link"
   },

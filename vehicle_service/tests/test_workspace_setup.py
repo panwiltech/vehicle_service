@@ -86,10 +86,38 @@ class TestWorkspaceSetup(FrappeTestCase):
 		self.assertNotIn("CRM", app_titles)
 
 	def test_vehicle_service_history_workspace_shortcuts(self):
-		"""Vehicle Service and Service Advisor workspaces must expose the Vehicle Service History page shortcut."""
+		"""Vehicle Service sidebar and workspaces must expose Vehicle Service History across shortcuts, cards, and content."""
+		import json
+
+		sidebar = frappe.get_doc("Sidebar", "Vehicle Service")
+		sidebar_links = [
+			it
+			for it in sidebar.items
+			if it.type == "Link"
+			and it.link_type == "Page"
+			and it.link_to == "vehicle-service-history"
+			and not it.hidden
+		]
+		self.assertTrue(len(sidebar_links) > 0, "Missing Vehicle Service History link in Vehicle Service Sidebar")
+
 		for ws_name in ("Vehicle Service", "Service Advisor"):
 			ws = frappe.get_doc("Workspace", ws_name)
 			shortcuts = [s for s in ws.shortcuts if s.type == "Page" and s.link_to == "vehicle-service-history"]
 			self.assertTrue(len(shortcuts) > 0, f"Missing Vehicle Service History shortcut in {ws_name}")
+
+			card_links = [
+				l
+				for l in ws.links
+				if l.type == "Link" and l.link_type == "Page" and l.link_to == "vehicle-service-history"
+			]
+			self.assertTrue(len(card_links) > 0, f"Missing Vehicle Service History card link in {ws_name}")
+
+			content_blocks = json.loads(ws.content or "[]")
+			shortcut_blocks = [
+				b
+				for b in content_blocks
+				if b.get("type") == "shortcut" and (b.get("data") or {}).get("shortcut_name") == "Vehicle Service History"
+			]
+			self.assertTrue(len(shortcut_blocks) > 0, f"Missing Vehicle Service History shortcut block in {ws_name} content")
 
 

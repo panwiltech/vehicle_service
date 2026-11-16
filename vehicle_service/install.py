@@ -279,6 +279,7 @@ def after_install():
 	setup_service_advisor_permissions()
 	setup_default_board_tabs()
 	setup_test_users()
+	sync_workspaces()
 
 
 def after_migrate():
@@ -292,6 +293,13 @@ def after_migrate():
 	setup_service_advisor_permissions()
 	setup_default_board_tabs()
 	setup_test_users()
+	sync_workspaces()
+
+
+def sync_workspaces():
+	from vehicle_service.workspace_setup import setup_production_workspaces
+
+	setup_production_workspaces()
 
 
 def setup_test_users():

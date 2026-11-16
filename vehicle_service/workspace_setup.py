@@ -62,8 +62,15 @@ VEHICLE_SERVICE_WORKSPACES = [
 
 def setup_production_workspaces():
 	"""Synchronizes Vehicle Service workspaces for production readiness."""
+	prev_in_patch = getattr(frappe.flags, "in_patch", False)
 	frappe.flags.in_patch = True
+	try:
+		_sync_production_workspaces()
+	finally:
+		frappe.flags.in_patch = prev_in_patch
 
+
+def _sync_production_workspaces():
 	# 0. Ensure Desk pages referenced by workspace shortcuts exist before workspace reload
 	for page_file in ("vehicle_service_history",):
 		try:
@@ -117,10 +124,13 @@ def setup_production_workspaces():
 		d.insert(ignore_permissions=True)
 	else:
 		d = frappe.get_doc("Dock", "vehicle_service")
-		d.items = []
-		for it in vs_dock_items:
-			d.append("items", it)
-		d.save(ignore_permissions=True)
+		existing_items = [(it.link_type, it.link_to, it.icon, it.title) for it in d.items]
+		desired_items = [(it["link_type"], it["link_to"], it["icon"], it["title"]) for it in vs_dock_items]
+		if existing_items != desired_items:
+			d.items = []
+			for it in vs_dock_items:
+				d.append("items", it)
+			d.save(ignore_permissions=True)
 
 	# Ensure CRM in erpnext Dock is unhidden
 	if frappe.db.exists("Dock", "erpnext"):

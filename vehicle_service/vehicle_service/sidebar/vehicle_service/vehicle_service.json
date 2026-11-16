@@ -185,6 +185,22 @@
    "child": 1,
    "collapsible": 1,
    "hidden": 0,
+   "icon": "history",
+   "indent": 0,
+   "is_default_module": 0,
+   "keep_closed": 0,
+   "label": "Vehicle Service History",
+   "link_to": "vehicle-service-history",
+   "link_type": "Page",
+   "open_in_new_tab": 0,
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "added": 0,
+   "child": 1,
+   "collapsible": 1,
+   "hidden": 0,
    "icon": "map-pin",
    "indent": 0,
    "is_default_module": 0,
@@ -371,7 +387,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-10-16 21:40:03.932109",
+ "modified": "2026-11-16 18:55:00.000000",
  "modified_by": "Administrator",
  "module": "Vehicle Service",
  "name": "Vehicle Service",
