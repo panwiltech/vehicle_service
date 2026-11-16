@@ -12,8 +12,12 @@ frappe.ui.form.on("Service Booking", {
 					args: { booking_name: frm.doc.name },
 					freeze: true,
 					callback: (r) => {
-						if (!r.exc && r.message && r.message.service_order) {
-							frappe.set_route("Form", "Service Order", r.message.service_order);
+						if (!r.exc && r.message) {
+							if (r.message.vehicle_intake) {
+								frappe.set_route("Form", "Vehicle Intake", r.message.vehicle_intake);
+							} else if (r.message.service_order) {
+								frappe.set_route("Form", "Service Order", r.message.service_order);
+							}
 						}
 					}
 				}).addClass("btn-primary");

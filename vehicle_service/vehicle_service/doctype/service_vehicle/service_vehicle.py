@@ -35,6 +35,7 @@ class ServiceVehicle(Document):
 		next_service_date: DF.Date | None
 		next_service_mileage: DF.Int
 		notes: DF.TextEditor | None
+		previous_registration_nos: DF.SmallText | None
 		registration_no: DF.Data
 		service_interval_km: DF.Int
 		service_interval_months: DF.Int
@@ -53,6 +54,46 @@ class ServiceVehicle(Document):
 
 		self.validate_mileage()
 		self.calculate_next_service()
+
+	def before_rename(self, old_name: str, new_name: str, merge: bool = False) -> str:
+		cleaned = (new_name or "").strip().upper()
+		if not cleaned:
+			frappe.throw(_("Registration No cannot be empty."))
+		return cleaned
+
+	def after_rename(self, old_name: str, new_name: str, merge: bool = False) -> None:
+		old_clean = (old_name or "").strip().upper()
+		new_clean = (new_name or "").strip().upper()
+
+		raw_sources = [self.previous_registration_nos]
+		if merge and old_clean and old_clean != new_clean:
+			raw_sources.append(frappe.db.get_value("Service Vehicle", old_name, "previous_registration_nos"))
+
+		tokens: list[str] = []
+		seen: set[str] = set()
+		for raw in raw_sources:
+			for part in (raw or "").split(","):
+				token = part.strip().upper()
+				if token and token != new_clean and token not in seen:
+					seen.add(token)
+					tokens.append(token)
+
+		if old_clean and old_clean != new_clean and old_clean not in seen:
+			seen.add(old_clean)
+			tokens.append(old_clean)
+
+		previous_str = ", ".join(tokens)
+		self.registration_no = new_clean
+		self.previous_registration_nos = previous_str
+		frappe.db.set_value(
+			"Service Vehicle",
+			self.name,
+			{
+				"registration_no": new_clean,
+				"previous_registration_nos": previous_str,
+			},
+			update_modified=False,
+		)
 
 	def validate_mileage(self):
 		if not self.is_new() and self.current_mileage:
@@ -91,7 +132,9 @@ class ServiceVehicle(Document):
 
 		movement = frappe.new_doc("Vehicle Movement")
 		movement.vehicle = self.name
-		movement.service_order = service_order or self.current_service_order
+		order = service_order or self.current_service_order
+		if order and frappe.db.exists("Service Order", order):
+			movement.service_order = order
 		movement.from_location = from_loc
 		movement.to_location = to_location
 		movement.moved_on = now_datetime()

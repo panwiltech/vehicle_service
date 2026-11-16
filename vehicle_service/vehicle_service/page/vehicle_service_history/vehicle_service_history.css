@@ -1,0 +1,10 @@
+/* Vehicle Service History Desk Page */
+
+#page-vehicle-service-history .layout-main-section {
+	max-width: 1320px;
+	margin: 0 auto;
+}
+
+#page-vehicle-service-history .page-content {
+	padding-top: 8px;
+}

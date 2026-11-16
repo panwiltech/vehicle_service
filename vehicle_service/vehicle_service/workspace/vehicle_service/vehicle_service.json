@@ -13,6 +13,7 @@
  "indicator_color": "blue",
  "is_hidden": 0,
  "label": "Vehicle Service",
+ "modified": "2026-11-16 16:30:00.000000",
  "module": "Vehicle Service",
  "name": "Vehicle Service",
  "parent_page": "",
@@ -55,6 +56,19 @@
    "type": "Page"
   },
   {
+   "color": "Cyan",
+   "label": "Vehicle Service History",
+   "link_to": "vehicle-service-history",
+   "type": "Page"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Vehicle Intakes",
+   "link_to": "Vehicle Intake",
+   "type": "DocType"
+  },
+  {
    "color": "Orange",
    "doc_view": "List",
    "label": "Service Orders",
@@ -73,6 +87,36 @@
    "label": "Estimate vs Actual",
    "link_to": "Estimate vs Actual",
    "type": "Report"
+  },
+  {
+   "color": "Blue",
+   "label": "Reports Dashboard",
+   "link_to": "reports-dashboard",
+   "type": "Page"
+  },
+  {
+   "color": "Green",
+   "label": "WIP Valuation",
+   "link_to": "WIP Valuation",
+   "type": "Report"
+  },
+  {
+   "color": "Purple",
+   "label": "Parts Sales",
+   "link_to": "Parts Sales",
+   "type": "Report"
+  },
+  {
+   "color": "Orange",
+   "label": "Technician Labour Units",
+   "link_to": "Technician Labour Units",
+   "type": "Report"
+  },
+  {
+   "color": "Grey",
+   "label": "Daily Operating Control",
+   "link_to": "Daily Operating Control",
+   "type": "Report"
   }
  ],
  "links": [
@@ -83,6 +127,17 @@
    "link_count": 0,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Vehicle Intakes",
+   "link_count": 0,
+   "link_to": "Vehicle Intake",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
   },
   {
    "dependencies": "",
@@ -310,6 +365,83 @@
    "link_count": 0,
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports Dashboard",
+   "link_count": 0,
+   "link_to": "reports-dashboard",
+   "link_type": "Page",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Completed Service Orders",
+   "link_count": 0,
+   "link_to": "Completed Service Orders",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Service Order Throughput",
+   "link_count": 0,
+   "link_to": "Service Order Throughput",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "WIP Valuation",
+   "link_count": 0,
+   "link_to": "WIP Valuation",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Sales Invoice",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Parts Sales",
+   "link_count": 0,
+   "link_to": "Parts Sales",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Job",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Technician Labour Units",
+   "link_count": 0,
+   "link_to": "Technician Labour Units",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "Service Order",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Daily Operating Control",
+   "link_count": 0,
+   "link_to": "Daily Operating Control",
+   "link_type": "Report",
+   "onboard": 1,
+   "type": "Link"
   },
   {
    "dependencies": "Service Order",

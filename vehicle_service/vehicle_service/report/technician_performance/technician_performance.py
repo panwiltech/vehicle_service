@@ -99,11 +99,26 @@ def get_data(filters):
 	if not jobs:
 		return []
 
+	# Pre-fetch current technician names using technician (Employee) IDs
+	technician_ids = {j.technician for j in jobs if j.technician}
+	employee_map = {}
+	if technician_ids:
+		employees = frappe.get_all(
+			"Employee",
+			filters={"name": ["in", list(technician_ids)]},
+			fields=["name", "employee_name"],
+		)
+		employee_map = {e.name: (e.employee_name or e.name) for e in employees}
+
 	# Group by technician
 	by_tech = {}
 	for j in jobs:
 		tech = j.technician or "Unassigned"
-		name = j.technician_name or tech
+		if tech != "Unassigned":
+			name = employee_map.get(tech) or j.technician_name or tech
+		else:
+			name = _("Unassigned")
+
 		if tech not in by_tech:
 			by_tech[tech] = {
 				"technician": tech if tech != "Unassigned" else None,

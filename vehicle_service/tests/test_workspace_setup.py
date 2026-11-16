@@ -54,10 +54,9 @@ class TestWorkspaceSetup(FrappeTestCase):
 		self.assertEqual(crm_items[0].hidden, 0, "CRM dock item must not be hidden")
 
 	def test_crm_desktop_icon(self):
-		"""CRM Desktop Icon must be top-level and not hidden."""
+		"""CRM Desktop Icon must be hidden."""
 		icon = frappe.get_doc("Desktop Icon", "CRM")
-		self.assertEqual(icon.hidden, 0, "CRM desktop icon must not be hidden")
-		self.assertIsNone(icon.parent_icon, "CRM desktop icon must be top-level (no parent_icon)")
+		self.assertEqual(icon.hidden, 1, "CRM desktop icon must be hidden")
 
 	def test_desk_sidebar_not_forced_in_css_and_js(self):
 		"""Desktop home screen (data-route="desktop") must not have sidebar forced visible."""
@@ -78,11 +77,19 @@ class TestWorkspaceSetup(FrappeTestCase):
 		# Ensure JS checks for desktop route before opening sidebar
 		self.assertIn("isDesktopPage", js_content)
 
-	def test_crm_in_primary_desk_apps(self):
-		"""CRM must be in extend_bootinfo primary_desk_apps."""
+	def test_crm_not_in_primary_desk_apps(self):
+		"""CRM must not be in extend_bootinfo primary_desk_apps."""
 		from vehicle_service.boot import extend_bootinfo
 		bootinfo = frappe._dict()
 		extend_bootinfo(bootinfo)
 		app_titles = [app["app_title"] for app in bootinfo.app_data]
-		self.assertIn("CRM", app_titles)
+		self.assertNotIn("CRM", app_titles)
+
+	def test_vehicle_service_history_workspace_shortcuts(self):
+		"""Vehicle Service and Service Advisor workspaces must expose the Vehicle Service History page shortcut."""
+		for ws_name in ("Vehicle Service", "Service Advisor"):
+			ws = frappe.get_doc("Workspace", ws_name)
+			shortcuts = [s for s in ws.shortcuts if s.type == "Page" and s.link_to == "vehicle-service-history"]
+			self.assertTrue(len(shortcuts) > 0, f"Missing Vehicle Service History shortcut in {ws_name}")
+
 

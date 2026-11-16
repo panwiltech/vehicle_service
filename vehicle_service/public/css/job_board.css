@@ -327,3 +327,38 @@ body[data-route*="job-board"] .layout-main-section {
 .jcb-jobs-table tr:last-child td {
 	border-bottom: none;
 }
+
+/* Vehicle Intake full width layout: small margin on ends instead of 900px center constraint */
+body[data-route*="Vehicle Intake"] .std-form-layout .section-head,
+body[data-route*="Vehicle Intake"] .std-form-layout .section-body,
+body[data-route*="vehicle_intake"] .std-form-layout .section-head,
+body[data-route*="vehicle_intake"] .std-form-layout .section-body,
+.vehicle-intake-wide-form .std-form-layout .section-head,
+.vehicle-intake-wide-form .std-form-layout .section-body {
+	max-width: 100% !important;
+	margin-left: 0 !important;
+	margin-right: 0 !important;
+	padding-left: 14px !important;
+	padding-right: 14px !important;
+}
+
+body[data-route*="Vehicle Intake"] .form-section,
+body[data-route*="vehicle_intake"] .form-section,
+.vehicle-intake-wide-form .form-section {
+	padding-left: 14px !important;
+	padding-right: 14px !important;
+}
+
+body[data-route*="Vehicle Intake"] .form-layout .form-page,
+body[data-route*="vehicle_intake"] .form-layout .form-page,
+.vehicle-intake-wide-form .form-layout .form-page {
+	padding-left: 8px !important;
+	padding-right: 8px !important;
+}
+
+body[data-route*="Vehicle Intake"] .form-section-description,
+body[data-route*="Vehicle Intake"] .form-footer,
+.vehicle-intake-wide-form .form-section-description,
+.vehicle-intake-wide-form .form-footer {
+	max-width: 100% !important;
+}

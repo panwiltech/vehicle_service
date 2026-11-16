@@ -18,23 +18,26 @@ def check_in_booking(booking_name: str):
 	if booking.status in ("Arrived", "Cancelled", "No Show"):
 		frappe.throw(_("Booking {0} is already {1}").format(booking.name, booking.status))
 
+	if getattr(booking, "vehicle_intake", None) and frappe.db.exists("Vehicle Intake", booking.vehicle_intake):
+		return {"status": "success", "vehicle_intake": booking.vehicle_intake}
+
 	if booking.service_order:
 		return {"status": "success", "service_order": booking.service_order}
 
-	order = frappe.new_doc("Service Order")
-	order.vehicle = booking.vehicle
-	order.customer = booking.customer
-	order.booking = booking.name
-	order.service_advisor = booking.service_advisor or frappe.session.user
-	order.customer_complaint = booking.requested_service
-	order.service_package = booking.service_package
-	order.insert(ignore_permissions=True)
+	intake = frappe.new_doc("Vehicle Intake")
+	intake.vehicle = booking.vehicle
+	intake.customer = booking.customer
+	intake.booking = booking.name
+	intake.service_advisor = booking.service_advisor or frappe.session.user
+	intake.customer_complaint = booking.requested_service
+	intake.flags.ignore_permissions = True
+	intake.insert()
 
-	booking.status = "Arrived"
-	booking.service_order = order.name
-	booking.save(ignore_permissions=True)
+	if hasattr(booking, "vehicle_intake"):
+		booking.vehicle_intake = intake.name
+		booking.save(ignore_permissions=True)
 
-	return {"status": "success", "service_order": order.name}
+	return {"status": "success", "vehicle_intake": intake.name}
 
 
 @frappe.whitelist()

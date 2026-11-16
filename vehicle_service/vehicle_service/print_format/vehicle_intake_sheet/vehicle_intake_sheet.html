@@ -221,8 +221,8 @@
 				<span class="field-val">{{ doc.service_advisor or "Not Assigned" }}</span>
 			</div>
 			<div class="field-row">
-				<span class="field-label">Order Type / Pri:</span>
-				<span class="field-val">{{ doc.order_type or "Customer" }} • {{ doc.priority or "Normal" }}</span>
+				<span class="field-label">Status:</span>
+				<span class="field-val">{{ doc.status or "Checked In" }}</span>
 			</div>
 		</div>
 	</div>
@@ -230,7 +230,7 @@
 
 <div class="panel" style="margin-bottom: 14px;">
 	<div class="panel-head">Intake Status & Reading</div>
-	<div class="panel-body grid-3" style="margin-bottom: 0; padding-bottom: 4px;">
+	<div class="panel-body grid-2" style="margin-bottom: 0; padding-bottom: 4px;">
 		<div class="field-row">
 			<span class="field-label">Odometer In:</span>
 			<span class="field-val" style="color: #047857; font-size: 11pt;">
@@ -242,10 +242,6 @@
 			<span class="field-val">
 				<span class="gauge-bar">{{ doc.fuel_level or "Unrecorded" }}</span>
 			</span>
-		</div>
-		<div class="field-row">
-			<span class="field-label">Package:</span>
-			<span class="field-val">{{ doc.service_package or "Standard Inspection" }}</span>
 		</div>
 	</div>
 </div>
@@ -273,6 +269,20 @@
 		</div>
 	</div>
 </div>
+
+{% if doc.intake_photos %}
+<div class="panel" style="margin-bottom: 14px;">
+	<div class="panel-head">Inspection Photographs</div>
+	<div class="panel-body" style="display: flex; gap: 10px; flex-wrap: wrap;">
+		{% for p in doc.intake_photos %}
+			<div style="text-align: center; border: 1px solid #e5e7eb; border-radius: 4px; padding: 4px;">
+				<img src="{{ p.photo }}" style="max-height: 120px; max-width: 180px; object-fit: contain; border-radius: 4px;" alt="Intake photo">
+				{% if p.description %}<div style="font-size: 8pt; color: #64748b; margin-top: 2px;">{{ p.description }}</div>{% endif %}
+			</div>
+		{% endfor %}
+	</div>
+</div>
+{% endif %}
 
 <!-- Customer Sign-Off -->
 <div class="sig-grid">
