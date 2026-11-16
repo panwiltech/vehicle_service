@@ -1690,7 +1690,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		const safeSrc = this._safe_url(src);
 		if (!safeSrc) return;
 		const d = new frappe.ui.Dialog({
-			title: desc || __("Vehicle Intake Photo"),
+			title: this._esc(desc || __("Vehicle Intake Photo")),
 			size: "large",
 			fields: [{ fieldname: "preview", fieldtype: "HTML" }],
 		});
@@ -1723,7 +1723,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			: __("Follow-up to prior recommendation");
 
 		const d = new frappe.ui.Dialog({
-			title: __("Schedule Follow-up Job ({0})", [targetOrder]),
+			title: this._esc(__("Schedule Follow-up Job ({0})", [targetOrder])),
 			fields: [
 				{
 					fieldname: "service_order",
@@ -1821,7 +1821,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 						if (!r.exc) {
 							d.hide();
 							frappe.show_alert({
-								message: __("Follow-up job added to {0}", [targetOrder]),
+								message: __("Follow-up job added to {0}", [this._esc(targetOrder)]),
 								indicator: "green",
 							});
 							this.load_vehicle(this.vehicle);
