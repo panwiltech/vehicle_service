@@ -20,9 +20,17 @@
    "link_to": "Job Control Board",
    "link_type": "Workspace",
    "title": "Job Control Board"
+  },
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "handshake-soft",
+   "link_to": "CRM",
+   "link_type": "Sidebar",
+   "title": "CRM"
   }
  ],
- "modified": "2026-10-16 21:43:20.456849",
+ "modified": "2026-10-24 18:59:11.796994",
  "modified_by": "Administrator",
  "name": "vehicle_service",
  "owner": "Administrator",

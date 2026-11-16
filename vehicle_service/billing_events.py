@@ -3,13 +3,66 @@
 
 import frappe
 from frappe.utils import flt
-from vehicle_service.state import INVOICED, READY_FOR_BILLING, READY_FOR_COLLECTION, vehicle_status_for
+from vehicle_service.state import (
+	INVOICED,
+	JOB_COMPLETED,
+	JOB_DONE,
+	READY_FOR_BILLING,
+	READY_FOR_COLLECTION,
+	vehicle_status_for,
+)
 
 
 def validate_sales_invoice(doc, method=None):
-	"""Restricts Service Advisors from deleting or reducing parts on a Sales Invoice linked to a Service Order."""
+	"""Restricts Service Advisors from deleting or altering parts on a Sales Invoice linked to a Service Order,
+	and validates that all workshop jobs are completed before allowing invoice submission.
+	"""
 	if not getattr(doc, "vs_service_order", None):
 		return
+
+	# Credit Note validations
+	if getattr(doc, "is_return", 0):
+		user = frappe.session.user
+		if user and user != "Administrator":
+			roles = set(frappe.get_roles(user))
+			is_accounts_or_mgr = bool(roles & {"System Manager", "Accounts Manager", "Accounts User", "Service Accounts", "Service Manager"})
+			if "Service Advisor" in roles and not is_accounts_or_mgr:
+				frappe.throw(
+					frappe._("Access denied: Service Advisors are not permitted to create Credit Notes. Credit Notes can only be created by Accounts or Service Managers."),
+					frappe.ValidationError,
+				)
+
+		ret_against = getattr(doc, "return_against", None)
+		if not ret_against:
+			frappe.throw(
+				frappe._("Credit Note must be linked to a submitted Sales Invoice in 'Return Against'."),
+				frappe.ValidationError,
+			)
+		orig_docstatus = frappe.db.get_value("Sales Invoice", ret_against, "docstatus")
+		if orig_docstatus != 1:
+			frappe.throw(
+				frappe._("Cannot create Credit Note against draft Sales Invoice {0}. Credit Notes can only be created against submitted Sales Invoices.").format(
+					ret_against
+				),
+				frappe.ValidationError,
+			)
+
+	# Block submission if workshop jobs on the Service Order are incomplete
+	if doc.docstatus == 1 and not getattr(doc, "is_return", 0):
+		all_jobs = frappe.get_all(
+			"Service Job",
+			filters={"service_order": doc.vs_service_order},
+			fields=["name", "job_title", "status"],
+		)
+		incomplete = [j for j in all_jobs if j.status not in (JOB_DONE | {"Cancelled", "Declined"})]
+		if incomplete:
+			titles = ", ".join(f"{j.job_title} ({j.status})" for j in incomplete)
+			frappe.throw(
+				frappe._(
+					"Cannot submit Sales Invoice {0}: Service Order {1} still has incomplete workshop jobs: {2}. All jobs must be completed before submitting the invoice."
+				).format(doc.name or "New", doc.vs_service_order, titles),
+				frappe.ValidationError,
+			)
 
 	user = frappe.session.user
 	if not user or user == "Administrator":
@@ -31,6 +84,15 @@ def validate_sales_invoice(doc, method=None):
 			part_row = getattr(item, "vs_part_row", None)
 			if part_row:
 				inv_parts[part_row] = item
+			elif not getattr(item, "vs_job", None):
+				# Stock part added directly outside Service Order
+				if frappe.db.get_value("Item", item.item_code, "is_stock_item"):
+					frappe.throw(
+						frappe._(
+							"Service Advisors are not permitted to add stock parts ({0}) directly to Sales Invoice {1}. Parts must be added by a Parts Consultant or Parts Manager on Service Order {2}."
+						).format(item.item_code, doc.name or "New", so.name),
+						frappe.ValidationError,
+					)
 
 		for part_row, so_part in so_parts_map.items():
 			if part_row not in inv_parts:
@@ -42,19 +104,19 @@ def validate_sales_invoice(doc, method=None):
 				)
 
 			inv_item = inv_parts[part_row]
-			if flt(inv_item.qty) < flt(so_part.qty_used):
+			if flt(inv_item.qty) != flt(so_part.qty_used):
 				frappe.throw(
 					frappe._(
-						"Service Advisors are not permitted to reduce the quantity of part {0} on Sales Invoice {1} below {2}. Please contact the Parts Consultant or Parts Manager."
-					).format(so_part.item_code, doc.name or "New", so_part.qty_used),
+						"Service Advisors are not permitted to change the quantity of part {0} on Sales Invoice {1} (Service Order: {2}). Expected quantity: {3}, found: {4}. Only labour hours can be modified on the invoice."
+					).format(so_part.item_code, doc.name or "New", so.name, so_part.qty_used, inv_item.qty),
 					frappe.ValidationError,
 				)
 
-			if flt(inv_item.rate) < flt(so_part.rate):
+			if flt(inv_item.rate) != flt(so_part.rate):
 				frappe.throw(
 					frappe._(
-						"Service Advisors are not permitted to reduce the rate of part {0} on Sales Invoice {1} below {2}. Please contact the Parts Consultant or Parts Manager."
-					).format(so_part.item_code, doc.name or "New", so_part.rate),
+						"Service Advisors are not permitted to change the rate of part {0} on Sales Invoice {1} (Service Order: {2}). Expected rate: {3}, found: {4}. Only labour hours can be modified on the invoice."
+					).format(so_part.item_code, doc.name or "New", so.name, so_part.rate, inv_item.rate),
 					frappe.ValidationError,
 				)
 

@@ -23,6 +23,15 @@
    "role": "Job Controller"
   },
   {
+   "role": "Service Advisor"
+  },
+  {
+   "role": "Parts Controller"
+  },
+  {
+   "role": "Parts Manager"
+  },
+  {
    "role": "Workshop Supervisor"
   },
   {
@@ -34,6 +43,12 @@
  ],
  "sequence_id": 1.2,
  "shortcuts": [
+  {
+   "color": "Purple",
+   "label": "Job Control Board",
+   "link_to": "job-board",
+   "type": "Page"
+  },
   {
    "color": "Blue",
    "label": "Workshop Live Control",

@@ -9,6 +9,7 @@ from frappe.utils import (
 	add_days,
 	cint,
 	flt,
+	getdate,
 	get_link_to_form,
 	now_datetime,
 	nowdate,
@@ -25,6 +26,7 @@ from vehicle_service.state import (
 	JOB_DONE,
 	JOB_INACTIVE,
 	JOB_PASSED,
+	JOB_PAUSED,
 	OPERATIONAL,
 	ORDER_FLOW,
 	PART_REQUIRED,
@@ -42,6 +44,23 @@ from vehicle_service.state import (
 	stepper_position,
 	vehicle_status_for,
 )
+
+
+def map_order_pause_reason(reason: str | None) -> str | None:
+	if not reason:
+		return None
+	r_lower = str(reason).lower()
+	if "part" in r_lower:
+		return "Waiting for Parts"
+	if "approv" in r_lower:
+		return "Awaiting Approval"
+	if "customer" in r_lower:
+		return "Customer Request"
+	if "consult" in r_lower:
+		return "Technical Consultation"
+	if reason in {"Awaiting Approval", "Waiting for Parts", "Customer Request", "Technical Consultation", "Other"}:
+		return reason
+	return "Other"
 
 
 class ServiceOrder(Document):
@@ -398,6 +417,8 @@ class ServiceOrder(Document):
 				row.rate = flt(std_price) if std_price else flt(frappe.db.get_value("Item", row.item_code, "valuation_rate") or 0)
 
 	def validate_open_orders(self):
+		if getattr(self.flags, "ignore_open_order_validation", False):
+			return
 		if self.is_new() or self.has_value_changed("vehicle"):
 			settings = frappe.get_cached_doc("Vehicle Service Settings")
 			if not settings.allow_multiple_open_orders and self.vehicle:
@@ -479,15 +500,34 @@ class ServiceOrder(Document):
 						row.bay = sj_info.bay
 						frappe.db.set_value("Service Order Job", row.name, {"bay": sj_info.bay}, update_modified=False)
 
-		if self.status in (DRAFT, CHECKED_IN, PAUSED, AWAITING_APPROVAL, READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION, DELIVERED, CANCELLED):
+		if self.status in (DRAFT, CHECKED_IN, READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION, DELIVERED, CANCELLED):
 			return
 
-		jobs = frappe.get_all("Service Job", filters={"service_order": self.name}, fields=["status"])
+		jobs = frappe.get_all("Service Job", filters={"service_order": self.name}, fields=["name", "status", "pause_reason"])
 		new_status = compute_operational_status(jobs, self.parts)
+
+		if new_status == PAUSED:
+			reason_to_set = None
+			for j in jobs:
+				if j.get("status") == JOB_PAUSED and j.get("pause_reason"):
+					reason_to_set = j.get("pause_reason")
+					break
+			self.pause_reason = map_order_pause_reason(reason_to_set)
+		elif new_status == AWAITING_APPROVAL:
+			reason_to_set = None
+			for j in jobs:
+				if j.get("status") == JOB_PAUSED and "approv" in str(j.get("pause_reason") or "").lower():
+					reason_to_set = j.get("pause_reason")
+					break
+			self.pause_reason = map_order_pause_reason(reason_to_set or "Awaiting Approval")
+		elif new_status not in (PAUSED, AWAITING_APPROVAL):
+			self.pause_reason = None
 
 		if self.status != new_status:
 			self.status = new_status
 			self.save(ignore_permissions=True)
+		else:
+			frappe.db.set_value("Service Order", self.name, "pause_reason", self.pause_reason, update_modified=False)
 
 		# Update vehicle status
 		if self.vehicle:
@@ -528,6 +568,18 @@ class ServiceOrder(Document):
 				send_ready_for_collection(self.name)
 			except Exception:
 				frappe.log_error(title="Failed to auto-send collection notification", message=frappe.get_traceback())
+
+		# Auto-sync to linked draft Sales Invoice if present
+		if self.sales_invoice and not getattr(self.flags, "in_invoice_sync", False):
+			try:
+				self.flags.in_invoice_sync = True
+				sync_draft_invoice_from_order(self)
+			except Exception:
+				if hasattr(frappe.local, "message_log") and frappe.local.message_log:
+					frappe.local.message_log.pop()
+				frappe.log_error(title="Failed to auto-sync draft invoice", message=frappe.get_traceback())
+			finally:
+				self.flags.in_invoice_sync = False
 
 	def on_trash(self):
 		if self.status not in (DRAFT, CANCELLED):
@@ -1023,6 +1075,27 @@ def create_estimate(order_name: str):
 	return {"status": "success", "quotation": quotation.name}
 
 
+def _apply_quotation_item(job, q_item):
+	"""Bill a quotation-born job under the quotation line's item at the quoted rate.
+
+	Without this a job falls back to the default labour item and labour rate, which disagrees with the
+	Sales Order line and the price the customer approved. Returns True when anything changed.
+	"""
+	changed = False
+	if q_item.item_code and job.service_item != q_item.item_code:
+		job.service_item = q_item.item_code
+		changed = True
+	rate = flt(q_item.rate)
+	if rate and flt(job.rate) != rate:
+		job.rate = rate
+		changed = True
+	amount = round(flt(job.estimated_hours) * flt(job.rate), 2)
+	if flt(job.amount) != amount:
+		job.amount = amount
+		changed = True
+	return changed
+
+
 def on_quotation_submit(doc, method=None):
 	if getattr(doc, "vs_service_order", None) and frappe.db.exists("Service Order", doc.vs_service_order):
 		order = frappe.get_doc("Service Order", doc.vs_service_order)
@@ -1156,6 +1229,7 @@ def record_customer_approval(
 									job.job_title = q_item.item_name or q_item.item_code
 									job.category = getattr(q_item, "vs_category", None) or "Essential"
 									job.estimated_hours = flt(q_item.qty) or 1.0
+									_apply_quotation_item(job, q_item)
 									job.quotation = quotation.name
 									job.quotation_item = q_item.name
 									job.status = "Approved"
@@ -1173,6 +1247,9 @@ def record_customer_approval(
 											"source": "From Quotation",
 											"sales_order": so.name,
 											"so_detail": so_item.name,
+											"service_item": q_item.item_code,
+											"rate": flt(q_item.rate),
+											"amount": round((flt(q_item.qty) or 1.0) * flt(q_item.rate), 2),
 										},
 									)
 								frappe.db.set_value("Quotation Item", q_item.name, "vs_job", job_name)
@@ -1272,6 +1349,8 @@ def sync_quotation_to_service_order(doc, method=None):
 					if job.estimated_hours != flt(item.qty):
 						job.estimated_hours = flt(item.qty)
 						job_modified = True
+					if _apply_quotation_item(job, item):
+						job_modified = True
 					if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 						if job.status != item.vs_approval and job.status not in ["In Progress", "Completed"]:
 							job.status = item.vs_approval
@@ -1285,6 +1364,11 @@ def sync_quotation_to_service_order(doc, method=None):
 						if j_row.service_job == item.vs_job:
 							if flt(j_row.estimated_hours) != flt(item.qty):
 								j_row.estimated_hours = flt(item.qty)
+								order_modified = True
+							if item.item_code and (j_row.service_item != item.item_code or flt(j_row.rate) != flt(item.rate)):
+								j_row.service_item = item.item_code
+								j_row.rate = flt(item.rate)
+								j_row.amount = round(flt(j_row.estimated_hours) * flt(j_row.rate), 2)
 								order_modified = True
 							if getattr(item, "vs_approval", None) and item.vs_approval in ["Approved", "Declined"]:
 								if j_row.status != item.vs_approval and j_row.status not in ["In Progress", "Completed"]:
@@ -1333,6 +1417,7 @@ def sync_quotation_to_service_order(doc, method=None):
 						job.job_title = item.item_name or item.item_code
 						job.category = getattr(item, "vs_category", None) or "Maintenance"
 						job.estimated_hours = flt(item.qty) or 1.0
+						_apply_quotation_item(job, item)
 						job.quotation = doc.name
 						job.quotation_item = item.name
 						job.status = "Approved" if getattr(item, "vs_approval", None) == "Approved" else "Pending Approval"
@@ -1544,17 +1629,159 @@ def complete_and_create_invoice(order_name: str, notes: str | None = None):
 	"""Shortcut for quick services: completes all jobs, sets Ready for Billing,
 	and immediately creates the linked Sales Invoice in one operation.
 	"""
+	# Idempotent: if an invoice is already linked, do not re-run completion
+	# (the order is past the workshop stage and completion would be rejected).
+	existing = frappe.db.get_value("Service Order", order_name, "sales_invoice")
+	if existing and frappe.db.exists("Sales Invoice", existing):
+		return create_sales_invoice_from_order(order_name)
 	complete_and_ready_for_billing(order_name, notes)
 	return create_sales_invoice_from_order(order_name)
 
 
+def _job_invoice_item_code(job, labour_item):
+	"""Item code to bill a job under.
+
+	ERPNext checks each invoice row against the Sales Order Item it points at (so_detail), so a job
+	created from a quotation must be billed under that line's item, not the default labour item.
+	"""
+	if job.get("so_detail"):
+		so_item = frappe.db.get_value("Sales Order Item", job.so_detail, "item_code")
+		if so_item:
+			return so_item
+	return job.get("service_item") or labour_item
+
+
+def sync_draft_invoice_from_order(order):
+	"""Synchronizes active jobs and used parts from Service Order to its linked Draft Sales Invoice."""
+	if not order.sales_invoice or not frappe.db.exists("Sales Invoice", order.sales_invoice):
+		return None
+
+	inv_docstatus = frappe.db.get_value("Sales Invoice", order.sales_invoice, "docstatus")
+	if inv_docstatus != 0:
+		return None
+
+	settings = frappe.get_cached_doc("Vehicle Service Settings")
+	wip_wh = settings.wip_warehouse
+	labour_item = settings.labour_item or "LABOUR"
+	labour_rate = flt(settings.labour_rate) or 50.0
+
+	si = frappe.get_doc("Sales Invoice", order.sales_invoice)
+
+	# 1. Sync Jobs
+	jobs = frappe.get_all(
+		"Service Job",
+		filters={"service_order": order.name, "status": ["not in", ["Cancelled", "Declined", "Pending Approval"]]},
+		fields=["name", "job_title", "sales_order", "so_detail", "estimated_hours", "actual_hours", "service_item", "rate", "supplier", "supplier_invoice_ref"],
+	)
+	active_job_names = {j.name for j in jobs}
+	existing_job_items = {it.vs_job: it for it in si.items if getattr(it, "vs_job", None)}
+
+	for j in jobs:
+		billable_hours = flt(j.estimated_hours) or 1.0
+		item_code = _job_invoice_item_code(j, labour_item)
+		j_rate = flt(j.rate) or labour_rate
+		desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
+		if item_code == "SUBLET" and getattr(j, "supplier", None):
+			desc += f" (Sublet by {j.supplier} - Ref: {getattr(j, 'supplier_invoice_ref', '') or 'N/A'})"
+
+		if j.name in existing_job_items:
+			it = existing_job_items[j.name]
+			it.item_code = item_code
+			it.item_name = j.job_title
+			it.description = desc
+			it.rate = j_rate
+			if flt(it.qty) <= 0:
+				it.qty = billable_hours
+		else:
+			si.append(
+				"items",
+				{
+					"item_code": item_code,
+					"item_name": j.job_title,
+					"description": desc,
+					"qty": billable_hours,
+					"rate": j_rate,
+					"sales_order": j.sales_order,
+					"so_detail": j.so_detail,
+					"vs_job": j.name,
+				},
+			)
+
+	# Remove items for cancelled/declined jobs
+	si.items = [it for it in si.items if not getattr(it, "vs_job", None) or it.vs_job in active_job_names]
+
+	# 2. Sync Parts (approved and actually used)
+	approved_parts = {p.name: p for p in order.parts if p.approval_status == "Approved" and flt(p.qty_used) > 0}
+	existing_part_items = {it.vs_part_row: it for it in si.items if getattr(it, "vs_part_row", None)}
+
+	for p_name, p in approved_parts.items():
+		if p_name in existing_part_items:
+			it = existing_part_items[p_name]
+			it.qty = flt(p.qty_used)
+			it.rate = flt(p.rate)
+			it.warehouse = wip_wh
+		else:
+			si.append(
+				"items",
+				{
+					"item_code": p.item_code,
+					"qty": flt(p.qty_used),
+					"rate": flt(p.rate),
+					"warehouse": wip_wh,
+					"sales_order": p.sales_order,
+					"so_detail": p.so_detail,
+					"vs_part_row": p.name,
+				},
+			)
+
+	# Remove part items that are no longer approved or have qty_used <= 0
+	si.items = [it for it in si.items if not getattr(it, "vs_part_row", None) or it.vs_part_row in approved_parts]
+
+	# Normalize posting_date and due_date to avoid ERPNext's "Due Date cannot be before Posting Date"
+	# if saving a draft invoice created on an earlier date.
+	today = nowdate()
+	target_date = today if not getattr(si, "set_posting_time", None) else (si.posting_date or today)
+	if getdate(si.due_date or target_date) < getdate(target_date):
+		si.due_date = target_date
+	for ps in si.get("payment_schedule", []):
+		if getdate(ps.due_date or target_date) < getdate(target_date):
+			ps.due_date = target_date
+
+	# Sync PO, Driver, Mileage, and remarks (non-destructively)
+	if getattr(order, "customer_po_no", None):
+		si.po_no = order.customer_po_no
+	if order.driver_name:
+		si.vs_driver_name = order.driver_name
+	if order.driver_phone:
+		si.vs_driver_phone = order.driver_phone
+	if order.odometer_in:
+		si.vs_mileage_in = int(order.odometer_in)
+	if order.odometer_out:
+		si.vs_mileage_out = int(order.odometer_out)
+	if not getattr(si, "vs_invoice_remarks", None) and order.customer_complaint:
+		si.vs_invoice_remarks = order.customer_complaint
+
+	si.save(ignore_permissions=True)
+	return si
+
+
 @frappe.whitelist()
 def create_sales_invoice_from_order(order_name: str):
+	# Row-lock the order until commit so concurrent calls serialise; the second
+	# caller then sees the linked invoice instead of creating a duplicate.
+	frappe.db.get_value("Service Order", order_name, "sales_invoice", for_update=True)
 	order = frappe.get_doc("Service Order", order_name)
-	if order.status != READY_FOR_BILLING:
-		frappe.throw(_("Sales Invoice can only be created when Service Order is in 'Ready for Billing' status (Current: {0}).").format(order.status))
+	allowed_statuses = OPERATIONAL | {READY_FOR_BILLING, INVOICED, READY_FOR_COLLECTION}
+	if order.status not in allowed_statuses:
+		frappe.throw(
+			_("Sales Invoice can only be created when Service Order is approved or in workshop progress (Current: {0}).").format(order.status)
+		)
 
 	if order.sales_invoice and frappe.db.exists("Sales Invoice", order.sales_invoice):
+		inv_status = frappe.db.get_value("Sales Invoice", order.sales_invoice, "docstatus")
+		if inv_status == 0:
+			sync_draft_invoice_from_order(order)
+			return {"status": "success", "sales_invoice": order.sales_invoice, "updated": True}
 		return {"status": "success", "sales_invoice": order.sales_invoice}
 
 	settings = frappe.get_cached_doc("Vehicle Service Settings")
@@ -1568,18 +1795,29 @@ def create_sales_invoice_from_order(order_name: str):
 	si.posting_date = nowdate()
 	si.vs_service_order = order.name
 	si.update_stock = 1
+	si.po_no = getattr(order, "customer_po_no", None) or ""
+
+	v_doc = frappe.get_doc("Service Vehicle", order.vehicle) if order.vehicle and frappe.db.exists("Service Vehicle", order.vehicle) else None
+	si.vs_license_plate = (v_doc.registration_no if v_doc else None) or order.vehicle or ""
+	si.vs_chassis_no = (v_doc.vin if v_doc else None) or ""
+	si.vs_vehicle_model = order.vehicle_description or (f"{v_doc.make or ''} {v_doc.model or ''}".strip() if v_doc else "")
+	si.vs_mileage_in = int(order.odometer_in or 0)
+	si.vs_mileage_out = int(order.odometer_out or 0)
+	si.vs_driver_name = order.driver_name or ""
+	si.vs_driver_phone = order.driver_phone or ""
+	si.vs_invoice_remarks = order.customer_complaint or ""
 
 	# Jobs Labour billing
 	jobs = frappe.get_all(
 		"Service Job",
-		filters={"service_order": order.name, "status": ["in", list(JOB_DONE)]},
+		filters={"service_order": order.name, "status": ["not in", ["Cancelled", "Declined", "Pending Approval"]]},
 		fields=["name", "job_title", "sales_order", "so_detail", "estimated_hours", "actual_hours", "service_item", "rate", "supplier", "supplier_invoice_ref"],
 	)
 
 	for j in jobs:
-		billable_hours = billable_labour_hours(j.estimated_hours, j.actual_hours, settings.labour_billing_basis)
+		billable_hours = flt(j.estimated_hours) or 1.0
 		if billable_hours > 0:
-			item_code = j.service_item or labour_item
+			item_code = _job_invoice_item_code(j, labour_item)
 			j_rate = flt(j.rate) or labour_rate
 			desc = f"{item_code}: {j.job_title} ({billable_hours} hrs)"
 			if item_code == "SUBLET" and getattr(j, "supplier", None):
@@ -1600,12 +1838,12 @@ def create_sales_invoice_from_order(order_name: str):
 
 	# Parts billing (only parts actually consumed/used)
 	for p in order.parts:
-		if p.approval_status == "Approved" and p.qty_used > 0:
+		if p.approval_status == "Approved" and flt(p.qty_used) > 0:
 			si.append(
 				"items",
 				{
 					"item_code": p.item_code,
-					"qty": p.qty_used,
+					"qty": flt(p.qty_used),
 					"rate": flt(p.rate),
 					"warehouse": wip_wh,
 					"sales_order": p.sales_order,
@@ -1617,6 +1855,8 @@ def create_sales_invoice_from_order(order_name: str):
 	si.insert(ignore_permissions=True)
 
 	order.sales_invoice = si.name
+	order.flags.ignore_invoice_lock = True
+	order.flags.ignore_job_lock = True
 	order.save(ignore_permissions=True)
 
 	return {"status": "success", "sales_invoice": si.name}
@@ -1665,6 +1905,11 @@ def deliver_vehicle(
 	order.status = DELIVERED
 	order.flags.ignore_invoice_lock = True
 	order.save(ignore_permissions=True)
+
+	if order.sales_invoice and frappe.db.exists("Sales Invoice", order.sales_invoice):
+		inv_status = frappe.db.get_value("Sales Invoice", order.sales_invoice, "docstatus")
+		if inv_status == 0:
+			frappe.db.set_value("Sales Invoice", order.sales_invoice, "vs_mileage_out", odometer)
 
 	# Update Vehicle lifetime history
 	vehicle = frappe.get_doc("Service Vehicle", order.vehicle)

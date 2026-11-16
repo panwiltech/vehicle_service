@@ -55,6 +55,15 @@ frappe.ui.form.on("Service Order", {
 	},
 
 	render_status_stepper(frm) {
+		// The status_html wrapper is reused between Service Order forms, so clear any
+		// clock strip left over from the previously viewed order before rendering anything.
+		const clearClockStrip = () => {
+			if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
+				frm.fields_dict.status_html.$wrapper.find(".workshop-clock-strip").remove();
+			}
+		};
+		clearClockStrip();
+
 		if (frm.is_new()) {
 			frm.set_df_property("status_html", "options", "");
 			return;
@@ -73,6 +82,41 @@ frappe.ui.form.on("Service Order", {
 		}
 
 		frm.set_df_property("status_html", "options", html);
+
+		// Workshop Technicians Clock Status Strip
+		if (!["Delivered", "Cancelled"].includes(frm.doc.status)) {
+			const requestedOrder = frm.doc.name;
+			frappe.db.get_list("Service Job", {
+				filters: { service_order: requestedOrder },
+				fields: ["name", "job_title", "technician", "technician_name", "status", "actual_hours", "pause_reason"],
+			}).then(jobs => {
+				// Ignore a late response if the user has since moved to another (or a new) order.
+				if (frm.is_new() || frm.doc.name !== requestedOrder) return;
+				clearClockStrip();
+				if (!jobs || !jobs.length) return;
+				const running = jobs.filter(j => j.status === "In Progress");
+				const paused = jobs.filter(j => j.status === "Paused");
+
+				if (running.length || paused.length) {
+					let badges = "";
+					running.forEach(j => {
+						const tech = (j.technician_name || j.technician || "").split(" ")[0];
+						badges += `<span class="badge badge-success mr-2 p-1" style="font-size: 11px;"><span class="indicator green blink mr-1"></span><strong>${frappe.utils.escape_html(tech)}:</strong> ${frappe.utils.escape_html(j.job_title)} (${flt(j.actual_hours || 0, 2)}h - ${__("Running")})</span>`;
+					});
+					paused.forEach(j => {
+						const tech = (j.technician_name || j.technician || "").split(" ")[0];
+						const reason = j.pause_reason ? ` - ${j.pause_reason}` : "";
+						badges += `<span class="badge badge-warning mr-2 p-1" style="font-size: 11px; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba;"><span class="indicator orange mr-1"></span><strong>${frappe.utils.escape_html(tech)}:</strong> ${frappe.utils.escape_html(j.job_title)} (${flt(j.actual_hours || 0, 2)}h - ${__("Paused")}${frappe.utils.escape_html(reason)})</span>`;
+					});
+
+					const strip_html = `<div class="workshop-clock-strip d-flex align-items-center flex-wrap my-2 p-2" style="background: var(--bg-light-gray, #f8f9fa); border-radius: 4px; border: 1px solid var(--border-color, #d1d8dd); gap: 6px;"><span class="text-muted font-weight-bold mr-2 text-xs" style="text-transform: uppercase; letter-spacing: 0.5px;"><i class="fa fa-clock-o mr-1"></i>${__("Workshop Clocks")}:</span>${badges}</div>`;
+
+					if (frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper) {
+						frm.fields_dict.status_html.$wrapper.append(strip_html);
+					}
+				}
+			});
+		}
 
 		if (frm.doc.sales_invoice) {
 			frappe.db.get_value("Sales Invoice", frm.doc.sales_invoice, ["docstatus"]).then(r => {
@@ -100,51 +144,11 @@ frappe.ui.form.on("Service Order", {
 		if (frm.is_new()) return;
 
 		const userRoles = frappe.user_roles || [];
-		const isJobController = userRoles.includes("Job Controller") || userRoles.includes("System Manager");
 		const isCompleted = ["Ready for Billing", "Invoiced", "Ready for Collection", "Delivered"].includes(frm.doc.status) || frm.doc.board_status === "Completed";
 
 		// If order is completed and user is Job Controller (and not System Manager), disable form
 		if (isCompleted && userRoles.includes("Job Controller") && !userRoles.includes("System Manager")) {
 			frm.disable_form();
-		}
-
-		// Job Control button group for Job Controller
-		if (isJobController && !isCompleted && frm.doc.status !== "Cancelled") {
-			frm.add_custom_button(__("Add Job"), () => {
-				frm.trigger("show_add_job_dialog");
-			}, __("Job Control"));
-
-			frm.add_custom_button(__("Assign Technician"), () => {
-				frm.trigger("show_assign_job_dialog");
-			}, __("Job Control"));
-
-			frm.add_custom_button(__("Start Clock"), () => {
-				frm.trigger("start_selected_job");
-			}, __("Job Control"));
-
-			frm.add_custom_button(__("Pause Clock"), () => {
-				frm.trigger("pause_selected_job");
-			}, __("Job Control"));
-
-			frm.add_custom_button(__("Complete Job"), () => {
-				frappe.confirm(
-					__("Mark all workshop jobs as completed and move this Service Order to Ready for Billing?"),
-					() => {
-						frappe.call({
-							method: "vehicle_service.job_control.complete_service_order",
-							args: { order_name: frm.doc.name },
-							freeze: true,
-							freeze_message: __("Completing Service Order..."),
-							callback: (r) => {
-								if (!r.exc) {
-									frappe.show_alert({ message: __("Service Order marked Completed (Ready for Billing)"), indicator: "green" });
-									frm.reload_doc();
-								}
-							}
-						});
-					}
-				);
-			}, __("Job Control")).addClass("btn-primary");
 		}
 
 		// 1. Check-in Button (if Draft)
@@ -161,15 +165,26 @@ frappe.ui.form.on("Service Order", {
 			}, __("Actions"));
 		}
 
-		// 3. Dynamic Quotation Buttons (Create vs View vs Approval)
-		frappe.db.get_list("Quotation", {
-			filters: { vs_service_order: frm.doc.name, docstatus: ["!=", 2] },
-			fields: ["name", "docstatus"],
-			order_by: "creation desc",
-			limit: 1
-		}).then((qRes) => {
+		// 3. One status-dependent quotation action:
+		//    no quotation -> Create Quotation (initial)
+		//    quotation exists + un-estimated pending work -> Estimate Additional Work (supplementary)
+		Promise.all([
+			frappe.db.get_list("Quotation", {
+				filters: { vs_service_order: frm.doc.name, docstatus: ["!=", 2] },
+				fields: ["name", "docstatus"],
+				order_by: "creation desc",
+				limit: 1
+			}),
+			frappe.db.get_list("Service Job", {
+				filters: { service_order: frm.doc.name, status: "Pending Approval", quotation: ["in", ["", null]] },
+				fields: ["name"],
+				limit: 1
+			})
+		]).then(([qRes, pendingJobs]) => {
 			const hasQuotation = qRes && qRes.length > 0;
 			const qName = hasQuotation ? qRes[0].name : null;
+			const hasPendingParts = (frm.doc.parts || []).some(p => p.approval_status === "Pending" && !p.quotation);
+			const hasUnestimatedWork = (pendingJobs && pendingJobs.length > 0) || hasPendingParts;
 
 			if (hasQuotation) {
 				frm.add_custom_button(__("View Quotation"), () => {
@@ -181,11 +196,29 @@ frappe.ui.form.on("Service Order", {
 						frm.trigger("show_approval_dialog");
 					}).addClass("btn-primary");
 				}
+
+				if (hasUnestimatedWork && ["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "In Progress", "Paused"].includes(frm.doc.status)) {
+					frm.add_custom_button(__("Estimate Additional Work"), () => {
+						frappe.call({
+							method: "vehicle_service.vehicle_service.doctype.service_order.service_order.create_estimate",
+							args: { order_name: frm.doc.name },
+							freeze: true,
+							freeze_message: __("Creating Quotation Estimate..."),
+							callback: (r) => {
+								if (!r.exc) {
+									frappe.show_alert({ message: __("Estimate Quotation {0} created", [r.message.quotation]), indicator: "green" });
+									frm.reload_doc();
+								}
+							}
+						});
+					}, __("Actions"));
+				}
 			} else if (["Draft", "Checked In", "In Progress"].includes(frm.doc.status)) {
-				frm.add_custom_button(__("Create Quotation"), () => {
+				const $qBtn = frm.add_custom_button(__("Create Quotation"), () => {
 					frappe.call({
 						method: "vehicle_service.vehicle_service.doctype.service_order.service_order.make_service_quotation",
 						args: { order_name: frm.doc.name },
+						btn: $qBtn,
 						freeze: true,
 						freeze_message: __("Preparing Quotation..."),
 						callback: (r) => {
@@ -198,72 +231,25 @@ frappe.ui.form.on("Service Order", {
 			}
 		});
 
-		// 3b. Create / Revise Estimate in Actions menu
-		if (["Checked In", "Awaiting Approval", "Approved", "Waiting for Parts", "Ready for Work", "In Progress", "Paused"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Create / Update Estimate"), () => {
-				frappe.call({
-					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.create_estimate",
-					args: { order_name: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Creating Quotation Estimate..."),
-					callback: (r) => {
-						if (!r.exc) {
-							frappe.show_alert({ message: __("Estimate Quotation {0} created", [r.message.quotation]), indicator: "green" });
-							frm.reload_doc();
-						}
-					}
-				});
-			}, __("Actions"));
-		}
-
-		// 5. Parts Issue / Return actions
-		if (["Checked In", "Approved", "Waiting for Parts", "Ready for Work", "In Progress"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Issue Selected Parts"), () => {
-				frm.trigger("show_parts_issue_dialog");
-			}, __("Parts Control"));
-
-			frm.add_custom_button(__("Return Parts from Workshop"), () => {
-				frm.trigger("show_parts_return_dialog");
-			}, __("Parts Control"));
-		}
-
-		// 6. Workshop Completion & QC actions
-		if (["Approved", "Waiting for Parts", "Ready for Work", "In Progress", "QC"].includes(frm.doc.status)) {
-			frm.add_custom_button(__("Complete & Create Invoice"), () => {
-				frappe.confirm(
-					__("Complete all workshop jobs and generate the Sales Invoice directly?"),
-					() => {
-						frappe.call({
-							method: "vehicle_service.vehicle_service.doctype.service_order.service_order.complete_and_create_invoice",
-							args: { order_name: frm.doc.name },
-							freeze: true,
-							freeze_message: __("Completing Workshop & Generating Sales Invoice..."),
-							callback: (r) => {
-								if (!r.exc && r.message && r.message.sales_invoice) {
-									frappe.show_alert({ message: __("Sales Invoice {0} created", [r.message.sales_invoice]), indicator: "green" });
-									frappe.set_route("Form", "Sales Invoice", r.message.sales_invoice);
-								} else {
-									frm.reload_doc();
-								}
-							}
-						});
-					}
+		// 6. Complete jobs: pick which jobs to complete. The order moves to Ready for Billing
+		// automatically once every active job is completed.
+		const canCompleteWorkshop = !isCompleted &&
+			!["Draft", "Cancelled"].includes(frm.doc.status);
+		if (canCompleteWorkshop) {
+			frm.add_custom_button(__("Complete Job"), () => {
+				const UI = frappe.vehicle_service && frappe.vehicle_service.JobControlBoardUI;
+				if (!UI) return;
+				const proto = UI.prototype;
+				proto.show_job_action_dialog.call(
+					{
+						job_action_config: proto.job_action_config,
+						get_status_indicator_class: proto.get_status_indicator_class,
+						get_selected_orders: () => [frm.doc.name],
+						refresh: () => frm.reload_doc(),
+					},
+					frm.doc.name,
+					"complete"
 				);
-			}).addClass("btn-primary");
-
-			frm.add_custom_button(__("Complete Workshop (Ready for Billing)"), () => {
-				frappe.call({
-					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.complete_and_ready_for_billing",
-					args: { order_name: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Marking Workshop Completed..."),
-					callback: (r) => {
-						if (!r.exc) {
-							frappe.show_alert({ message: __("Service Order marked Ready for Billing"), indicator: "green" });
-							frm.reload_doc();
-						}
-					}
-				});
 			}, __("Actions"));
 		}
 
@@ -282,17 +268,25 @@ frappe.ui.form.on("Service Order", {
 			}, __("Actions"));
 		}
 
-		// 7. Create Sales Invoice (if Ready for Billing)
-		if (frm.doc.status === "Ready for Billing") {
-			frm.add_custom_button(__("Create Sales Invoice"), () => {
+		// 7. Create / Update Sales Invoice
+		const canInvoiceStatuses = ["Approved", "Waiting for Parts", "Ready for Work", "In Progress", "QC", "Ready for Billing"];
+		if (!frm.doc.sales_invoice && canInvoiceStatuses.includes(frm.doc.status)) {
+			const label = frm.doc.status === "Ready for Billing" ? __("Create Sales Invoice") : __("Create Draft Invoice");
+			const $invBtn = frm.add_custom_button(label, () => {
 				frappe.call({
 					method: "vehicle_service.vehicle_service.doctype.service_order.service_order.create_sales_invoice_from_order",
 					args: { order_name: frm.doc.name },
+					btn: $invBtn, // disables the button while in flight
 					freeze: true,
 					freeze_message: __("Generating Sales Invoice..."),
 					callback: (r) => {
 						if (!r.exc && r.message && r.message.sales_invoice) {
-							frappe.set_route("Form", "Sales Invoice", r.message.sales_invoice);
+							frappe.show_alert({
+								message: __("Sales Invoice {0} created", [r.message.sales_invoice]),
+								indicator: "green"
+							});
+							frm.reload_doc();
+							frappe.set_route("selling", "Form", "Sales Invoice", r.message.sales_invoice);
 						}
 					}
 				});
@@ -300,8 +294,32 @@ frappe.ui.form.on("Service Order", {
 		}
 
 		if (frm.doc.sales_invoice) {
+			frappe.db.get_value("Sales Invoice", frm.doc.sales_invoice, ["docstatus"]).then(r => {
+				const isDraft = r && r.message && r.message.docstatus === 0;
+				if (isDraft) {
+					const $updBtn = frm.add_custom_button(__("Update Sales Invoice"), () => {
+						frappe.call({
+							method: "vehicle_service.vehicle_service.doctype.service_order.service_order.create_sales_invoice_from_order",
+							args: { order_name: frm.doc.name },
+							btn: $updBtn,
+							freeze: true,
+							freeze_message: __("Syncing to Sales Invoice..."),
+							callback: (res) => {
+								if (!res.exc) {
+									frappe.show_alert({
+										message: __("Sales Invoice {0} updated with latest jobs and parts", [frm.doc.sales_invoice]),
+										indicator: "green"
+									});
+									frappe.set_route("selling", "Form", "Sales Invoice", frm.doc.sales_invoice);
+								}
+							}
+						});
+					}).addClass("btn-primary");
+				}
+			});
+
 			frm.add_custom_button(__("View Sales Invoice"), () => {
-				frappe.set_route("Form", "Sales Invoice", frm.doc.sales_invoice);
+				frappe.set_route("selling", "Form", "Sales Invoice", frm.doc.sales_invoice);
 			});
 		}
 
@@ -534,6 +552,9 @@ frappe.ui.form.on("Service Order", {
 		if (frm.fields_dict.parts && frm.fields_dict.parts.grid) {
 			const grid = frm.fields_dict.parts.grid;
 			// Top toolbar buttons for immediate visibility
+			grid.add_custom_button(__("Add Part"), () => {
+				frm.trigger("show_add_part_dialog");
+			}, "top");
 			grid.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
 			}, "top");
@@ -545,6 +566,9 @@ frappe.ui.form.on("Service Order", {
 			}, "top");
 
 			// Bottom toolbar buttons
+			grid.add_custom_button(__("Add Part"), () => {
+				frm.trigger("show_add_part_dialog");
+			});
 			grid.add_custom_button(__("Issue Selected Parts"), () => {
 				frm.trigger("show_parts_issue_dialog");
 			});
@@ -560,7 +584,12 @@ frappe.ui.form.on("Service Order", {
 				Object.keys(grid.custom_buttons).forEach(label => {
 					const $btn = grid.custom_buttons[label];
 					if ($btn && $btn.length) {
-						if (label.indexOf("Issue") !== -1) {
+						if (label.indexOf("Add Part") !== -1) {
+							$btn.off("click").on("click", (e) => {
+								e.preventDefault();
+								frm.trigger("show_add_part_dialog");
+							});
+						} else if (label.indexOf("Issue") !== -1) {
 							$btn.off("click").on("click", (e) => {
 								e.preventDefault();
 								frm.trigger("show_parts_issue_dialog");
@@ -1149,6 +1178,17 @@ frappe.ui.form.on("Service Order", {
 					}
 				};
 			});
+
+			// Add Job lives in the Jobs tab (moved from the old Job Control menu)
+			const roles = frappe.user_roles || [];
+			const canAddJob = roles.includes("Job Controller") || roles.includes("System Manager");
+			const orderClosed = ["Cancelled", "Ready for Billing", "Invoiced", "Ready for Collection", "Delivered"].includes(frm.doc.status)
+				|| frm.doc.board_status === "Completed";
+			if (canAddJob && !orderClosed && !frm.is_new()) {
+				grid.add_custom_button(__("Add Job"), () => {
+					frm.trigger("show_add_job_dialog");
+				}, "top");
+			}
 
 			// Add custom action buttons to the jobs grid
 			grid.add_custom_button(__("Assign Technician"), () => {

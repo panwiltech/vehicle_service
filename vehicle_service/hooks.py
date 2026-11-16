@@ -24,8 +24,8 @@ after_install = "vehicle_service.install.after_install"
 after_migrate = "vehicle_service.install.after_migrate"
 extend_bootinfo = "vehicle_service.boot.extend_bootinfo"
 
-app_include_js = "/assets/vehicle_service/js/job_board.js?v=20261015-7"
-app_include_css = "/assets/vehicle_service/css/job_board.css?v=20261015-7"
+app_include_js = "/assets/vehicle_service/js/job_board.js?v=20261024-5"
+app_include_css = "/assets/vehicle_service/css/job_board.css?v=20261024-5"
 
 # Document Events
 doc_events = {
@@ -45,6 +45,7 @@ doc_events = {
 	},
 	"Sales Invoice": {
 		"validate": "vehicle_service.billing_events.validate_sales_invoice",
+		"before_submit": "vehicle_service.billing_events.validate_sales_invoice",
 		"on_submit": "vehicle_service.billing_events.handle_sales_invoice_submit",
 		"on_cancel": "vehicle_service.billing_events.handle_sales_invoice_cancel",
 	},
@@ -71,6 +72,7 @@ doctype_js = {
 	"Service Job": "public/js/service_job.js",
 	"Service Vehicle": "public/js/service_vehicle.js",
 	"Service Booking": "public/js/service_booking.js",
+	"Sales Invoice": "public/js/sales_invoice.js",
 }
 
 export_python_type_annotations = True

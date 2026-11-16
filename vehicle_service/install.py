@@ -132,7 +132,82 @@ CUSTOM_FIELDS = {
 			"options": "Service Order",
 			"insert_after": "customer",
 			"read_only": 1,
-		}
+		},
+		{
+			"fieldname": "vs_section_vehicle",
+			"label": "Vehicle & Service Details",
+			"fieldtype": "Section Break",
+			"insert_after": "has_subcontracted",
+			"collapsible": 0,
+		},
+		{
+			"fieldname": "vs_license_plate",
+			"label": "Vehicle Registration",
+			"fieldtype": "Data",
+			"insert_after": "vs_section_vehicle",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_chassis_no",
+			"label": "Chassis Number / VIN",
+			"fieldtype": "Data",
+			"insert_after": "vs_license_plate",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_vehicle_model",
+			"label": "Vehicle Model",
+			"fieldtype": "Data",
+			"insert_after": "vs_chassis_no",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_col_break_vehicle",
+			"fieldtype": "Column Break",
+			"insert_after": "vs_vehicle_model",
+		},
+		{
+			"fieldname": "vs_mileage_in",
+			"label": "Mileage In (km)",
+			"fieldtype": "Int",
+			"insert_after": "vs_col_break_vehicle",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_mileage_out",
+			"label": "Mileage Out (km)",
+			"fieldtype": "Int",
+			"insert_after": "vs_mileage_in",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_driver_name",
+			"label": "Driver Name",
+			"fieldtype": "Data",
+			"insert_after": "vs_mileage_out",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_driver_phone",
+			"label": "Driver Phone",
+			"fieldtype": "Data",
+			"insert_after": "vs_driver_name",
+			"read_only": 1,
+		},
+		{
+			"fieldname": "vs_section_remarks",
+			"label": "Invoice Remarks",
+			"fieldtype": "Section Break",
+			"insert_after": "net_total",
+			"collapsible": 0,
+		},
+		{
+			"fieldname": "vs_invoice_remarks",
+			"label": "Invoice Remarks",
+			"fieldtype": "Small Text",
+			"insert_after": "vs_section_remarks",
+			"read_only": 0,
+		},
 	],
 	"Sales Invoice Item": [
 		{
@@ -263,29 +338,77 @@ def setup_job_controller_permissions():
 
 
 def setup_service_advisor_permissions():
-	"""Ensures Custom DocPerm records exist for Service Advisor on Sales Invoice and related masters."""
-	core_perms = [
-		("Sales Invoice", {"read": 1, "write": 1, "report": 1, "print": 1}),
-		("Account", {"read": 1}),
-		("Customer", {"read": 1}),
-		("Item", {"read": 1}),
-		("Price List", {"read": 1}),
-		("Warehouse", {"read": 1}),
-		("Company", {"read": 1}),
+	"""Ensures Custom DocPerm records exist for Service Advisor, Parts Controller, and Parts Manager on Quotation, Sales Invoice, and related masters."""
+	role_perms = [
+		(
+			"Service Advisor",
+			[
+				("Quotation", {"read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1, "amend": 1, "report": 1, "print": 1, "email": 1}),
+				("Sales Invoice", {"read": 1, "write": 1, "report": 1, "print": 1}),
+				("Account", {"read": 1}),
+				("Customer", {"read": 1}),
+				("Item", {"read": 1}),
+				("Price List", {"read": 1}),
+				("Warehouse", {"read": 1}),
+				("Company", {"read": 1}),
+				("Terms and Conditions", {"read": 1}),
+				("Address", {"read": 1}),
+				("Contact", {"read": 1}),
+			],
+		),
+		(
+			"Parts Controller",
+			[
+				("Quotation", {"read": 1, "write": 1, "report": 1, "print": 1}),
+				("Customer", {"read": 1}),
+				("Item", {"read": 1}),
+				("Price List", {"read": 1}),
+				("Warehouse", {"read": 1}),
+				("Company", {"read": 1}),
+			],
+		),
+		(
+			"Parts Manager",
+			[
+				("Quotation", {"read": 1, "write": 1, "submit": 1, "cancel": 1, "report": 1, "print": 1}),
+				("Customer", {"read": 1}),
+				("Item", {"read": 1}),
+				("Price List", {"read": 1}),
+				("Warehouse", {"read": 1}),
+				("Company", {"read": 1}),
+			],
+		),
 	]
-	for dt, perms in core_perms:
-		if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": "Service Advisor"}):
-			try:
-				cdp = frappe.new_doc("Custom DocPerm")
-				cdp.parent = dt
-				cdp.parenttype = "DocType"
-				cdp.parentfield = "permissions"
-				cdp.role = "Service Advisor"
-				for k, v in perms.items():
-					setattr(cdp, k, v)
-				cdp.insert(ignore_permissions=True)
-			except Exception:
-				pass
+
+	for role, doctype_perms in role_perms:
+		for dt, perms in doctype_perms:
+			if not frappe.db.exists("Custom DocPerm", {"parent": dt, "role": role}):
+				try:
+					cdp = frappe.new_doc("Custom DocPerm")
+					cdp.parent = dt
+					cdp.parenttype = "DocType"
+					cdp.parentfield = "permissions"
+					cdp.role = role
+					for k, v in perms.items():
+						setattr(cdp, k, v)
+					cdp.insert(ignore_permissions=True)
+				except Exception:
+					pass
+			else:
+				try:
+					cdp_name = frappe.db.get_value("Custom DocPerm", {"parent": dt, "role": role}, "name")
+					if cdp_name:
+						cdp = frappe.get_doc("Custom DocPerm", cdp_name)
+						updated = False
+						for k, v in perms.items():
+							if getattr(cdp, k, 0) != v:
+								setattr(cdp, k, v)
+								updated = True
+						if updated:
+							cdp.save(ignore_permissions=True)
+				except Exception:
+					pass
+
 	frappe.db.commit()
 
 

@@ -12,6 +12,7 @@
   "vehicle_description",
   "customer",
   "customer_name",
+  "customer_po_no",
   "driver_name",
   "driver_phone",
   "cb_vehicle",
@@ -121,6 +122,12 @@
    "in_list_view": 1,
    "label": "Customer Name",
    "read_only": 1
+  },
+  {
+   "fieldname": "customer_po_no",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Customer PO No"
   },
   {
    "fieldname": "driver_name",
@@ -591,7 +598,19 @@
    "report": 1,
    "role": "Parts Controller",
    "share": 0,
-   "write": 0
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Parts Manager",
+   "share": 0,
+   "write": 1
   },
   {
    "create": 0,

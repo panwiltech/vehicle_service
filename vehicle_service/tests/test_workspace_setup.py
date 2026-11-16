@@ -45,3 +45,44 @@ class TestWorkspaceSetup(FrappeTestCase):
 		self.assertTrue(ws.content and ws.content != "[]", "Job Control Board content cannot be empty")
 		self.assertTrue(len(ws.shortcuts) > 0, "Job Control Board must have shortcuts")
 		self.assertTrue(len(ws.links) > 0, "Job Control Board must have links")
+
+	def test_crm_dock_item(self):
+		"""CRM must be in the vehicle_service dock and visible."""
+		dock = frappe.get_doc("Dock", "vehicle_service")
+		crm_items = [it for it in dock.items if it.link_to == "CRM" or it.title == "CRM"]
+		self.assertTrue(len(crm_items) > 0, "CRM must be present in vehicle_service dock")
+		self.assertEqual(crm_items[0].hidden, 0, "CRM dock item must not be hidden")
+
+	def test_crm_desktop_icon(self):
+		"""CRM Desktop Icon must be top-level and not hidden."""
+		icon = frappe.get_doc("Desktop Icon", "CRM")
+		self.assertEqual(icon.hidden, 0, "CRM desktop icon must not be hidden")
+		self.assertIsNone(icon.parent_icon, "CRM desktop icon must be top-level (no parent_icon)")
+
+	def test_desk_sidebar_not_forced_in_css_and_js(self):
+		"""Desktop home screen (data-route="desktop") must not have sidebar forced visible."""
+		import os
+		app_path = frappe.get_app_path("vehicle_service")
+		css_path = os.path.join(app_path, "public", "css", "job_board.css")
+		js_path = os.path.join(app_path, "public", "js", "job_board.js")
+
+		with open(css_path) as f:
+			css_content = f.read()
+		with open(js_path) as f:
+			js_content = f.read()
+
+		# Ensure unqualified global .body-sidebar-container { display: flex !important } does not exist
+		self.assertNotIn("\n.body-sidebar-container {\n\tdisplay: flex !important;", css_content)
+		# Ensure desktop route is specifically handled to hide sidebar
+		self.assertIn('data-route="desktop"', css_content)
+		# Ensure JS checks for desktop route before opening sidebar
+		self.assertIn("isDesktopPage", js_content)
+
+	def test_crm_in_primary_desk_apps(self):
+		"""CRM must be in extend_bootinfo primary_desk_apps."""
+		from vehicle_service.boot import extend_bootinfo
+		bootinfo = frappe._dict()
+		extend_bootinfo(bootinfo)
+		app_titles = [app["app_title"] for app in bootinfo.app_data]
+		self.assertIn("CRM", app_titles)
+

@@ -141,11 +141,33 @@ class TestJobBoardMatching(FrappeTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			get_board_orders("In Progress")
 
+		# Service Advisor and Parts Controller can view board
+		if frappe.db.exists("User", "serviceadvisor.test@example.com"):
+			frappe.set_user("serviceadvisor.test@example.com")
+			tabs = get_board_tabs()
+			self.assertIsInstance(tabs, list)
+
+		if frappe.db.exists("User", "partscontroller.test@example.com"):
+			frappe.set_user("partscontroller.test@example.com")
+			tabs = get_board_tabs()
+			self.assertIsInstance(tabs, list)
+
 
 class TestJobBoardPage(FrappeTestCase):
 	def test_page_exists_with_roles(self):
 		page = frappe.get_doc("Page", "job-board")
-		self.assertEqual(sorted(r.role for r in page.roles), ["Job Controller", "System Manager"])
+		expected_roles = {
+			"Job Controller",
+			"Service Advisor",
+			"Parts Controller",
+			"Parts Manager",
+			"Workshop Supervisor",
+			"Service Manager",
+			"System Manager",
+		}
+		page_roles = {r.role for r in page.roles}
+		for r in expected_roles:
+			self.assertIn(r, page_roles)
 
 	def test_publish_board_update_emits(self):
 		from unittest.mock import patch

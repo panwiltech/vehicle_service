@@ -149,10 +149,12 @@ def compute_operational_status(jobs: Iterable[Any], parts: Iterable[Any]) -> str
 
 	Priority order:
 	1. every approved job done (and nothing awaiting approval) -> Ready for Billing (QC removed)
-	2. any job being worked, paused, or returned from QC -> In Progress
-	3. an approved part is waiting for stock -> Waiting for Parts
-	4. any approved job has a technician -> Ready for Work
-	5. otherwise -> Approved
+	2. if all remaining jobs are pending approval -> Awaiting Approval
+	3. any active job being actively worked or returned from QC -> In Progress
+	4. an approved part is waiting for stock or job paused for parts -> Waiting for Parts
+	5. all remaining uncompleted jobs are paused -> Paused
+	6. any approved job has a technician -> Ready for Work
+	7. otherwise -> Approved
 	"""
 	jobs = list(jobs)
 	parts = list(parts)
@@ -160,16 +162,63 @@ def compute_operational_status(jobs: Iterable[Any], parts: Iterable[Any]) -> str
 	pending = any(_get(j, "status") == JOB_PENDING for j in jobs)
 
 	if active and all(_get(j, "status") in JOB_DONE for j in active):
-		return IN_PROGRESS if pending else READY_FOR_BILLING
-	if any(_get(j, "status") in JOB_WORKING | {JOB_QC_FAILED} for j in active):
+		return AWAITING_APPROVAL if pending else READY_FOR_BILLING
+
+	if not active and pending:
+		return AWAITING_APPROVAL
+
+	if any(_get(j, "status") in {JOB_IN_PROGRESS, JOB_QC_FAILED} for j in active):
 		return IN_PROGRESS
-	if any(
+
+	parts_waiting = any(
 		_get(p, "approval_status") == "Approved" and _get(p, "part_status") == PART_WAITING for p in parts
-	):
+	)
+	job_paused_for_parts = any(
+		_get(j, "status") == JOB_PAUSED and "part" in str(_get(j, "pause_reason") or "").lower() for j in active
+	)
+	if parts_waiting or job_paused_for_parts:
 		return WAITING_FOR_PARTS
+
+	uncompleted_active = [j for j in active if _get(j, "status") not in JOB_DONE]
+	if uncompleted_active and all(_get(j, "status") == JOB_PAUSED for j in uncompleted_active):
+		if any("approv" in str(_get(j, "pause_reason") or "").lower() for j in uncompleted_active):
+			return AWAITING_APPROVAL
+		return PAUSED
+
 	if any(_get(j, "status") == JOB_ASSIGNED for j in active):
 		return READY_FOR_WORK
+
 	return APPROVED
+
+
+JOB_STARTABLE_ACTION = frozenset({JOB_APPROVED, JOB_ASSIGNED, JOB_PAUSED, JOB_QC_FAILED})
+JOB_COMPLETABLE = frozenset({JOB_APPROVED, JOB_ASSIGNED, JOB_IN_PROGRESS, JOB_PAUSED, JOB_QC_FAILED})
+JOB_ACTION_STATUSES = {
+	"start": JOB_STARTABLE_ACTION,
+	"pause": frozenset({JOB_IN_PROGRESS}),
+	"complete": JOB_COMPLETABLE,
+}
+
+
+def job_action_block_reason(action: str, job: Any, order_status: str | None, on_hold: bool = False) -> str | None:
+	"""Why `job` cannot take `action` ("start" | "pause" | "complete"); None when it can.
+
+	Shared by the Job Control Board dialogs and the batch endpoints so both agree.
+	"""
+	statuses = JOB_ACTION_STATUSES.get(action)
+	if statuses is None:
+		return "Unknown action"
+	if order_status in COMPLETED_STATES or order_status == CANCELLED:
+		return "Order is locked"
+	status = _get(job, "status")
+	if status not in statuses:
+		return f"Job is {status}"
+	if action == "start":
+		if not _get(job, "technician"):
+			return "No technician assigned"
+		if on_hold:
+			return "Order is on hold"
+	return None
 
 
 def compute_part_status(row: Any) -> str:
