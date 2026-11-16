@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_import": 1,
+ "allow_rename": 1,
  "autoname": "field:registration_no",
  "creation": "2026-10-03 10:00:00",
  "doctype": "DocType",
@@ -9,6 +10,7 @@
   "tab_overview",
   "sb_identity",
   "registration_no",
+  "previous_registration_nos",
   "vin",
   "make",
   "model",
@@ -67,6 +69,13 @@
    "label": "Registration No",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "previous_registration_nos",
+   "fieldtype": "Small Text",
+   "in_global_search": 1,
+   "label": "Previous Registration Numbers",
+   "read_only": 1
   },
   {
    "fieldname": "vin",
@@ -280,7 +289,7 @@
  ],
  "image_field": "image",
  "links": [],
- "modified": "2026-10-03 13:42:03.801243",
+ "modified": "2026-11-16 14:35:00.000000",
  "modified_by": "Administrator",
  "module": "Vehicle Service",
  "name": "Service Vehicle",
