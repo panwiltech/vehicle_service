@@ -128,11 +128,19 @@ class TestWorkshopReports(FrappeTestCase):
 		self.assertEqual(row.get("variance_hours"), -0.5)
 
 	def test_technician_performance_report(self):
+		# Update employee name while keeping old name on service job
+		self.emp.reload()
+		self.emp.first_name = "UpdatedReport"
+		self.emp.last_name = "Technician"
+		self.emp.save(ignore_permissions=True)
+		self.emp.reload()
+
 		columns, data, message, chart, summary = execute_technician_performance(filters={})
 		self.assertGreater(len(columns), 0)
 		self.assertGreater(len(data), 0)
 		row = next((r for r in data if r.get("technician") == self.emp.name), None)
 		self.assertIsNotNone(row)
+		self.assertEqual(row.get("technician_name"), self.emp.employee_name)
 		self.assertEqual(row.get("jobs_completed"), 1)
 		self.assertEqual(row.get("total_actual_hours"), 3.5)
 
@@ -287,7 +295,9 @@ class TestWorkshopReports(FrappeTestCase):
 		self.assertIsNotNone(summary)
 
 	def test_doc_report_script_report(self):
-		from vehicle_service.vehicle_service.report.doc_report.doc_report import execute as execute_doc_report
+		from vehicle_service.vehicle_service.report.daily_operating_control.daily_operating_control import (
+			execute as execute_doc_report,
+		)
 
 		# 1. Daily Operating Trend
 		cols_t, data_t, msg_t, chart_t, summary_t = execute_doc_report(
@@ -304,6 +314,12 @@ class TestWorkshopReports(FrappeTestCase):
 		self.assertGreater(len(cols_e), 0)
 		self.assertIsInstance(data_e, list)
 		self.assertIsNotNone(summary_e)
+
+		# 3. Standard Frappe Report resolution by report name
+		res = frappe.get_doc("Report", "Daily Operating Control").execute_script_report(
+			filters={"from_date": "2026-10-01", "to_date": "2026-10-31", "view_mode": "Executive Summary"}
+		)
+		self.assertIsNotNone(res)
 
 
 

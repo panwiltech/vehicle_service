@@ -130,7 +130,7 @@ The **Reports Dashboard** (`reports-dashboard`) is the central executive cockpit
 | **WIP Valuation** | `report/wip_valuation` | `Service Order` | System Manager, Service Manager, Workshop Supervisor, Service Advisor, Accounts Manager |
 | **Parts Sales** | `report/parts_sales` | `Sales Invoice` | System Manager, Service Manager, Workshop Supervisor, Service Advisor, Accounts Manager |
 | **Technician Labour Units** | `report/technician_labour_units` | `Service Job` | System Manager, Service Manager, Workshop Supervisor, Accounts Manager |
-| **Daily Operating Control** | `report/doc_report` | `Service Order` | System Manager, Service Manager, Workshop Supervisor, Accounts Manager |
+| **Daily Operating Control** | `report/daily_operating_control` | `Service Order` | System Manager, Service Manager, Workshop Supervisor, Accounts Manager |
 
 ---
 
