@@ -289,7 +289,7 @@
  ],
  "image_field": "image",
  "links": [],
- "modified": "2026-11-16 14:35:00.000000",
+ "modified": "2026-11-16 15:08:00.000000",
  "modified_by": "Administrator",
  "module": "Vehicle Service",
  "name": "Service Vehicle",
@@ -364,6 +364,50 @@
    "read": 1,
    "report": 1,
    "role": "Service Accounts"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Job Controller"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Parts Manager"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
   }
  ],
  "quick_entry": 1,

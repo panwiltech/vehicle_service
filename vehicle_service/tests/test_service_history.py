@@ -159,3 +159,207 @@ class TestServiceHistorySchema(FrappeTestCase):
 		so2.save(ignore_permissions=True)
 		sj_direct.reload()
 		self.assertEqual(sj_direct.follows_up_job, rec_job_a["job"])
+
+
+class TestServiceHistorySearch(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+		if not frappe.db.exists("Customer", "Search Test Customer"):
+			c = frappe.new_doc("Customer")
+			c.customer_name = "Search Test Customer"
+			c.customer_type = "Individual"
+			c.insert(ignore_permissions=True)
+		if not frappe.db.exists("Customer", "Other Search Customer"):
+			c = frappe.new_doc("Customer")
+			c.customer_name = "Other Search Customer"
+			c.customer_type = "Individual"
+			c.insert(ignore_permissions=True)
+		if not frappe.db.exists("Item", "LABOUR"):
+			it = frappe.new_doc("Item")
+			it.item_code = "LABOUR"
+			it.item_name = "Workshop Labour"
+			it.item_group = "Services"
+			it.is_stock_item = 0
+			it.insert(ignore_permissions=True)
+		self._ensure_vehicle("ABC 1234", "VIN1234567890ABCD", prev="XYZ 9001")
+		self._ensure_vehicle("DEF 5678", "VIN1234567890ABCD")
+		self._ensure_vehicle("KLM 4455", "VIN9999999999KLM0")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def _ensure_vehicle(
+		self,
+		reg_no: str,
+		vin: str,
+		prev: str | None = None,
+		customer: str = "Search Test Customer",
+	):
+		if frappe.db.exists("Service Vehicle", reg_no):
+			v = frappe.get_doc("Service Vehicle", reg_no)
+		else:
+			v = frappe.new_doc("Service Vehicle")
+			v.registration_no = reg_no
+			v.vin = vin
+			v.make = "Ford"
+			v.model = "Ranger"
+			v.year = 2021
+			v.customer = customer
+			v.insert(ignore_permissions=True)
+		if prev is not None and v.previous_registration_nos != prev:
+			frappe.db.set_value("Service Vehicle", v.name, "previous_registration_nos", prev)
+		return v
+
+	def _ensure_test_user(self, email: str, roles: list[str]):
+		if frappe.db.exists("User", email):
+			user = frappe.get_doc("User", email)
+		else:
+			user = frappe.new_doc("User")
+			user.email = email
+			user.first_name = email.split("@")[0]
+			user.last_name = "Tester"
+			user.enabled = 1
+			user.user_type = "System User"
+		user.roles = []
+		for role in roles:
+			user.append("roles", {"role": role})
+		user.save(ignore_permissions=True)
+		return user.name
+
+	def test_search_vehicles_by_reg_vin_and_previous_plate(self):
+		from vehicle_service.service_history import search_vehicles
+
+		by_norm_reg = search_vehicles("  abc-1234 ")
+		self.assertTrue(by_norm_reg)
+		self.assertEqual(by_norm_reg[0]["name"], "ABC 1234")
+		self.assertEqual(by_norm_reg[0]["match_source"], "Registration")
+
+		by_prev_plate = search_vehicles("xyz9001")
+		self.assertTrue(any(r["name"] == "ABC 1234" and r["match_source"] == "Previous Registration" for r in by_prev_plate))
+
+		by_vin = search_vehicles("VIN1234567890ABCD")
+		returned_names = {r["name"] for r in by_vin}
+		self.assertEqual(returned_names, {"ABC 1234", "DEF 5678"})
+
+	def test_search_vehicles_escapes_sql_wildcards_and_handles_no_match(self):
+		from vehicle_service.service_history import search_vehicles
+
+		self.assertEqual(search_vehicles("   "), [])
+		self.assertEqual(search_vehicles("%_%"), [])
+		self.assertEqual(search_vehicles("NONEXISTENT-PLATE-999"), [])
+
+	def test_resolve_vehicle_cluster_merges_same_vin_records(self):
+		from vehicle_service.service_history import resolve_vehicle_cluster
+
+		primary, cluster_ids = resolve_vehicle_cluster("ABC 1234")
+		self.assertEqual(primary.name, "ABC 1234")
+		self.assertEqual(set(cluster_ids), {"ABC 1234", "DEF 5678"})
+
+	def test_search_vehicles_historical_intake_invoice_ranking_and_limit(self):
+		from vehicle_service.job_control import complete_service_order
+		from vehicle_service.service_history import normalize_lookup_token, search_vehicles
+		from vehicle_service.vehicle_service.doctype.service_order.service_order import (
+			create_sales_invoice_from_order,
+		)
+
+		self.assertEqual(normalize_lookup_token("  abc-1234  "), ("ABC-1234", "ABC1234"))
+		self.assertEqual(normalize_lookup_token(None), ("", ""))
+
+		# Historical Vehicle Intake snapshot (preserve snapshot fields against fetch_from)
+		intake = frappe.new_doc("Vehicle Intake")
+		intake.vehicle = "KLM 4455"
+		intake.customer = "Search Test Customer"
+		intake.insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Vehicle Intake",
+			intake.name,
+			{"license_plate": "OLD-INT 77", "vin": "HIST-VIN-INT-77"},
+			update_modified=False,
+		)
+
+		by_intake = search_vehicles("oldint77")
+		self.assertTrue(any(r["name"] == "KLM 4455" and r["match_source"] == "Historical Record" for r in by_intake))
+
+		# Historical submitted Sales Invoice snapshot vs draft Sales Invoice (draft excluded)
+		so = frappe.new_doc("Service Order")
+		so.vehicle = "KLM 4455"
+		so.customer = "Search Test Customer"
+		so.insert(ignore_permissions=True)
+		add_job(so.name, job_title="History Snapshot Check", estimated_hours=1.0)
+		complete_service_order(so.name)
+		inv_res = create_sales_invoice_from_order(so.name)
+		inv = frappe.get_doc("Sales Invoice", inv_res["sales_invoice"])
+		inv.vs_license_plate = "OLD-INV-88"
+		inv.vs_chassis_no = "HIST-VIN-INV-88"
+		inv.save(ignore_permissions=True)
+
+		# Draft invoice must not appear as historical match
+		self.assertEqual(search_vehicles("oldinv88"), [])
+
+		inv.submit()
+		by_inv = search_vehicles("oldinv88")
+		self.assertTrue(any(r["name"] == "KLM 4455" and r["match_source"] == "Historical Record" for r in by_inv))
+		by_inv_vin = search_vehicles("HISTVININV88")
+		self.assertTrue(any(r["name"] == "KLM 4455" and r["match_source"] == "Historical Record" for r in by_inv_vin))
+
+		# Ranking: exact/prefix registration beats substring VIN; limit respected
+		self._ensure_vehicle("ABC 9999", "VIN-OTHER-ABC99")
+		ranked = search_vehicles("ABC")
+		self.assertIn(ranked[0]["name"], {"ABC 1234", "ABC 9999"})
+		self.assertEqual(ranked[0]["match_source"], "Registration")
+		# DEF 5678 only matches ABC inside VIN (substring, rank=3) so comes after prefix reg matches
+		names_order = [r["name"] for r in ranked]
+		self.assertGreater(names_order.index("DEF 5678"), names_order.index("ABC 1234"))
+		self.assertEqual(len(search_vehicles("ABC", limit=1)), 1)
+
+	def test_search_and_cluster_permissions_and_missing_vehicle(self):
+		from vehicle_service.service_history import resolve_vehicle_cluster, search_vehicles
+
+		# Missing vehicle raises DoesNotExistError
+		with self.assertRaises(frappe.DoesNotExistError):
+			resolve_vehicle_cluster("MISSING-VEH-999")
+
+		# Guest is rejected
+		frappe.set_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			search_vehicles("ABC")
+		with self.assertRaises(frappe.PermissionError):
+			resolve_vehicle_cluster("ABC 1234")
+
+		# Desk user without any HISTORY_VIEWER_ROLES is rejected
+		frappe.set_user("Administrator")
+		unauth_user = self._ensure_test_user("nohistory.test@example.com", ["Stock User"])
+		frappe.set_user(unauth_user)
+		with self.assertRaises(frappe.PermissionError):
+			search_vehicles("ABC")
+		with self.assertRaises(frappe.PermissionError):
+			resolve_vehicle_cluster("ABC 1234")
+
+		# Authorized viewers (Workshop Technician, Accounts Manager, System Manager) can search and resolve cluster
+		frappe.set_user("Administrator")
+		tech_user = self._ensure_test_user("histtech.test@example.com", ["Workshop Technician"])
+		accounts_user = self._ensure_test_user("histacct.test@example.com", ["Accounts Manager"])
+		sysmgr_user = self._ensure_test_user("histsys.test@example.com", ["System Manager"])
+		other_veh = f"OTH-{frappe.generate_hash(length=5).upper()}"
+		self._ensure_vehicle(other_veh, "VIN-OTHER-CUST-1", customer="Other Search Customer")
+
+		for permitted_user in (tech_user, accounts_user, sysmgr_user):
+			frappe.set_user(permitted_user)
+			self.assertTrue(any(r["name"] == "ABC 1234" for r in search_vehicles("ABC 1234")))
+			primary, cluster_ids = resolve_vehicle_cluster("ABC 1234")
+			self.assertEqual(primary.name, "ABC 1234")
+			self.assertEqual(set(cluster_ids), {"ABC 1234", "DEF 5678"})
+
+		# User Permission restricting Customer hides non-permitted vehicles
+		frappe.set_user("Administrator")
+		up = frappe.new_doc("User Permission")
+		up.user = tech_user
+		up.allow = "Customer"
+		up.for_value = "Other Search Customer"
+		up.insert(ignore_permissions=True)
+
+		frappe.set_user(tech_user)
+		self.assertEqual(search_vehicles("ABC 1234"), [])
+		self.assertTrue(any(r["name"] == other_veh for r in search_vehicles(other_veh)))
+		with self.assertRaises(frappe.PermissionError):
+			resolve_vehicle_cluster("ABC 1234")
