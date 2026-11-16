@@ -11,6 +11,7 @@
   "cb_company",
   "labour_item",
   "labour_rate",
+  "default_labour_cost_rate",
   "labour_billing_basis",
   "inspection_fee_item",
   "sb_locations",
@@ -26,7 +27,9 @@
   "default_service_interval_km",
   "default_service_interval_months",
   "satisfaction_followup_days",
-  "next_service_reminder_days"
+  "next_service_reminder_days",
+  "sb_branch_warehouses",
+  "branch_warehouses"
  ],
  "fields": [
   {
@@ -69,6 +72,13 @@
    "fieldname": "labour_rate",
    "fieldtype": "Currency",
    "label": "Default Labour Rate (per hour)"
+  },
+  {
+   "default": "40.0",
+   "description": "Internal hourly cost rate of technician labour used for WIP and cost accounting",
+   "fieldname": "default_labour_cost_rate",
+   "fieldtype": "Currency",
+   "label": "Default Labour Cost Rate (per hour)"
   },
   {
    "default": "Approved Hours",
@@ -159,6 +169,17 @@
    "fieldname": "next_service_reminder_days",
    "fieldtype": "Int",
    "label": "Next Service Reminder Lead (days)"
+  },
+  {
+   "fieldname": "sb_branch_warehouses",
+   "fieldtype": "Section Break",
+   "label": "Multi-Branch Warehouses"
+  },
+  {
+   "fieldname": "branch_warehouses",
+   "fieldtype": "Table",
+   "label": "Branch Warehouse Mappings",
+   "options": "Branch Warehouse Mapping"
   }
  ],
  "index_web_pages_for_search": 0,
