@@ -29,19 +29,73 @@ function _sync_history_url(vehicleName) {
 	} catch (e) {}
 }
 
+function _set_history_breadcrumbs(page, vehicleDoc, view) {
+	if (!page || typeof page.set_breadcrumbs !== "function") return;
+	const crumbs = [{ label: __("Vehicle Service"), href: "/desk/vehicle-service" }];
+	if (vehicleDoc && vehicleDoc.name) {
+		crumbs.push({
+			label: __("Vehicle Service History"),
+			onclick: () => {
+				if (view) view.search_and_resolve("");
+			},
+		});
+		crumbs.push({ label: vehicleDoc.registration_no || vehicleDoc.name });
+	} else {
+		crumbs.push({ label: __("Vehicle Service History") });
+	}
+	page.set_breadcrumbs(crumbs);
+}
+
+function _update_history_page_header(page, vehicleDoc, view) {
+	if (!page) return;
+	page.clear_inner_toolbar();
+
+	if (vehicleDoc && vehicleDoc.name) {
+		const statusLabel = vehicleDoc.vehicle_status || "Outside Workshop";
+		const indicatorColor = view ? view._status_color(statusLabel) : "gray";
+		page.set_indicator(__(statusLabel), indicatorColor);
+
+		page.add_inner_button(__("Print / Export PDF"), () => {
+			if (view) view.open_export_dialog();
+		});
+		page.add_inner_button(__("Open Vehicle"), () => {
+			frappe.set_route("Form", "Service Vehicle", vehicleDoc.name);
+		});
+		if (vehicleDoc.current_service_order) {
+			page.add_inner_button(__("View Open Service Order"), () => {
+				frappe.set_route("Form", "Service Order", vehicleDoc.current_service_order);
+			});
+		} else if (frappe.model && typeof frappe.model.can_create === "function" && frappe.model.can_create("Service Order")) {
+			page.add_inner_button(__("New Service Order"), () => {
+				frappe.new_doc("Service Order", {
+					vehicle: vehicleDoc.name,
+					customer: vehicleDoc.customer,
+					driver_name: vehicleDoc.driver_name,
+					driver_phone: vehicleDoc.driver_phone,
+				});
+			});
+		}
+	} else {
+		page.clear_indicator();
+	}
+
+	_set_history_breadcrumbs(page, vehicleDoc, view);
+}
+
 frappe.pages["vehicle-service-history"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: __("Vehicle Service History"),
 		single_column: true,
+		card_layout: true,
 	});
+	page.main.addClass("frappe-card");
 
 	page.set_primary_action(
 		__("Refresh"),
 		() => {
-			const view = wrapper._vsh_view;
-			if (view && view.vehicle) {
-				view.load_vehicle(view.vehicle);
+			if (wrapper.history_view) {
+				wrapper.history_view.refresh();
 			}
 		},
 		"refresh"
@@ -50,31 +104,46 @@ frappe.pages["vehicle-service-history"].on_page_load = function (wrapper) {
 	const { vehicle, q } = _consume_history_route_params();
 	wrapper._vsh_initial_handled = true;
 
-	wrapper._vsh_view = new vehicle_service.VehicleServiceHistoryView({
+	const view = new vehicle_service.VehicleServiceHistoryView({
 		parent: page.main,
+		page: page,
 		vehicle: vehicle || null,
 		show_search: true,
 		on_vehicle_selected: (vehicleDoc) => {
 			const name = vehicleDoc && vehicleDoc.name ? vehicleDoc.name : null;
 			_sync_history_url(name);
+			_update_history_page_header(page, vehicleDoc, view);
 		},
+	});
+	wrapper.history_view = view;
+	wrapper._vsh_view = view;
+
+	// pageview.js sets a single-item breadcrumb immediately after on_page_load;
+	// defer one microtask so the module trail persists cleanly.
+	Promise.resolve().then(() => {
+		const currentVehicle = view.data && view.data.vehicle ? view.data.vehicle : null;
+		_set_history_breadcrumbs(page, currentVehicle, view);
 	});
 
 	if (!vehicle && q) {
-		wrapper._vsh_view.search_and_resolve(q);
+		view.search_and_resolve(q);
 	}
 };
 
 frappe.pages["vehicle-service-history"].on_page_show = function (wrapper) {
-	if (!wrapper._vsh_view) return;
+	const view = wrapper.history_view || wrapper._vsh_view;
+	if (!view) return;
+	const currentVehicle = view.data && view.data.vehicle ? view.data.vehicle : null;
+	_set_history_breadcrumbs(wrapper.page, currentVehicle, view);
+
 	if (wrapper._vsh_initial_handled) {
 		wrapper._vsh_initial_handled = false;
 		return;
 	}
 	const { vehicle, q } = _consume_history_route_params();
 	if (vehicle) {
-		wrapper._vsh_view.load_vehicle(vehicle);
+		view.load_vehicle(vehicle);
 	} else if (q) {
-		wrapper._vsh_view.search_and_resolve(q);
+		view.search_and_resolve(q);
 	}
 };

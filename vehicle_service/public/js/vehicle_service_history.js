@@ -6,6 +6,7 @@ frappe.provide("vehicle_service");
 vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 	constructor(opts = {}) {
 		this.$parent = $(opts.parent);
+		this.page = opts.page || null;
 		this.vehicle = opts.vehicle || null;
 		this.show_search = opts.show_search !== undefined ? Boolean(opts.show_search) : true;
 		this.on_vehicle_selected = typeof opts.on_vehicle_selected === "function" ? opts.on_vehicle_selected : null;
@@ -22,8 +23,13 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		this.active_rec_tab = "outstanding";
 		this.editable_open_order = null;
 		this._current_recommendations = [];
+		this._controls = {};
+		this._syncing_filters = false;
+		this._event_ns = `.vsh_${frappe.utils.get_random(6)}`;
 
-		this._render_shell();
+		this._make_skeleton();
+		this._setup_filter_controls();
+		this._toggle_filter_controls(false);
 		this._bind_events();
 
 		if (this.vehicle) {
@@ -72,10 +78,12 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			.replace(/\s+/g, "-");
 	}
 
-	_doc_link(doctype, name, label = null, cls = "vsh-link") {
-		if (!name) return `<span class="vsh-muted">—</span>`;
-		const slug = this._doc_slug(doctype);
-		const href = `/app/${slug}/${encodeURIComponent(name)}`;
+	_doc_link(doctype, name, label = null, cls = "bold") {
+		if (!name) return `<span class="text-muted">—</span>`;
+		const href =
+			frappe.utils && typeof frappe.utils.get_form_link === "function"
+				? frappe.utils.get_form_link(doctype, name)
+				: `/desk/${this._doc_slug(doctype)}/${encodeURIComponent(name)}`;
 		return `<a href="${this._esc(href)}" class="${this._esc(cls)}" data-vsh-doc-link="1">${this._esc(label || name)}</a>`;
 	}
 
@@ -123,31 +131,77 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		return this._esc(String(val));
 	}
 
-	_status_tone(status) {
-		const s = String(status || "").toLowerCase();
+	_status_color(status) {
+		const s = String(status || "").trim().toLowerCase();
 		if (
-			["delivered", "completed", "passed", "paid", "pass", "ready for collection", "outside workshop"].includes(s)
+			[
+				"completed",
+				"delivered",
+				"paid",
+				"pass",
+				"passed",
+				"approved",
+				"issued",
+				"awaiting collection",
+				"ready for collection",
+				"awaiting release",
+			].includes(s)
 		) {
 			return "green";
 		}
-		if (["in progress", "approved", "ready for work", "checked in", "invoiced", "ready for billing", "in workshop"].includes(s)) {
+		if (
+			[
+				"in progress",
+				"in qc",
+				"qc",
+				"booked",
+				"assigned",
+				"partly issued",
+				"registration",
+				"vin",
+				"advisory logged",
+				"checked in",
+				"arrived",
+			].includes(s)
+		) {
 			return "blue";
 		}
-		if (["paused", "waiting for parts", "waiting", "awaiting approval", "pending approval", "partly paid", "due", "recommended"].includes(s)) {
-			return "amber";
+		if (
+			[
+				"in service",
+				"in workshop",
+				"waiting for parts",
+				"waiting",
+				"pending approval",
+				"awaiting approval",
+				"recommended",
+				"optional",
+				"deferred",
+				"paused",
+				"on hold",
+				"partly paid",
+				"due soon",
+				"due",
+				"previous registration",
+				"ready for billing",
+				"ready for work",
+			].includes(s)
+		) {
+			return "orange";
 		}
-		if (["qc", "quality control"].includes(s)) {
+		if (["invoiced", "credit note issued", "historical record", "additional", "quality control"].includes(s)) {
 			return "purple";
 		}
-		if (["cancelled", "declined", "fail", "qc failed", "overdue", "unpaid"].includes(s)) {
+		if (["overdue", "declined", "cancelled", "fail", "qc failed", "disputed", "unpaid"].includes(s)) {
 			return "red";
 		}
-		return "slate";
+		return "gray";
 	}
 
-	_pill(text, tone = null) {
-		const resolved = tone || this._status_tone(text);
-		return `<span class="vsh-pill vsh-pill--${this._esc(resolved)}">${this._esc(text || "—")}</span>`;
+	_pill(label, forcedColor = null) {
+		const text = label || "—";
+		const color = forcedColor || this._status_color(text);
+		return `<span class="indicator-pill ${this._esc(color)}">${this._esc(text)}</span>`;
 	}
 
 	_can_view_financials() {
@@ -186,65 +240,298 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		return payload;
 	}
 
-	_render_shell() {
-		this.$parent.empty();
+	refresh() {
+		if (this.vehicle) {
+			this.load_vehicle(this.vehicle);
+			return;
+		}
+		if (this.show_search) {
+			const query = this._get_search_query();
+			if (query) {
+				this.search_and_resolve(query);
+			}
+		}
+	}
 
-		const searchHtml = this.show_search
-			? `
-			<div class="vsh-search-card">
-				<div class="vsh-search-bar-row">
-					<div class="vsh-search-input-wrap">
-						<i class="fa fa-search vsh-search-icon" aria-hidden="true"></i>
-						<input
-							type="text"
-							class="form-control vsh-search-input"
-							placeholder="${this._esc(__("Enter Registration Number, Previous Plate, or VIN/Chassis No..."))}"
-							autocomplete="off"
-							aria-label="${this._esc(__("Search vehicle by registration number or VIN"))}"
-							aria-expanded="false"
-						/>
-						<button type="button" class="vsh-search-clear" title="${this._esc(__("Clear search"))}" style="display: none;">
-							<i class="fa fa-times" aria-hidden="true"></i>
-						</button>
-						<div class="vsh-autocomplete" role="listbox" style="display: none;"></div>
-					</div>
-					<button type="button" class="btn btn-primary vsh-search-btn">
-						<i class="fa fa-search mr-1" aria-hidden="true"></i>${this._esc(__("Lookup Vehicle"))}
-					</button>
+	_make_skeleton() {
+		// On a standard Frappe Desk page, page.page_form lives inside page.main,
+		// so only remove prior .vsh-root instead of wiping page.main.
+		if (this.page && this.page.page_form) {
+			this.$parent.find(".vsh-root").remove();
+			this.page.clear_fields();
+			this.page.show_form();
+			this.$filter_form = this.page.page_form;
+			this.$root = $(`<div class="vsh-root vsh-root--page"><div class="vsh-content"></div></div>`).appendTo(
+				this.$parent
+			);
+		} else {
+			this.$parent.empty();
+			this.$root = $(`
+				<div class="vsh-root vsh-root--embedded">
+					<div class="page-form row vsh-inline-page-form"></div>
+					<div class="vsh-content"></div>
 				</div>
-			</div>
-		`
-			: "";
-
-		this.$root = $(`
-			<div class="vsh-root ${this.show_search ? "vsh-root--page" : "vsh-root--embedded"}">
-				${searchHtml}
-				<div class="vsh-content"></div>
-			</div>
-		`).appendTo(this.$parent);
+			`).appendTo(this.$parent);
+			this.$filter_form = this.$root.find(".vsh-inline-page-form");
+		}
 
 		this.$content = this.$root.find(".vsh-content");
-		this.$search_input = this.$root.find(".vsh-search-input");
-		this.$search_clear = this.$root.find(".vsh-search-clear");
-		this.$autocomplete = this.$root.find(".vsh-autocomplete");
+	}
+
+	_add_filter_field(df) {
+		let ctrl;
+		if (this.page && typeof this.page.add_field === "function") {
+			ctrl = this.page.add_field(df);
+		} else {
+			if (!df.placeholder) {
+				df.placeholder = df.label;
+			}
+			df.input_class = "input-xs";
+			ctrl = frappe.ui.form.make_control({
+				df: df,
+				parent: this.$filter_form,
+				render_input: true,
+				only_input: df.fieldtype === "Check" ? false : true,
+			});
+			ctrl.refresh();
+			$(ctrl.wrapper)
+				.addClass("col-md-2")
+				.attr("title", __(df.label))
+				.tooltip({ delay: { show: 600, hide: 100 }, trigger: "hover" });
+			if (!ctrl.$input && df.fieldtype !== "HTML") {
+				ctrl.make_input();
+			}
+			if (ctrl.$input && df.fieldtype !== "Button") {
+				ctrl.$input.attr("placeholder", __(df.placeholder || df.label));
+			}
+			if (df.default && ctrl.set_input) {
+				ctrl.set_input(df.default);
+			}
+		}
+
+		if (df.fieldname) {
+			this._controls[df.fieldname] = ctrl;
+		}
+		return ctrl;
+	}
+
+	_setup_filter_controls() {
+		this._controls = {};
+		this.$search_input = null;
+		this.$autocomplete = null;
+
+		if (this.show_search) {
+			const searchCtrl = this._add_filter_field({
+				fieldname: "vehicle_query",
+				label: __("Vehicle (Reg No / VIN)"),
+				placeholder: __("Reg No, Prev Plate, or VIN..."),
+				fieldtype: "Data",
+			});
+			$(searchCtrl.wrapper).removeClass("col-md-2").addClass("col-md-3 vsh-search-control");
+			this.$search_input = searchCtrl.$input;
+			if (this.$search_input && this.$search_input.length) {
+				this.$search_input
+					.attr("autocomplete", "off")
+					.attr("aria-label", __("Search vehicle by registration number or VIN"))
+					.attr("aria-expanded", "false");
+				const $awesomplete = $('<div class="awesomplete"></div>');
+				this.$search_input.wrap($awesomplete);
+				this.$autocomplete = $('<ul role="listbox" class="vsh-autocomplete" hidden></ul>').insertAfter(
+					this.$search_input
+				);
+			}
+
+			const lookupCtrl = this._add_filter_field({
+				fieldname: "lookup_vehicle",
+				label: __("Lookup"),
+				fieldtype: "Button",
+				click: () => this.search_and_resolve(this._get_search_query()),
+			});
+			$(lookupCtrl.wrapper).removeClass("col-md-2").addClass("col-md-1");
+		}
+
+		this._add_filter_field({
+			fieldname: "from_date",
+			label: __("From Date"),
+			fieldtype: "Date",
+			change: () => this._on_filter_control_change("from_date"),
+		});
+		this._add_filter_field({
+			fieldname: "to_date",
+			label: __("To Date"),
+			fieldtype: "Date",
+			change: () => this._on_filter_control_change("to_date"),
+		});
+		this._add_filter_field({
+			fieldname: "status",
+			label: __("Service Status"),
+			fieldtype: "Select",
+			options: [{ label: __("Status: All (Excl. Cancelled)"), value: "" }],
+			change: () => this._on_filter_control_change("status"),
+		});
+		this._add_filter_field({
+			fieldname: "order_type",
+			label: __("Service Type"),
+			fieldtype: "Select",
+			options: [{ label: __("Service Type: All"), value: "" }],
+			change: () => this._on_filter_control_change("order_type"),
+		});
+		this._add_filter_field({
+			fieldname: "technician",
+			label: __("Technician"),
+			fieldtype: "Select",
+			options: [{ label: __("Technician: All"), value: "" }],
+			change: () => this._on_filter_control_change("technician"),
+		});
+		this._add_filter_field({
+			fieldname: "service_advisor",
+			label: __("Service Advisor"),
+			fieldtype: "Select",
+			options: [{ label: __("Advisor: All"), value: "" }],
+			change: () => this._on_filter_control_change("service_advisor"),
+		});
+		this._add_filter_field({
+			fieldname: "invoice_status",
+			label: __("Invoice Status"),
+			fieldtype: "Select",
+			options: [{ label: __("Invoice Status: All"), value: "" }],
+			change: () => this._on_filter_control_change("invoice_status"),
+		});
+		this._add_filter_field({
+			fieldname: "sort_order",
+			label: __("Sort Order"),
+			fieldtype: "Select",
+			options: [
+				{ label: __("Newest First"), value: "desc" },
+				{ label: __("Oldest First"), value: "asc" },
+			],
+			default: "desc",
+			change: () => this._on_filter_control_change("sort_order"),
+		});
+	}
+
+	_get_search_query() {
+		const ctrl = this._controls.vehicle_query;
+		if (ctrl && typeof ctrl.get_value === "function") {
+			return String(ctrl.get_value() || "").trim();
+		}
+		if (this.$search_input && this.$search_input.length) {
+			return String(this.$search_input.val() || "").trim();
+		}
+		return "";
+	}
+
+	_set_search_query(val) {
+		const text = val || "";
+		const ctrl = this._controls.vehicle_query;
+		if (ctrl && typeof ctrl.set_input === "function") {
+			ctrl.set_input(text);
+		} else if (this.$search_input && this.$search_input.length) {
+			this.$search_input.val(text);
+		}
+	}
+
+	_toggle_filter_controls(show) {
+		const filterKeys = [
+			"from_date",
+			"to_date",
+			"status",
+			"order_type",
+			"technician",
+			"service_advisor",
+			"invoice_status",
+			"sort_order",
+		];
+		filterKeys.forEach((key) => {
+			const ctrl = this._controls[key];
+			if (!ctrl || !ctrl.wrapper) return;
+			const visible = key === "invoice_status" ? Boolean(show && this._can_view_financials()) : Boolean(show);
+			$(ctrl.wrapper).toggle(visible);
+		});
+		if (!this.show_search && this.$filter_form) {
+			this.$filter_form.toggleClass("hide", !show);
+		}
+	}
+
+	_populate_filter_options() {
+		const opts = (this.data && this.data.filter_options) || {};
+		const selectConfig = [
+			{ key: "status", items: opts.statuses, allLabel: __("Status: All (Excl. Cancelled)") },
+			{ key: "order_type", items: opts.order_types, allLabel: __("Service Type: All") },
+			{ key: "technician", items: opts.technicians, allLabel: __("Technician: All") },
+			{ key: "service_advisor", items: opts.service_advisors, allLabel: __("Advisor: All") },
+			{ key: "invoice_status", items: opts.invoice_statuses, allLabel: __("Invoice Status: All") },
+		];
+
+		this._syncing_filters = true;
+		try {
+			selectConfig.forEach(({ key, items, allLabel }) => {
+				const ctrl = this._controls[key];
+				if (!ctrl) return;
+				const normalized = (items || []).map((opt) =>
+					typeof opt === "object"
+						? { value: opt.value || "", label: opt.label || opt.value || "" }
+						: { value: opt, label: opt }
+				);
+				ctrl.df.options = [{ label: allLabel, value: "" }, ...normalized];
+				if (typeof ctrl.set_options === "function") {
+					ctrl.set_options(this.filters[key] || "");
+				}
+				if (typeof ctrl.set_input === "function") {
+					ctrl.set_input(this.filters[key] || "");
+				}
+			});
+		} finally {
+			this._syncing_filters = false;
+		}
+		this._toggle_filter_controls(true);
+		this._sync_filter_inputs();
+	}
+
+	_on_filter_control_change(key) {
+		if (this._syncing_filters || !this.vehicle) return;
+		const ctrl = this._controls[key];
+		if (!ctrl) return;
+		const rawVal = typeof ctrl.get_value === "function" ? ctrl.get_value() : ctrl.$input ? ctrl.$input.val() : "";
+		const nextVal = key === "sort_order" ? rawVal || "desc" : rawVal || "";
+		if ((this.filters[key] || "") === nextVal) return;
+		this.filters[key] = nextVal;
+		this._reload_timeline_only();
+	}
+
+	_sync_filter_inputs() {
+		this._syncing_filters = true;
+		try {
+			Object.keys(this.filters).forEach((key) => {
+				const ctrl = this._controls[key];
+				if (!ctrl) return;
+				const val = key === "sort_order" ? this.filters[key] || "desc" : this.filters[key] || "";
+				if (typeof ctrl.set_input === "function") {
+					ctrl.set_input(val);
+				} else if (ctrl.$input) {
+					ctrl.$input.val(val);
+				}
+			});
+		} finally {
+			this._syncing_filters = false;
+		}
 	}
 
 	_bind_events() {
-		if (this.show_search) {
+		if (this.show_search && this.$search_input && this.$search_input.length) {
 			this.$search_input.on("input", () => {
-				const query = (this.$search_input.val() || "").trim();
-				this.$search_clear.toggle(Boolean(query));
+				const query = this._get_search_query();
 				clearTimeout(this.search_timer);
 				if (!query) {
 					this._hide_autocomplete();
 					return;
 				}
-				this.search_timer = setTimeout(() => this._fetch_autocomplete(query), 250);
+				this.search_timer = setTimeout(() => this._fetch_autocomplete(query), 220);
 			});
 
 			this.$search_input.on("keydown", (e) => {
 				if (e.key === "ArrowDown") {
-					if (this.search_results.length && this.$autocomplete.is(":visible")) {
+					if (this.search_results.length && this.$autocomplete && !this.$autocomplete.is("[hidden]")) {
 						e.preventDefault();
 						this.active_dropdown_index = Math.min(
 							this.active_dropdown_index + 1,
@@ -253,7 +540,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 						this._highlight_autocomplete_item();
 					}
 				} else if (e.key === "ArrowUp") {
-					if (this.search_results.length && this.$autocomplete.is(":visible")) {
+					if (this.search_results.length && this.$autocomplete && !this.$autocomplete.is("[hidden]")) {
 						e.preventDefault();
 						this.active_dropdown_index = Math.max(this.active_dropdown_index - 1, 0);
 						this._highlight_autocomplete_item();
@@ -263,25 +550,16 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 				} else if (e.key === "Enter") {
 					e.preventDefault();
 					if (
-						this.$autocomplete.is(":visible") &&
+						this.$autocomplete &&
+						!this.$autocomplete.is("[hidden]") &&
 						this.active_dropdown_index >= 0 &&
 						this.search_results[this.active_dropdown_index]
 					) {
 						this._select_search_candidate(this.search_results[this.active_dropdown_index]);
 					} else {
-						this.search_and_resolve(this.$search_input.val());
+						this.search_and_resolve(this._get_search_query());
 					}
 				}
-			});
-
-			this.$search_clear.on("click", () => {
-				this.$search_input.val("").focus();
-				this.$search_clear.hide();
-				this._hide_autocomplete();
-			});
-
-			this.$root.find(".vsh-search-btn").on("click", () => {
-				this.search_and_resolve(this.$search_input.val());
 			});
 
 			this.$autocomplete.on("click", ".vsh-autocomplete-item", (e) => {
@@ -292,23 +570,29 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 				}
 			});
 
-			this._outside_click_handler = (e) => {
-				if (!this.$root || !this.$root.length) return;
-				if (!$(e.target).closest(this.$root.find(".vsh-search-input-wrap")).length) {
-					this._hide_autocomplete();
-				}
-			};
-			$(document).on("click", this._outside_click_handler);
+			$(document)
+				.off(`click${this._event_ns}`)
+				.on(`click${this._event_ns}`, (e) => {
+					if (!this.$root || !document.contains(this.$root[0])) {
+						$(document).off(`click${this._event_ns}`);
+						return;
+					}
+					const searchCtrl = this._controls.vehicle_query;
+					if (searchCtrl && searchCtrl.wrapper && !$(e.target).closest(searchCtrl.wrapper).length) {
+						this._hide_autocomplete();
+					}
+				});
 		}
 
-		// Disambiguation card selection
-		this.$content.on("click", ".vsh-disambig-card", (e) => {
+		// Disambiguation table row selection
+		this.$content.on("click", ".vsh-disambig-row", (e) => {
+			if ($(e.target).closest("a[data-vsh-doc-link]").length) return;
 			const name = $(e.currentTarget).attr("data-vehicle");
 			if (name) {
 				this.load_vehicle(name);
 			}
 		});
-		this.$content.on("keydown", ".vsh-disambig-card", (e) => {
+		this.$content.on("keydown", ".vsh-disambig-row", (e) => {
 			if (e.key === "Enter" || e.key === " ") {
 				e.preventDefault();
 				const name = $(e.currentTarget).attr("data-vehicle");
@@ -318,29 +602,14 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			}
 		});
 
-		// Quick actions
-		this.$content.on("click", ".vsh-btn-open-vehicle", () => {
-			if (this.vehicle) frappe.set_route("Form", "Service Vehicle", this.vehicle);
-		});
-		this.$content.on("click", ".vsh-btn-view-open-order", () => {
-			const order = this.data && this.data.vehicle && this.data.vehicle.current_service_order;
-			if (order) frappe.set_route("Form", "Service Order", order);
-		});
-		this.$content.on("click", ".vsh-btn-new-order", () => {
-			const v = (this.data && this.data.vehicle) || {};
-			frappe.new_doc("Service Order", {
-				vehicle: v.name,
-				customer: v.customer,
-				driver_name: v.driver_name,
-				driver_phone: v.driver_phone,
-			});
-		});
+		// Export modal button (used in embedded Service Vehicle tab)
 		this.$content.on("click", ".vsh-btn-export", () => {
 			this.open_export_dialog();
 		});
 
 		// Recommendations tabs & follow-up modal
 		this.$content.on("click", ".vsh-rec-tab", (e) => {
+			e.preventDefault();
 			const tab = $(e.currentTarget).attr("data-tab");
 			if (tab) {
 				this.active_rec_tab = tab;
@@ -353,15 +622,6 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			if (rec) {
 				this._open_followup_dialog(rec);
 			}
-		});
-
-		// Filter bar changes
-		this.$content.on("change", ".vsh-filter-control", (e) => {
-			const $el = $(e.currentTarget);
-			const key = $el.attr("data-filter");
-			if (!key) return;
-			this.filters[key] = $el.val() || "";
-			this._reload_timeline_only();
 		});
 
 		this.$content.on("click", ".vsh-btn-reset-filters", () => {
@@ -415,36 +675,31 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		if (!key) return;
 		const $body = $card.find(".vsh-visit-body");
 		const $header = $card.find(".vsh-visit-header");
-		const $chevron = $card.find(".vsh-visit-chevron");
+		const $indicator = $card.find(".vsh-visit-header .collapse-indicator");
 		const isOpen = this.expanded_visits.has(key);
 
 		if (isOpen) {
 			this.expanded_visits.delete(key);
 			$body.slideUp(140);
-			$card.removeClass("is-expanded");
-			$header.attr("aria-expanded", "false");
-			$chevron.removeClass("fa-chevron-down").addClass("fa-chevron-right");
+			$header.addClass("collapsed").attr("aria-expanded", "false");
+			$indicator.html(frappe.utils.icon("chevron-right", "sm"));
 		} else {
 			this.expanded_visits.add(key);
 			$body.slideDown(140);
-			$card.addClass("is-expanded");
-			$header.attr("aria-expanded", "true");
-			$chevron.removeClass("fa-chevron-right").addClass("fa-chevron-down");
+			$header.removeClass("collapsed").attr("aria-expanded", "true");
+			$indicator.html(frappe.utils.icon("chevron-down", "sm"));
 		}
 
 		const timeline = (this.data && this.data.timeline) || [];
-		this.all_expanded = timeline.length > 0 && timeline.every((v) => this.expanded_visits.has(v.service_order || v.vehicle_intake));
+		this.all_expanded =
+			timeline.length > 0 && timeline.every((v) => this.expanded_visits.has(v.service_order || v.vehicle_intake));
 		this._update_toggle_all_button();
 	}
 
 	_update_toggle_all_button() {
 		const $btn = this.$content.find(".vsh-btn-toggle-all");
 		if (!$btn.length) return;
-		$btn.html(
-			this.all_expanded
-				? `<i class="fa fa-compress mr-1"></i>${this._esc(__("Collapse All"))}`
-				: `<i class="fa fa-expand mr-1"></i>${this._esc(__("Expand All"))}`
-		);
+		$btn.text(this.all_expanded ? __("Collapse All") : __("Expand All"));
 	}
 
 	_fetch_autocomplete(query) {
@@ -461,26 +716,17 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		});
 	}
 
-	_match_badge_html(source) {
-		if (!source) return "";
-		let tone = "slate";
-		if (source === "Previous Registration") tone = "amber";
-		else if (source === "Historical Record") tone = "purple";
-		else if (source === "VIN") tone = "blue";
-		else if (source === "Registration") tone = "green";
-		return `<span class="vsh-pill vsh-pill--${tone} vsh-match-badge">${this._esc(source)}</span>`;
-	}
-
 	_render_autocomplete(query) {
+		if (!this.$autocomplete) return;
 		if (!this.search_results.length) {
 			this.$autocomplete
 				.html(
-					`<div class="vsh-autocomplete-empty">${this._esc(
-						__("No matching vehicles found for \"{0}\"", [query])
-					)}</div>`
+					`<li class="vsh-autocomplete-empty" role="option" aria-disabled="true">
+						<p class="text-muted mb-0">${this._esc(__('No matching vehicles found for "{0}"', [query]))}</p>
+					</li>`
 				)
-				.show();
-			this.$search_input.attr("aria-expanded", "true");
+				.removeAttr("hidden");
+			this.$search_input && this.$search_input.attr("aria-expanded", "true");
 			return;
 		}
 
@@ -488,38 +734,37 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			.map((item, idx) => {
 				const modelDesc = [item.make, item.model, item.year ? `(${item.year})` : ""].filter(Boolean).join(" ");
 				const prevHtml = item.previous_registration_nos
-					? `<span class="vsh-muted text-xs ml-1">(${this._esc(__("Prev"))}: ${this._esc(item.previous_registration_nos)})</span>`
+					? `<span class="text-muted small ml-1">(${this._esc(__("Prev"))}: ${this._esc(item.previous_registration_nos)})</span>`
 					: "";
 				return `
-					<div class="vsh-autocomplete-item" role="option" data-index="${idx}">
-						<div class="vsh-ac-top">
-							<div>
-								<strong class="vsh-ac-plate">${this._esc(item.registration_no || item.name)}</strong>
+					<li class="vsh-autocomplete-item" role="option" data-index="${idx}" aria-selected="false">
+						<p class="d-flex justify-content-between align-items-center mb-1">
+							<span>
+								<strong>${this._esc(item.registration_no || item.name)}</strong>
 								${prevHtml}
-								${this._match_badge_html(item.match_source)}
-							</div>
-							<div>${this._pill(item.vehicle_status || "Outside Workshop")}</div>
-						</div>
-						<div class="vsh-ac-meta">
-							<span>${this._esc(modelDesc || "—")}</span>
-							<span>&middot; VIN: <code>${this._esc(item.vin || "—")}</code></span>
-							<span>&middot; ${this._esc(item.customer_name || item.customer || "—")}</span>
-						</div>
-					</div>
+								${item.match_source ? `<span class="text-muted small ml-1">[${this._esc(item.match_source)}]</span>` : ""}
+							</span>
+							${this._pill(item.vehicle_status || "Outside Workshop")}
+						</p>
+						<p class="text-muted small mb-0">
+							${this._esc(modelDesc || "—")} &middot; VIN: ${this._esc(item.vin || "—")} &middot; ${this._esc(item.customer_name || item.customer || "—")}
+						</p>
+					</li>
 				`;
 			})
 			.join("");
 
-		this.$autocomplete.html(itemsHtml).show();
-		this.$search_input.attr("aria-expanded", "true");
+		this.$autocomplete.html(itemsHtml).removeAttr("hidden");
+		this.$search_input && this.$search_input.attr("aria-expanded", "true");
 	}
 
 	_highlight_autocomplete_item() {
+		if (!this.$autocomplete) return;
 		const $items = this.$autocomplete.find(".vsh-autocomplete-item");
-		$items.removeClass("is-active");
+		$items.attr("aria-selected", "false");
 		if (this.active_dropdown_index >= 0) {
 			const $active = $items.eq(this.active_dropdown_index);
-			$active.addClass("is-active");
+			$active.attr("aria-selected", "true");
 			if ($active[0] && $active[0].scrollIntoView) {
 				$active[0].scrollIntoView({ block: "nearest" });
 			}
@@ -528,7 +773,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 
 	_hide_autocomplete() {
 		if (this.$autocomplete) {
-			this.$autocomplete.hide().empty();
+			this.$autocomplete.attr("hidden", true).empty();
 		}
 		if (this.$search_input) {
 			this.$search_input.attr("aria-expanded", "false");
@@ -538,10 +783,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 
 	_select_search_candidate(item) {
 		this._hide_autocomplete();
-		if (this.$search_input && this.$search_input.length) {
-			this.$search_input.val(item.registration_no || item.name);
-			this.$search_clear.show();
-		}
+		this._set_search_query(item.registration_no || item.name);
 		this.load_vehicle(item.name);
 	}
 
@@ -549,6 +791,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		this.vehicle = null;
 		this.data = null;
 		this.editable_open_order = null;
+		this._toggle_filter_controls(false);
 		if (this.on_vehicle_selected) {
 			this.on_vehicle_selected(null);
 		}
@@ -558,18 +801,16 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		const query = String(rawQuery || "").trim();
 		clearTimeout(this.search_timer);
 		this._hide_autocomplete();
-
-		if (this.$search_input && this.$search_input.length) {
-			this.$search_input.val(query);
-			this.$search_clear.toggle(Boolean(query));
-		}
+		this._set_search_query(query);
 
 		if (!query) {
+			this._clear_selected_vehicle();
 			this._render_initial_empty();
 			return;
 		}
 
 		const seq = ++this._search_seq;
+		this._toggle_filter_controls(false);
 		this.$content.html(this._loading_html(__("Searching vehicles...")));
 
 		frappe.call({
@@ -591,96 +832,112 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			},
 			error: () => {
 				if (seq !== this._search_seq) return;
+				this._clear_selected_vehicle();
 				this._render_error_state(__("Unable to search vehicles right now. Please check your permissions and try again."));
 			},
 		});
 	}
 
-	_loading_html(label) {
+	_state_box_html(title, subtitle = "") {
 		return `
-			<div class="vsh-state-box">
-				<div class="vsh-spinner" aria-hidden="true"></div>
-				<div class="vsh-state-title">${this._esc(label || __("Loading service history..."))}</div>
+			<div class="no-result text-muted flex justify-center align-center vsh-empty-box">
+				<div class="msg-box">
+					<p class="bold mb-1">${this._esc(title)}</p>
+					${subtitle ? `<p class="text-muted mb-0">${this._esc(subtitle)}</p>` : ""}
+				</div>
 			</div>
 		`;
 	}
 
+	_loading_html(label) {
+		return this._state_box_html(label || __("Loading service history..."));
+	}
+
 	_render_initial_empty() {
-		this.$content.html(`
-			<div class="vsh-state-box">
-				<div class="vsh-state-icon"><i class="fa fa-car" aria-hidden="true"></i></div>
-				<div class="vsh-state-title">${this._esc(__("Lookup Vehicle Service History"))}</div>
-				<div class="vsh-state-sub">${this._esc(__("Enter a vehicle Registration Number (Number Plate), Previous Plate, or VIN/Chassis Number above to inspect its full maintenance, inspection, recommendation, and billing history."))}</div>
-			</div>
-		`);
+		this.$content.html(
+			this._state_box_html(
+				__("Lookup Vehicle Service History"),
+				__(
+					"Enter a vehicle Registration Number, Previous Plate, or VIN/Chassis Number above to inspect its full service, inspection, recommendation, and billing history."
+				)
+			)
+		);
 	}
 
 	_render_no_match(query) {
-		this.$content.html(`
-			<div class="vsh-state-box vsh-state-box--warning">
-				<div class="vsh-state-icon"><i class="fa fa-search" aria-hidden="true"></i></div>
-				<div class="vsh-state-title">${this._esc(__("No vehicle matched \"{0}\"", [query]))}</div>
-				<div class="vsh-state-sub">${this._esc(__("Check the spelling or try searching by full VIN/Chassis Number or an earlier registration plate."))}</div>
-			</div>
-		`);
+		this.$content.html(
+			this._state_box_html(
+				__('No vehicle matched "{0}"', [query]),
+				__("Check the spelling or try searching by full VIN/Chassis Number or an earlier registration plate.")
+			)
+		);
 	}
 
 	_render_error_state(message) {
-		this.$content.html(`
-			<div class="vsh-state-box vsh-state-box--error">
-				<div class="vsh-state-icon"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i></div>
-				<div class="vsh-state-title">${this._esc(__("Service History Unavailable"))}</div>
-				<div class="vsh-state-sub">${this._esc(message)}</div>
-			</div>
-		`);
+		this.$content.html(this._state_box_html(__("Service History Unavailable"), message));
 	}
 
 	_render_disambiguation(query, matches) {
-		const cardsHtml = matches
+		const rowsHtml = matches
 			.map((m) => {
 				const modelDesc = [m.make, m.model, m.year ? `(${m.year})` : ""].filter(Boolean).join(" ");
+				const prevLine = m.previous_registration_nos
+					? `<div class="text-muted small">${this._esc(__("Prev"))}: ${this._esc(m.previous_registration_nos)}</div>`
+					: "";
 				return `
-					<div class="vsh-disambig-card" data-vehicle="${this._esc(m.name)}" role="button" tabindex="0">
-						<div class="vsh-disambig-top">
-							<div>
-								<span class="vsh-plate-badge vsh-plate-badge--sm">${this._esc(m.registration_no || m.name)}</span>
-								${this._match_badge_html(m.match_source)}
-							</div>
-							${this._pill(m.vehicle_status || "Outside Workshop")}
-						</div>
-						${
-							m.previous_registration_nos
-								? `<div class="vsh-muted text-xs mt-1">${this._esc(__("Previous Plates"))}: <strong>${this._esc(m.previous_registration_nos)}</strong></div>`
-								: ""
-						}
-						<div class="vsh-disambig-title">${this._esc(modelDesc || "—")}</div>
-						<div class="vsh-disambig-meta">
-							<div><span class="vsh-muted">${this._esc(__("VIN"))}:</span> <code>${this._esc(m.vin || "—")}</code></div>
-							<div><span class="vsh-muted">${this._esc(__("Customer"))}:</span> ${this._esc(m.customer_name || m.customer || "—")}</div>
-							<div><span class="vsh-muted">${this._esc(__("Mileage"))}:</span> ${this._esc(this._fmt_km(m.current_mileage))}</div>
-						</div>
-						<div class="vsh-disambig-cta">${this._esc(__("View Service History"))} &rarr;</div>
-					</div>
+					<tr class="vsh-disambig-row pointer" data-vehicle="${this._esc(m.name)}" role="button" tabindex="0">
+						<td>
+							<strong>${this._esc(m.registration_no || m.name)}</strong>
+							${prevLine}
+						</td>
+						<td>${m.match_source ? this._pill(m.match_source) : "—"}</td>
+						<td>${this._esc(modelDesc || "—")}</td>
+						<td><code>${this._esc(m.vin || "—")}</code></td>
+						<td>${this._esc(m.customer_name || m.customer || "—")}</td>
+						<td class="text-right">${this._esc(this._fmt_km(m.current_mileage))}</td>
+						<td>${this._pill(m.vehicle_status || "Outside Workshop")}</td>
+						<td class="text-right">
+							<button type="button" class="btn btn-xs btn-default">${this._esc(__("Open"))}</button>
+						</td>
+					</tr>
 				`;
 			})
 			.join("");
 
 		this.$content.html(`
-			<div class="vsh-disambig-section">
-				<div class="vsh-disambig-header">
-					<h5>${this._esc(__("Multiple Vehicles Matched \"{0}\"", [query]))}</h5>
-					<span class="vsh-muted">${this._esc(__("{0} vehicles found — select one to open its full history.", [matches.length]))}</span>
+			<div class="form-section card-section">
+				<div class="section-head">
+					<span>${this._esc(__('Multiple Vehicles Matched "{0}" ({1})', [query, matches.length]))}</span>
 				</div>
-				<div class="vsh-disambig-grid">${cardsHtml}</div>
+				<div class="section-body">
+					<div class="w-100">
+						<p class="text-muted small mb-2">${this._esc(__("Select a vehicle below to open its full service history."))}</p>
+						<div class="table-responsive">
+							<table class="table table-bordered table-hover vsh-table">
+								<thead>
+									<tr>
+										<th>${this._esc(__("Registration No"))}</th>
+										<th>${this._esc(__("Match"))}</th>
+										<th>${this._esc(__("Vehicle"))}</th>
+										<th>${this._esc(__("VIN / Chassis"))}</th>
+										<th>${this._esc(__("Customer"))}</th>
+										<th class="text-right">${this._esc(__("Current Mileage"))}</th>
+										<th>${this._esc(__("Status"))}</th>
+										<th class="text-right" style="width: 72px;">${this._esc(__("Action"))}</th>
+									</tr>
+								</thead>
+								<tbody>${rowsHtml}</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
 			</div>
 		`);
 	}
 
 	load_vehicle(vehicleName) {
 		if (!vehicleName) {
-			this.vehicle = null;
-			this.data = null;
-			this.editable_open_order = null;
+			this._clear_selected_vehicle();
 			if (this.show_search) {
 				this._render_initial_empty();
 			} else {
@@ -712,21 +969,22 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			callback: (r) => {
 				if (seq !== this._load_seq) return;
 				if (!r.message) {
+					this._clear_selected_vehicle();
 					this._render_error_state(__("No history payload returned."));
 					return;
 				}
 				this.data = r.message;
 				this.vehicle = (this.data.vehicle && this.data.vehicle.name) || vehicleName;
 
-				if (this.$search_input && this.$search_input.length) {
-					this.$search_input.val((this.data.vehicle && this.data.vehicle.registration_no) || this.vehicle);
-					this.$search_clear.show();
+				if (this.show_search) {
+					this._set_search_query((this.data.vehicle && this.data.vehicle.registration_no) || this.vehicle);
 				}
 
 				if (this._has_no_timeline_filters()) {
 					this._resolve_editable_open_order();
 				}
 
+				this._populate_filter_options();
 				this._render_full_dashboard();
 
 				if (this.on_vehicle_selected) {
@@ -735,6 +993,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			},
 			error: () => {
 				if (seq !== this._load_seq) return;
+				this._clear_selected_vehicle();
 				this._render_error_state(
 					__("Could not load service history for {0}. Verify the vehicle exists and you have access.", [vehicleName])
 				);
@@ -769,9 +1028,7 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			error: () => {
 				if (seq !== this._load_seq) return;
 				if ($timelineSlot.length) {
-					$timelineSlot.html(
-						`<div class="vsh-empty-inline">${this._esc(__("Failed to apply filters. Please try again."))}</div>`
-					);
+					$timelineSlot.html(this._state_box_html(__("Failed to apply filters. Please try again.")));
 				}
 			},
 		});
@@ -799,18 +1056,96 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 
 	_render_full_dashboard() {
 		this.$content.html(`
-			<div class="vsh-header-slot"></div>
-			<div class="vsh-kpi-slot"></div>
-			<div class="vsh-recommendations-slot"></div>
-			<div class="vsh-filter-slot"></div>
-			<div class="vsh-timeline-slot"></div>
+			<div class="form-layout">
+				<div class="form-page">
+					<div class="vsh-kpi-slot"></div>
+					<div class="vsh-header-slot"></div>
+					<div class="vsh-recommendations-slot"></div>
+					<div class="vsh-timeline-slot"></div>
+				</div>
+			</div>
 		`);
 
-		this._render_vehicle_header();
 		this._render_kpis();
+		this._render_vehicle_header();
 		this._render_recommendations();
-		this._render_filter_bar();
 		this._render_timeline();
+	}
+
+	_render_kpis() {
+		const stats = (this.data && this.data.overview_stats) || {};
+		const showFinancials =
+			this._can_view_financials() &&
+			stats.total_historical_service_value !== null &&
+			stats.total_historical_service_value !== undefined;
+
+		const items = [
+			{ label: __("Total Visits"), value: this._esc(stats.total_visits || 0), colorClass: "blue" },
+			{ label: __("Total Service Orders"), value: this._esc(stats.total_service_orders || 0), colorClass: "" },
+			{ label: __("Completed Repairs"), value: this._esc(stats.total_completed_repairs || 0), colorClass: "green" },
+			{
+				label: __("Last Service Date"),
+				value: stats.last_service_date ? this._fmt_date(stats.last_service_date) : "—",
+				colorClass: "",
+			},
+			{
+				label: __("Last Recorded Mileage"),
+				value: this._esc(this._fmt_km(stats.last_recorded_mileage || 0)),
+				colorClass: "",
+			},
+		];
+
+		if (showFinancials) {
+			items.push({
+				label: __("Total Service Value"),
+				value: this._fmt_currency(stats.total_historical_service_value || 0),
+				colorClass: "blue",
+			});
+		}
+
+		const outstandingCount = stats.outstanding_service_orders || 0;
+		items.push({
+			label: __("Outstanding Orders"),
+			value: this._esc(outstandingCount),
+			colorClass: outstandingCount > 0 ? "red" : "",
+		});
+
+		const summaryHtml = items
+			.map(
+				(item) => `
+				<div class="summary-item">
+					<div class="summary-label">${this._esc(item.label)}</div>
+					<div class="summary-value ${this._esc(item.colorClass)}">${item.value}</div>
+				</div>
+			`
+			)
+			.join("");
+
+		this.$content.find(".vsh-kpi-slot").html(`
+			<div class="form-dashboard-section">
+				<div class="section-head">
+					<span>${this._esc(__("Overview"))}</span>
+				</div>
+				<div class="section-body">
+					<div class="report-summary vsh-report-summary">${summaryHtml}</div>
+				</div>
+			</div>
+		`);
+	}
+
+	_field_html(label, valueHtml) {
+		return `
+			<div class="frappe-control">
+				<div class="form-group">
+					<div class="clearfix">
+						<label class="control-label">${this._esc(label)}</label>
+					</div>
+					<div class="control-input-wrapper">
+						<div class="control-value like-disabled-input">${valueHtml}</div>
+					</div>
+				</div>
+			</div>
+		`;
 	}
 
 	_render_vehicle_header() {
@@ -818,35 +1153,14 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		const c = (this.data && this.data.customer) || {};
 		const clusterIds = (this.data && this.data.vehicle_ids) || [];
 
-		const prevBadge = v.previous_registration_nos
-			? `<span class="vsh-prev-plate-badge">${this._esc(__("Previous"))}: ${this._esc(v.previous_registration_nos)}</span>`
-			: "";
-
-		const clusterBadge =
-			clusterIds.length > 1
-				? `<span class="vsh-cluster-badge" title="${this._esc(__("Aggregated across linked vehicle records sharing this VIN"))}">${this._esc(__("Merged VIN History ({0})", [clusterIds.length]))}</span>`
-				: "";
-
 		const modelTitle = [v.make, v.model, v.year ? `(${v.year})` : ""].filter(Boolean).join(" ") || __("Service Vehicle");
-		const specsText = [v.colour, v.fuel_type, v.transmission].filter(Boolean).join(" · ") || "—";
-
-		const canCreateOrder =
-			frappe.model && typeof frappe.model.can_create === "function" && frappe.model.can_create("Service Order");
-
-		const openVehicleBtn = this.show_search
-			? `<button type="button" class="btn btn-sm btn-default vsh-btn-open-vehicle"><i class="fa fa-external-link mr-1" aria-hidden="true"></i>${this._esc(__("Open Vehicle"))}</button>`
-			: "";
-
-		let orderBtn = "";
-		if (v.current_service_order) {
-			orderBtn = `<button type="button" class="btn btn-sm btn-info vsh-btn-view-open-order"><i class="fa fa-wrench mr-1" aria-hidden="true"></i>${this._esc(__("View Open Service Order"))}</button>`;
-		} else if (canCreateOrder) {
-			orderBtn = `<button type="button" class="btn btn-sm btn-default vsh-btn-new-order"><i class="fa fa-plus mr-1" aria-hidden="true"></i>${this._esc(__("+ New Service Order"))}</button>`;
-		}
+		const specsParts = [v.colour, v.fuel_type, v.transmission, v.engine_no ? __("Engine: {0}", [v.engine_no]) : ""]
+			.filter(Boolean);
+		const specsText = specsParts.length ? specsParts.join(" · ") : "—";
 
 		const customerDisplay = v.customer
 			? this._doc_link("Customer", v.customer, c.customer_name || v.customer_name || v.customer)
-			: `<span class="vsh-muted">—</span>`;
+			: `<span class="text-muted">—</span>`;
 		const contactParts = [c.mobile_no || v.driver_phone, c.email_id].filter(Boolean).map((x) => this._esc(x)).join(" · ");
 		const driverDisplay = v.driver_name
 			? `${this._esc(v.driver_name)}${v.driver_phone ? ` (${this._esc(v.driver_phone)})` : ""}`
@@ -858,92 +1172,70 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			.filter(Boolean)
 			.join(" · ");
 
+		const prevBadge = v.previous_registration_nos
+			? `<span class="indicator-pill orange">${this._esc(__("Previous Plates"))}: ${this._esc(v.previous_registration_nos)}</span>`
+			: "";
+
+		const clusterBadge =
+			clusterIds.length > 1
+				? `<span class="indicator-pill purple" title="${this._esc(__("Aggregated across linked vehicle records sharing this VIN"))}">${this._esc(__("Merged VIN History ({0})", [clusterIds.length]))}</span>`
+				: "";
+
+		// In embedded Service Vehicle tab, surface Export directly in the section header;
+		// on the Desk Page it lives in the native page toolbar via add_inner_button.
+		const embeddedExportBtn = !this.show_search
+			? `<button type="button" class="btn btn-xs btn-default vsh-btn-export">
+					${frappe.utils.icon("printer", "xs")}
+					<span class="ml-1">${this._esc(__("Print / Export PDF"))}</span>
+				</button>`
+			: "";
+
+		const regDisplay = this.show_search
+			? this._doc_link("Service Vehicle", v.name, v.registration_no || v.name)
+			: `<strong>${this._esc(v.registration_no || v.name)}</strong>`;
+
+		const openOrderDisplay = v.current_service_order
+			? this._doc_link("Service Order", v.current_service_order)
+			: `<span class="text-muted">—</span>`;
+
+		const col1 = [
+			this._field_html(__("Registration Number"), regDisplay),
+			this._field_html(__("Make / Model / Year"), this._esc(modelTitle)),
+			this._field_html(__("VIN / Chassis Number"), `<code>${this._esc(v.vin || "—")}</code>`),
+			this._field_html(__("Specifications"), this._esc(specsText)),
+		].join("");
+
+		const col2 = [
+			this._field_html(__("Customer"), customerDisplay),
+			this._field_html(__("Customer Contact"), contactParts || `<span class="text-muted">—</span>`),
+			this._field_html(__("Default Driver"), driverDisplay),
+			this._field_html(__("Vehicle Status"), this._pill(v.vehicle_status || "Outside Workshop")),
+		].join("");
+
+		const col3 = [
+			this._field_html(__("Current Mileage"), this._esc(this._fmt_km(v.current_mileage))),
+			this._field_html(__("Workshop Location"), this._esc(v.current_location || "—")),
+			this._field_html(__("Active Service Order"), openOrderDisplay),
+			this._field_html(__("Next Service Due"), nextServiceParts || `<span class="text-muted">—</span>`),
+		].join("");
+
 		this.$content.find(".vsh-header-slot").html(`
-			<div class="vsh-section-card vsh-profile-card">
-				<div class="vsh-profile-top">
-					<div class="vsh-profile-identity">
-						<div class="vsh-plate-row">
-							<span class="vsh-plate-badge">${this._esc(v.registration_no || v.name)}</span>
-							${prevBadge}
-							${this._pill(v.vehicle_status || "Outside Workshop")}
-							${clusterBadge}
-						</div>
-						<h3 class="vsh-vehicle-title">${this._esc(modelTitle)}</h3>
-						<div class="vsh-profile-specs">
-							<span><strong>${this._esc(__("VIN"))}:</strong> <code>${this._esc(v.vin || "—")}</code></span>
-							<span><strong>${this._esc(__("Specs"))}:</strong> ${this._esc(specsText)}</span>
-							${v.engine_no ? `<span><strong>${this._esc(__("Engine No"))}:</strong> ${this._esc(v.engine_no)}</span>` : ""}
-							<span><strong>${this._esc(__("Current Mileage"))}:</strong> ${this._esc(this._fmt_km(v.current_mileage))}</span>
-							${v.current_location ? `<span><strong>${this._esc(__("Location"))}:</strong> ${this._esc(v.current_location)}</span>` : ""}
-						</div>
-					</div>
-					<div class="vsh-profile-actions">
-						${openVehicleBtn}
-						${orderBtn}
-						<button type="button" class="btn btn-sm btn-primary vsh-btn-export">
-							<i class="fa fa-print mr-1" aria-hidden="true"></i>${this._esc(__("Print / Export History"))}
-						</button>
+			<div class="form-section card-section">
+				<div class="section-head vsh-section-head-flex">
+					<span>${this._esc(__("Vehicle & Customer Summary"))}</span>
+					<div class="vsh-head-actions">
+						${prevBadge}
+						${clusterBadge}
+						${embeddedExportBtn}
 					</div>
 				</div>
-				<div class="vsh-profile-owner-bar">
-					<div><span class="vsh-muted">${this._esc(__("Customer"))}:</span> ${customerDisplay}</div>
-					<div><span class="vsh-muted">${this._esc(__("Contact"))}:</span> ${contactParts || "—"}</div>
-					<div><span class="vsh-muted">${this._esc(__("Default Driver"))}:</span> ${driverDisplay}</div>
-					<div><span class="vsh-muted">${this._esc(__("Next Service Due"))}:</span> ${nextServiceParts || "—"}</div>
+				<div class="section-body">
+					<div class="form-column col-sm-4">${col1}</div>
+					<div class="form-column col-sm-4">${col2}</div>
+					<div class="form-column col-sm-4">${col3}</div>
 				</div>
 			</div>
 		`);
-	}
-
-	_render_kpis() {
-		const stats = (this.data && this.data.overview_stats) || {};
-		const showFinancials =
-			this._can_view_financials() &&
-			stats.total_historical_service_value !== null &&
-			stats.total_historical_service_value !== undefined;
-
-		const cards = [
-			{ label: __("Total Visits"), value: this._esc(stats.total_visits || 0), tone: "blue" },
-			{ label: __("Total Service Orders"), value: this._esc(stats.total_service_orders || 0), tone: "slate" },
-			{ label: __("Completed Repairs"), value: this._esc(stats.total_completed_repairs || 0), tone: "green" },
-			{
-				label: __("Last Service Date"),
-				value: stats.last_service_date ? this._fmt_date(stats.last_service_date) : "—",
-				tone: "slate",
-			},
-			{
-				label: __("Last Recorded Mileage"),
-				value: this._esc(this._fmt_km(stats.last_recorded_mileage || 0)),
-				tone: "slate",
-			},
-		];
-
-		if (showFinancials) {
-			cards.push({
-				label: __("Total Historical Service Value"),
-				value: this._fmt_currency(stats.total_historical_service_value || 0),
-				tone: "highlight",
-			});
-		}
-
-		cards.push({
-			label: __("Outstanding Orders"),
-			value: this._esc(stats.outstanding_service_orders || 0),
-			tone: (stats.outstanding_service_orders || 0) > 0 ? "amber" : "slate",
-		});
-
-		const cardsHtml = cards
-			.map(
-				(c) => `
-				<div class="vsh-kpi-card vsh-kpi-card--${this._esc(c.tone)}">
-					<div class="vsh-kpi-label">${this._esc(c.label)}</div>
-					<div class="vsh-kpi-value">${c.value}</div>
-				</div>
-			`
-			)
-			.join("");
-
-		this.$content.find(".vsh-kpi-slot").html(`<div class="vsh-kpi-grid">${cardsHtml}</div>`);
 	}
 
 	_render_recommendations() {
@@ -956,9 +1248,10 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 
 		const scheduledHtml = scheduled.length
 			? `
-			<div class="vsh-scheduled-grid">
+			<div class="vsh-scheduled-banners mb-3">
 				${scheduled
 					.map((s) => {
+						const msgColor = s.status === "Overdue" ? "red" : s.status === "Due Soon" ? "orange" : "blue";
 						const detail =
 							s.metric === "Date"
 								? `${this._fmt_date(s.due_date)}${
@@ -972,11 +1265,8 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 									}`
 								: `${this._esc(this._fmt_km(s.target_mileage))} (${this._esc(__("Current"))}: ${this._esc(this._fmt_km(s.current_mileage))})`;
 						return `
-							<div class="vsh-scheduled-item">
-								<div>
-									<div class="vsh-scheduled-title">${this._esc(s.title)}</div>
-									<div class="vsh-scheduled-detail">${detail}</div>
-								</div>
+							<div class="form-message ${msgColor} mb-2 d-flex justify-content-between align-items-center flex-wrap" style="gap: 8px;">
+								<span><strong>${this._esc(s.title)}</strong> &mdash; ${detail}</span>
 								${this._pill(s.status)}
 							</div>
 						`;
@@ -995,10 +1285,12 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		const tabsHtml = tabs
 			.map(
 				(t) => `
-				<button type="button" class="vsh-rec-tab ${this.active_rec_tab === t.id ? "is-active" : ""}" data-tab="${this._esc(t.id)}">
-					<span>${this._esc(t.label)}</span>
-					<span class="vsh-tab-count">${this._esc(t.count)}</span>
-				</button>
+				<li class="nav-item">
+					<a class="nav-link vsh-rec-tab ${this.active_rec_tab === t.id ? "active" : ""}" href="#" data-tab="${this._esc(t.id)}" role="tab">
+						<span>${this._esc(t.label)}</span>
+						<span class="text-muted small">(${this._esc(t.count)})</span>
+					</a>
+				</li>
 			`
 			)
 			.join("");
@@ -1013,52 +1305,56 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		}
 
 		this.$content.find(".vsh-recommendations-slot").html(`
-			<div class="vsh-section-card">
-				<div class="vsh-section-header">
-					<div class="vsh-section-title-group">
-						<h4 class="vsh-section-title">${this._esc(__("Maintenance & Repair Recommendations"))}</h4>
-						<span class="vsh-muted text-xs">${this._esc(__("Recommendations stay Outstanding until completed via a linked Service Job or follow-up record."))}</span>
-					</div>
-					<div class="vsh-rec-tabs">${tabsHtml}</div>
+			<div class="form-section card-section">
+				<div class="section-head vsh-section-head-flex">
+					<span>${this._esc(__("Maintenance & Repair Recommendations"))}</span>
+					<span class="text-muted small font-weight-normal">${this._esc(__("Recommendations stay Outstanding until completed via a linked Service Job or follow-up record."))}</span>
 				</div>
-				${scheduledHtml}
-				<div class="vsh-rec-body">${bodyHtml}</div>
+				<div class="section-body">
+					<div class="w-100">
+						${scheduledHtml}
+						<div class="form-tabs-list vsh-rec-tabs-list">
+							<ul class="nav form-tabs" role="tablist">${tabsHtml}</ul>
+						</div>
+						<div class="form-tab-content pt-2">${bodyHtml}</div>
+					</div>
+				</div>
 			</div>
 		`);
 	}
 
 	_render_outstanding_recs(items) {
 		if (!items.length) {
-			return `<div class="vsh-empty-inline">${this._esc(__("No outstanding maintenance or repair recommendations."))}</div>`;
+			return `<div class="text-muted small py-3">${this._esc(__("No outstanding maintenance or repair recommendations."))}</div>`;
 		}
 		const canSchedule = this._can_schedule_followup() && Boolean(this.editable_open_order);
 		return `
 			<div class="table-responsive">
-				<table class="table vsh-table">
+				<table class="table table-bordered table-hover vsh-table">
 					<thead>
 						<tr>
-							<th style="width: 72px;">${this._esc(__("Type"))}</th>
+							<th style="width: 85px;">${this._esc(__("Type"))}</th>
 							<th>${this._esc(__("Recommendation"))}</th>
 							<th style="width: 115px;">${this._esc(__("Recommended On"))}</th>
-							<th style="width: 140px;">${this._esc(__("Origin Order"))}</th>
-							<th style="width: 130px;">${this._esc(__("Status"))}</th>
-							${canSchedule ? `<th style="width: 180px;" class="text-right">${this._esc(__("Action"))}</th>` : ""}
+							<th style="width: 145px;">${this._esc(__("Origin Order"))}</th>
+							<th style="width: 135px;">${this._esc(__("Status"))}</th>
+							${canSchedule ? `<th style="width: 185px;" class="text-right">${this._esc(__("Action"))}</th>` : ""}
 						</tr>
 					</thead>
 					<tbody>
 						${items
 							.map((rec, idx) => {
-								const desc = rec.description ? `<div class="vsh-muted text-xs">${this._esc(rec.description)}</div>` : "";
+								const desc = rec.description ? `<div class="text-muted small">${this._esc(rec.description)}</div>` : "";
 								const actionCell = canSchedule
 									? `<td class="text-right">
-											<button type="button" class="btn btn-xs btn-primary vsh-btn-followup" data-idx="${idx}">
-												<i class="fa fa-calendar-plus-o mr-1" aria-hidden="true"></i>${this._esc(__("Schedule Follow-up Job"))}
+											<button type="button" class="btn btn-xs btn-default vsh-btn-followup" data-idx="${idx}">
+												${this._esc(__("Schedule Follow-up Job"))}
 											</button>
 										</td>`
 									: "";
 								return `
 									<tr>
-										<td>${this._pill(rec.source_type || "Job", "slate")}</td>
+										<td>${this._pill(rec.source_type || "Job", "gray")}</td>
 										<td><strong>${this._esc(rec.title || "—")}</strong>${desc}</td>
 										<td>${this._fmt_date(rec.recommended_on)}</td>
 										<td>${this._doc_link("Service Order", rec.origin_order)}</td>
@@ -1076,37 +1372,37 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 
 	_render_completed_recs(items) {
 		if (!items.length) {
-			return `<div class="vsh-empty-inline">${this._esc(__("No completed recommendations yet."))}</div>`;
+			return `<div class="text-muted small py-3">${this._esc(__("No completed recommendations yet."))}</div>`;
 		}
 		return `
 			<div class="table-responsive">
-				<table class="table vsh-table">
+				<table class="table table-bordered table-hover vsh-table">
 					<thead>
 						<tr>
-							<th style="width: 72px;">${this._esc(__("Type"))}</th>
+							<th style="width: 85px;">${this._esc(__("Type"))}</th>
 							<th>${this._esc(__("Recommendation"))}</th>
 							<th style="width: 115px;">${this._esc(__("Recommended On"))}</th>
-							<th style="width: 140px;">${this._esc(__("Origin Order"))}</th>
+							<th style="width: 145px;">${this._esc(__("Origin Order"))}</th>
 							<th style="width: 220px;">${this._esc(__("Linked Completion"))}</th>
-							<th style="width: 110px;">${this._esc(__("Status"))}</th>
+							<th style="width: 115px;">${this._esc(__("Status"))}</th>
 						</tr>
 					</thead>
 					<tbody>
 						${items
 							.map((rec) => {
-								const desc = rec.description ? `<div class="vsh-muted text-xs">${this._esc(rec.description)}</div>` : "";
+								const desc = rec.description ? `<div class="text-muted small">${this._esc(rec.description)}</div>` : "";
 								const completionOrderLink = rec.linked_completion_order
 									? this._doc_link("Service Order", rec.linked_completion_order)
 									: "—";
 								const completionJobLink = rec.linked_completion_job
-									? `<div class="text-xs">${this._doc_link("Service Job", rec.linked_completion_job)}</div>`
+									? `<div class="small">${this._doc_link("Service Job", rec.linked_completion_job)}</div>`
 									: "";
 								const completedOn = rec.completed_on
-									? `<div class="vsh-muted text-xs">${this._fmt_date(rec.completed_on)}</div>`
+									? `<div class="text-muted small">${this._fmt_date(rec.completed_on)}</div>`
 									: "";
 								return `
 									<tr>
-										<td>${this._pill(rec.source_type || "Job", "slate")}</td>
+										<td>${this._pill(rec.source_type || "Job", "gray")}</td>
 										<td><strong>${this._esc(rec.title || "—")}</strong>${desc}</td>
 										<td>${this._fmt_date(rec.recommended_on)}</td>
 										<td>${this._doc_link("Service Order", rec.origin_order)}</td>
@@ -1124,18 +1420,18 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 
 	_render_advisory_notes(items) {
 		if (!items.length) {
-			return `<div class="vsh-empty-inline">${this._esc(__("No delivery or QC advisory notes recorded."))}</div>`;
+			return `<div class="text-muted small py-3">${this._esc(__("No delivery or QC advisory notes recorded."))}</div>`;
 		}
 		return `
 			<div class="table-responsive">
-				<table class="table vsh-table">
+				<table class="table table-bordered table-hover vsh-table">
 					<thead>
 						<tr>
 							<th style="width: 115px;">${this._esc(__("Recorded On"))}</th>
-							<th style="width: 140px;">${this._esc(__("Origin Order"))}</th>
+							<th style="width: 145px;">${this._esc(__("Origin Order"))}</th>
 							<th style="width: 210px;">${this._esc(__("Source"))}</th>
 							<th>${this._esc(__("Advisory Note"))}</th>
-							<th style="width: 130px;">${this._esc(__("Tag"))}</th>
+							<th style="width: 135px;">${this._esc(__("Tag"))}</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1158,81 +1454,35 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		`;
 	}
 
-	_select_options_html(options, selectedValue, allLabel) {
-		const opts = [`<option value="">${this._esc(allLabel)}</option>`];
-		(options || []).forEach((opt) => {
-			const val = typeof opt === "object" ? opt.value : opt;
-			const label = typeof opt === "object" ? opt.label : opt;
-			const sel = val === selectedValue ? " selected" : "";
-			opts.push(`<option value="${this._esc(val)}"${sel}>${this._esc(label)}</option>`);
-		});
-		return opts.join("");
-	}
-
-	_render_filter_bar() {
-		const opts = (this.data && this.data.filter_options) || {};
+	_render_timeline() {
+		const timeline = (this.data && this.data.timeline) || [];
 		const canFin = this._can_view_financials();
+		const $slot = this.$content.find(".vsh-timeline-slot");
 
-		const invoiceFilterHtml = canFin
-			? `
-			<div class="vsh-filter-item">
-				<label class="vsh-filter-label">${this._esc(__("Invoice Status"))}</label>
-				<select class="form-control input-sm vsh-filter-control" data-filter="invoice_status">
-					${this._select_options_html(opts.invoice_statuses, this.filters.invoice_status, __("All"))}
-				</select>
-			</div>
-		`
-			: "";
+		const bodyContent = timeline.length
+			? timeline.map((visit) => this._render_visit_card(visit, canFin)).join("")
+			: this._state_box_html(
+					__("No Service Visits Found"),
+					__("No service visits match the current filter criteria.")
+				);
 
-		this.$content.find(".vsh-filter-slot").html(`
-			<div class="vsh-section-card vsh-filter-card">
-				<div class="vsh-filter-grid">
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("From Date"))}</label>
-						<input type="date" class="form-control input-sm vsh-filter-control" data-filter="from_date" value="${this._esc(this.filters.from_date)}" />
-					</div>
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("To Date"))}</label>
-						<input type="date" class="form-control input-sm vsh-filter-control" data-filter="to_date" value="${this._esc(this.filters.to_date)}" />
-					</div>
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("Service Status"))}</label>
-						<select class="form-control input-sm vsh-filter-control" data-filter="status">
-							${this._select_options_html(opts.statuses, this.filters.status, __("All (Excl. Cancelled)"))}
-						</select>
-					</div>
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("Service Type"))}</label>
-						<select class="form-control input-sm vsh-filter-control" data-filter="order_type">
-							${this._select_options_html(opts.order_types, this.filters.order_type, __("All"))}
-						</select>
-					</div>
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("Technician"))}</label>
-						<select class="form-control input-sm vsh-filter-control" data-filter="technician">
-							${this._select_options_html(opts.technicians, this.filters.technician, __("All"))}
-						</select>
-					</div>
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("Service Advisor"))}</label>
-						<select class="form-control input-sm vsh-filter-control" data-filter="service_advisor">
-							${this._select_options_html(opts.service_advisors, this.filters.service_advisor, __("All"))}
-						</select>
-					</div>
-					${invoiceFilterHtml}
-					<div class="vsh-filter-item">
-						<label class="vsh-filter-label">${this._esc(__("Sort Order"))}</label>
-						<select class="form-control input-sm vsh-filter-control" data-filter="sort_order">
-							<option value="desc"${this.filters.sort_order !== "asc" ? " selected" : ""}>${this._esc(__("Newest First"))}</option>
-							<option value="asc"${this.filters.sort_order === "asc" ? " selected" : ""}>${this._esc(__("Oldest First"))}</option>
-						</select>
+		$slot.html(`
+			<div class="form-section card-section hide-border">
+				<div class="section-head vsh-section-head-flex">
+					<span>${this._esc(__("Service Visit History"))} <span class="text-muted small font-weight-normal">(${this._esc(timeline.length)})</span></span>
+					<div class="vsh-head-actions">
+						${
+							timeline.length
+								? `<button type="button" class="btn btn-xs btn-default vsh-btn-toggle-all"></button>`
+								: ""
+						}
+						<button type="button" class="btn btn-xs btn-default vsh-btn-reset-filters">
+							${this._esc(__("Reset Filters"))}
+						</button>
 					</div>
 				</div>
-				<div class="vsh-filter-actions">
-					<button type="button" class="btn btn-xs btn-default vsh-btn-toggle-all"></button>
-					<button type="button" class="btn btn-xs btn-default vsh-btn-reset-filters">
-						<i class="fa fa-undo mr-1" aria-hidden="true"></i>${this._esc(__("Reset Filters"))}
-					</button>
+				<div class="section-body">
+					<div class="w-100">${bodyContent}</div>
 				</div>
 			</div>
 		`);
@@ -1240,47 +1490,11 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		this._update_toggle_all_button();
 	}
 
-	_sync_filter_inputs() {
-		const $bar = this.$content.find(".vsh-filter-card");
-		Object.keys(this.filters).forEach((key) => {
-			$bar.find(`[data-filter="${key}"]`).val(this.filters[key] || "");
-		});
-	}
-
-	_render_timeline() {
-		const timeline = (this.data && this.data.timeline) || [];
-		const canFin = this._can_view_financials();
-		const $slot = this.$content.find(".vsh-timeline-slot");
-
-		if (!timeline.length) {
-			$slot.html(`
-				<div class="vsh-section-card">
-					<div class="vsh-section-header">
-						<h4 class="vsh-section-title">${this._esc(__("Chronological Visit Timeline"))} <span class="vsh-tab-count">0</span></h4>
-					</div>
-					<div class="vsh-empty-inline">${this._esc(__("No service visits match the current filter criteria."))}</div>
-				</div>
-			`);
-			return;
-		}
-
-		const cardsHtml = timeline.map((visit) => this._render_visit_card(visit, canFin)).join("");
-
-		$slot.html(`
-			<div class="vsh-timeline-section">
-				<div class="vsh-timeline-section-header">
-					<h4 class="vsh-section-title">${this._esc(__("Chronological Visit Timeline"))} <span class="vsh-tab-count">${this._esc(timeline.length)}</span></h4>
-				</div>
-				<div class="vsh-timeline-list">${cardsHtml}</div>
-			</div>
-		`);
-	}
-
 	_render_visit_card(visit, canFin) {
 		const visitKey = visit.service_order || visit.vehicle_intake || "";
 		const isExpanded = this.expanded_visits.has(visitKey);
 		const refDoctype = visit.service_order ? "Service Order" : "Vehicle Intake";
-		const refLink = this._doc_link(refDoctype, visitKey, visitKey, "vsh-visit-ref");
+		const refLink = this._doc_link(refDoctype, visitKey, visitKey, "bold");
 
 		const techNames = [];
 		const seenTechs = new Set();
@@ -1304,32 +1518,30 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 				? this._fmt_currency(fin.total_invoice_value || 0)
 				: `${this._esc(__("Est."))} ${this._fmt_currency(flt(fin.labour_charges) + flt(fin.parts_charges))}`;
 			finSummaryHtml = `
-				<div class="vsh-visit-fin-badge">
-					<span class="vsh-visit-total">${amountText}</span>
-					${this._pill(fin.payment_status || "Not Invoiced")}
-				</div>
+				<span class="bold text-color">${amountText}</span>
+				${this._pill(fin.payment_status || "Not Invoiced")}
 			`;
 		}
 
 		const bodyHtml = this._render_visit_body(visit, canFin);
 
 		return `
-			<div class="vsh-visit-card ${isExpanded ? "is-expanded" : ""}" data-visit-key="${this._esc(visitKey)}">
-				<div class="vsh-visit-header" role="button" tabindex="0" aria-expanded="${isExpanded ? "true" : "false"}">
+			<div class="frappe-card-outline vsh-visit-card mb-3" data-visit-key="${this._esc(visitKey)}">
+				<div class="section-head collapsible vsh-visit-header ${isExpanded ? "" : "collapsed"}" role="button" tabindex="0" aria-expanded="${isExpanded ? "true" : "false"}">
 					<div class="vsh-visit-header-left">
-						<i class="fa ${isExpanded ? "fa-chevron-down" : "fa-chevron-right"} vsh-visit-chevron" aria-hidden="true"></i>
-						<div>
-							<div class="vsh-visit-title-row">
+						<span class="collapse-indicator mr-2">${frappe.utils.icon(isExpanded ? "chevron-down" : "chevron-right", "sm")}</span>
+						<div class="min-w-0">
+							<div class="d-flex align-items-center flex-wrap mb-1" style="gap: 6px;">
 								${refLink}
-								${this._pill(visit.visit_type || "Service Order", "slate")}
+								${this._pill(visit.visit_type || "Service Order", "gray")}
 								${visit.order_type ? this._pill(visit.order_type, "blue") : ""}
-								${visit.branch ? `<span class="vsh-branch-chip"><i class="fa fa-map-marker mr-1" aria-hidden="true"></i>${this._esc(visit.branch)}</span>` : ""}
+								${visit.branch ? `<span class="text-muted small">${this._esc(visit.branch)}</span>` : ""}
 							</div>
-							<div class="vsh-visit-sub-row">
-								<span><i class="fa fa-calendar mr-1" aria-hidden="true"></i>${dateSummary}</span>
-								<span>&middot; <strong>${this._esc(__("Odometer"))}:</strong> ${this._esc(this._fmt_km(visit.odometer_in))}</span>
-								${visit.service_advisor_name ? `<span>&middot; <strong>${this._esc(__("Advisor"))}:</strong> ${this._esc(visit.service_advisor_name)}</span>` : ""}
-								${techNames.length ? `<span>&middot; <strong>${this._esc(__("Techs"))}:</strong> ${this._esc(techNames.join(", "))}</span>` : ""}
+							<div class="text-muted small font-weight-normal d-flex flex-wrap" style="gap: 8px;">
+								<span>${dateSummary}</span>
+								<span>&middot; ${this._esc(__("Odometer"))}: ${this._esc(this._fmt_km(visit.odometer_in))}</span>
+								${visit.service_advisor_name ? `<span>&middot; ${this._esc(__("Advisor"))}: ${this._esc(visit.service_advisor_name)}</span>` : ""}
+								${techNames.length ? `<span>&middot; ${this._esc(__("Techs"))}: ${this._esc(techNames.join(", "))}</span>` : ""}
 								<span>&middot; ${this._esc(__("{0} Job(s), {1} Part(s)", [(visit.jobs || []).length, (visit.parts || []).length]))}</span>
 							</div>
 						</div>
@@ -1362,28 +1574,39 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		`;
 	}
 
+	_kv_cell(label, valueHtml) {
+		return `
+			<div class="col-sm-3 mb-2">
+				<div class="control-label small mb-0">${this._esc(label)}</div>
+				<div class="text-color bold">${valueHtml}</div>
+			</div>
+		`;
+	}
+
 	_render_visit_intake_section(visit) {
 		const odoText = visit.odometer_out
 			? `${this._fmt_km(visit.odometer_in)} / ${this._fmt_km(visit.odometer_out)}`
 			: this._fmt_km(visit.odometer_in);
 
 		const notesBlocks = [
-			{ label: __("Customer Complaint"), value: visit.customer_complaint, cls: "" },
-			{ label: __("Existing Damage"), value: visit.existing_damage, cls: "vsh-note-box--danger" },
-			{ label: __("Declared Contents / Valuables"), value: visit.vehicle_contents, cls: "" },
-			{ label: __("Delivery Notes"), value: visit.delivery_notes, cls: "" },
-			{ label: __("Reception Notes"), value: visit.reception_notes, cls: "vsh-note-box--internal" },
-			{ label: __("Hold Reason"), value: visit.hold_reason, cls: "vsh-note-box--warning" },
-			{ label: __("Pause Reason"), value: visit.pause_reason, cls: "vsh-note-box--warning" },
-			{ label: __("Dispute Notes"), value: visit.dispute_notes, cls: "vsh-note-box--danger" },
-			{ label: __("Cancellation Reason"), value: visit.cancellation_reason, cls: "vsh-note-box--danger" },
+			{ label: __("Customer Complaint"), value: visit.customer_complaint, color: "blue" },
+			{ label: __("Existing Damage"), value: visit.existing_damage, color: "red" },
+			{ label: __("Declared Contents / Valuables"), value: visit.vehicle_contents, color: "blue" },
+			{ label: __("Delivery Notes"), value: visit.delivery_notes, color: "blue" },
+			{ label: __("Reception Notes"), value: visit.reception_notes, color: "yellow" },
+			{ label: __("Hold Reason"), value: visit.hold_reason, color: "yellow" },
+			{ label: __("Pause Reason"), value: visit.pause_reason, color: "yellow" },
+			{ label: __("Dispute Notes"), value: visit.dispute_notes, color: "red" },
+			{ label: __("Cancellation Reason"), value: visit.cancellation_reason, color: "red" },
 		]
 			.filter((b) => b.value && String(b.value).trim())
 			.map(
 				(b) => `
-				<div class="vsh-note-box ${b.cls}">
-					<div class="vsh-note-label">${this._esc(b.label)}</div>
-					<div class="vsh-pre-wrap">${this._esc(b.value)}</div>
+				<div class="col-md-6 mb-2">
+					<div class="form-message ${b.color}">
+						<div class="small bold mb-1">${this._esc(b.label)}</div>
+						<div class="vsh-pre-wrap small">${this._esc(b.value)}</div>
+					</div>
 				</div>
 			`
 			)
@@ -1392,8 +1615,8 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		const photos = (visit.intake_photos || []).filter((p) => this._safe_url(p.photo));
 		const photosHtml = photos.length
 			? `
-			<div class="vsh-photos-block">
-				<div class="vsh-sub-heading">${this._esc(__("Intake Inspection Photos ({0})", [photos.length]))}</div>
+			<div class="mt-2">
+				<div class="control-label small mb-1">${this._esc(__("Intake Inspection Photos ({0})", [photos.length]))}</div>
 				<div class="vsh-photo-strip">
 					${photos
 						.map((p) => {
@@ -1412,19 +1635,19 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			: "";
 
 		return `
-			<div class="vsh-sub-section">
-				<div class="vsh-sub-heading">${this._esc(__("Visit & Intake Condition"))}</div>
-				<div class="vsh-kv-grid">
-					<div><span class="vsh-muted">${this._esc(__("Checked In"))}:</span> <strong>${this._fmt_datetime(visit.checked_in_on)}</strong></div>
-					<div><span class="vsh-muted">${this._esc(__("Completed / Delivered"))}:</span> <strong>${this._fmt_datetime(visit.delivered_on || visit.work_completed_on)}</strong></div>
-					<div><span class="vsh-muted">${this._esc(__("Odometer In / Out"))}:</span> <strong>${this._esc(odoText)}</strong></div>
-					<div><span class="vsh-muted">${this._esc(__("Fuel Level"))}:</span> <strong>${this._esc(visit.fuel_level || "—")}</strong></div>
-					<div><span class="vsh-muted">${this._esc(__("Service Advisor"))}:</span> <strong>${this._esc(visit.service_advisor_name || "—")}</strong></div>
-					<div><span class="vsh-muted">${this._esc(__("Collected By"))}:</span> <strong>${this._esc(visit.collected_by || "—")}</strong></div>
-					<div><span class="vsh-muted">${this._esc(__("Vehicle Intake"))}:</span> ${visit.vehicle_intake ? this._doc_link("Vehicle Intake", visit.vehicle_intake) : "—"}</div>
-					<div><span class="vsh-muted">${this._esc(__("Branch / Company"))}:</span> <strong>${this._esc([visit.branch, visit.company].filter(Boolean).join(" · ") || "—")}</strong></div>
+			<div class="vsh-visit-sub">
+				<div class="control-label bold mb-2">${this._esc(__("Visit & Intake Condition"))}</div>
+				<div class="row">
+					${this._kv_cell(__("Checked In"), this._fmt_datetime(visit.checked_in_on))}
+					${this._kv_cell(__("Completed / Delivered"), this._fmt_datetime(visit.delivered_on || visit.work_completed_on))}
+					${this._kv_cell(__("Odometer In / Out"), this._esc(odoText))}
+					${this._kv_cell(__("Fuel Level"), this._esc(visit.fuel_level || "—"))}
+					${this._kv_cell(__("Service Advisor"), this._esc(visit.service_advisor_name || "—"))}
+					${this._kv_cell(__("Collected By"), this._esc(visit.collected_by || "—"))}
+					${this._kv_cell(__("Vehicle Intake"), visit.vehicle_intake ? this._doc_link("Vehicle Intake", visit.vehicle_intake) : "—")}
+					${this._kv_cell(__("Branch / Company"), this._esc([visit.branch, visit.company].filter(Boolean).join(" · ") || "—"))}
 				</div>
-				${notesBlocks ? `<div class="vsh-notes-grid">${notesBlocks}</div>` : ""}
+				${notesBlocks ? `<div class="row mt-1">${notesBlocks}</div>` : ""}
 				${photosHtml}
 			</div>
 		`;
@@ -1433,26 +1656,26 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 	_render_visit_jobs_section(jobs, canFin) {
 		if (!jobs.length) {
 			return `
-				<div class="vsh-sub-section">
-					<div class="vsh-sub-heading">${this._esc(__("Jobs & Labour"))}</div>
-					<div class="vsh-empty-inline">${this._esc(__("No workshop jobs recorded for this visit."))}</div>
+				<div class="vsh-visit-sub">
+					<div class="control-label bold mb-2">${this._esc(__("Jobs & Labour"))}</div>
+					<div class="text-muted small">${this._esc(__("No workshop jobs recorded for this visit."))}</div>
 				</div>
 			`;
 		}
 
 		return `
-			<div class="vsh-sub-section">
-				<div class="vsh-sub-heading">${this._esc(__("Jobs & Labour ({0})", [jobs.length]))}</div>
+			<div class="vsh-visit-sub">
+				<div class="control-label bold mb-2">${this._esc(__("Jobs & Labour ({0})", [jobs.length]))}</div>
 				<div class="table-responsive">
-					<table class="table vsh-table">
+					<table class="table table-bordered table-hover vsh-table">
 						<thead>
 							<tr>
 								<th style="width: 36px;" class="text-center">#</th>
 								<th>${this._esc(__("Job Description"))}</th>
-								<th style="width: 100px;">${this._esc(__("Category"))}</th>
-								<th style="width: 120px;">${this._esc(__("Status"))}</th>
-								<th style="width: 135px;">${this._esc(__("Technician"))}</th>
-								<th style="width: 110px;">${this._esc(__("Bay"))}</th>
+								<th style="width: 105px;">${this._esc(__("Category"))}</th>
+								<th style="width: 125px;">${this._esc(__("Status"))}</th>
+								<th style="width: 140px;">${this._esc(__("Technician"))}</th>
+								<th style="width: 115px;">${this._esc(__("Bay"))}</th>
 								<th style="width: 95px;" class="text-right">${this._esc(__("Est / Act Hrs"))}</th>
 								${canFin ? `<th style="width: 95px;" class="text-right">${this._esc(__("Rate"))}</th><th style="width: 105px;" class="text-right">${this._esc(__("Amount"))}</th>` : ""}
 							</tr>
@@ -1482,8 +1705,8 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 											<td class="text-center">${idx + 1}</td>
 											<td>
 												<strong>${this._esc(j.job_title || "—")}</strong>
-												${j.service_job ? `<span class="vsh-muted text-xs ml-1">(${this._doc_link("Service Job", j.service_job)})</span>` : ""}
-												${notes.length ? `<div class="vsh-muted text-xs mt-1">${notes.join("")}</div>` : ""}
+												${j.service_job ? `<span class="text-muted small ml-1">(${this._doc_link("Service Job", j.service_job)})</span>` : ""}
+												${notes.length ? `<div class="text-muted small mt-1">${notes.join("")}</div>` : ""}
 											</td>
 											<td>${this._esc(j.category || "Essential")}</td>
 											<td>${this._pill(j.status || "Open")}</td>
@@ -1508,15 +1731,15 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		}
 
 		return `
-			<div class="vsh-sub-section">
-				<div class="vsh-sub-heading">${this._esc(__("Parts & Materials ({0})", [parts.length]))}</div>
+			<div class="vsh-visit-sub">
+				<div class="control-label bold mb-2">${this._esc(__("Parts & Materials ({0})", [parts.length]))}</div>
 				<div class="table-responsive">
-					<table class="table vsh-table">
+					<table class="table table-bordered table-hover vsh-table">
 						<thead>
 							<tr>
 								<th style="width: 36px;" class="text-center">#</th>
 								<th>${this._esc(__("Part / Item"))}</th>
-								<th style="width: 120px;">${this._esc(__("Status"))}</th>
+								<th style="width: 125px;">${this._esc(__("Status"))}</th>
 								<th style="width: 65px;" class="text-right">${this._esc(__("Req"))}</th>
 								<th style="width: 65px;" class="text-right">${this._esc(__("Issued"))}</th>
 								<th style="width: 65px;" class="text-right">${this._esc(__("Ret"))}</th>
@@ -1529,13 +1752,13 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 								.map((p, idx) => {
 									const partSubNotes = [];
 									if (p.item_code && p.item_name && p.item_code !== p.item_name) {
-										partSubNotes.push(`<span class="vsh-muted text-xs">(${this._esc(p.item_code)})</span>`);
+										partSubNotes.push(`<span class="text-muted small">(${this._esc(p.item_code)})</span>`);
 									}
 									if (p.reason_for_adding) {
-										partSubNotes.push(`<div class="vsh-muted text-xs"><em>${this._esc(__("Reason Added"))}:</em> ${this._esc(p.reason_for_adding)}</div>`);
+										partSubNotes.push(`<div class="text-muted small"><em>${this._esc(__("Reason Added"))}:</em> ${this._esc(p.reason_for_adding)}</div>`);
 									}
 									if (p.substituted_by) {
-										partSubNotes.push(`<div class="vsh-muted text-xs"><em>${this._esc(__("Substituted By"))}:</em> ${this._esc(p.substituted_by)}</div>`);
+										partSubNotes.push(`<div class="text-muted small"><em>${this._esc(__("Substituted By"))}:</em> ${this._esc(p.substituted_by)}</div>`);
 									}
 									const statusLabel = p.part_status || p.approval_status || "Required";
 									return `
@@ -1563,8 +1786,8 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		if (!qcs.length) return "";
 
 		return `
-			<div class="vsh-sub-section">
-				<div class="vsh-sub-heading">${this._esc(__("Quality Control Inspection ({0})", [qcs.length]))}</div>
+			<div class="vsh-visit-sub">
+				<div class="control-label bold mb-2">${this._esc(__("Quality Control Inspection ({0})", [qcs.length]))}</div>
 				${qcs
 					.map((qc) => {
 						const roadTest = qc.road_test_done
@@ -1574,11 +1797,11 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 							qc.checklist && qc.checklist.length
 								? `
 								<div class="table-responsive mt-2">
-									<table class="table vsh-table vsh-table--compact">
+									<table class="table table-bordered vsh-table">
 										<thead>
 											<tr>
 												<th>${this._esc(__("Check Item"))}</th>
-												<th style="width: 85px;">${this._esc(__("Result"))}</th>
+												<th style="width: 90px;">${this._esc(__("Result"))}</th>
 												<th>${this._esc(__("Remarks"))}</th>
 											</tr>
 										</thead>
@@ -1601,15 +1824,15 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 								: "";
 
 						return `
-							<div class="vsh-qc-card">
-								<div class="vsh-qc-meta">
+							<div class="frappe-card-outline mb-2">
+								<div class="d-flex flex-wrap align-items-center" style="gap: 12px;">
 									<div>${this._doc_link("Service QC", qc.name)} ${this._pill(qc.result || "Pending")}</div>
-									<div><span class="vsh-muted">${this._esc(__("Inspector"))}:</span> ${this._esc(qc.inspector || "—")}</div>
-									<div><span class="vsh-muted">${this._esc(__("Inspected On"))}:</span> ${this._fmt_datetime(qc.inspected_on)}</div>
-									<div><span class="vsh-muted">${this._esc(__("Road Test"))}:</span> ${this._esc(roadTest)}</div>
+									<div class="small"><span class="text-muted">${this._esc(__("Inspector"))}:</span> ${this._esc(qc.inspector || "—")}</div>
+									<div class="small"><span class="text-muted">${this._esc(__("Inspected On"))}:</span> ${this._fmt_datetime(qc.inspected_on)}</div>
+									<div class="small"><span class="text-muted">${this._esc(__("Road Test"))}:</span> ${this._esc(roadTest)}</div>
 								</div>
-								${qc.findings ? `<div class="vsh-qc-note"><strong>${this._esc(__("Findings"))}:</strong> <span class="vsh-pre-wrap">${this._esc(qc.findings)}</span></div>` : ""}
-								${qc.fail_reason ? `<div class="vsh-qc-note text-danger"><strong>${this._esc(__("Fail Reason"))}:</strong> <span class="vsh-pre-wrap">${this._esc(qc.fail_reason)}</span></div>` : ""}
+								${qc.findings ? `<div class="small mt-2"><strong>${this._esc(__("Findings"))}:</strong> <span class="vsh-pre-wrap">${this._esc(qc.findings)}</span></div>` : ""}
+								${qc.fail_reason ? `<div class="small mt-1 text-danger"><strong>${this._esc(__("Fail Reason"))}:</strong> <span class="vsh-pre-wrap">${this._esc(qc.fail_reason)}</span></div>` : ""}
 								${checklistHtml}
 							</div>
 						`;
@@ -1622,11 +1845,11 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 	_render_visit_financials_section(fin) {
 		const invLink = fin.invoice_number
 			? this._doc_link("Sales Invoice", fin.invoice_number)
-			: `<span class="vsh-muted">${this._esc(__("Not Invoiced"))}</span>`;
+			: `<span class="text-muted">${this._esc(__("Not Invoiced"))}</span>`;
 
 		const creditNotesHtml =
 			fin.credit_notes && fin.credit_notes.length
-				? `<span class="vsh-muted text-xs ml-2">(${this._esc(__("Credit Notes"))}: ${fin.credit_notes
+				? `<span class="text-muted small ml-2">(${this._esc(__("Credit Notes"))}: ${fin.credit_notes
 						.map((cn) => this._doc_link("Sales Invoice", cn))
 						.join(", ")})</span>`
 				: "";
@@ -1634,10 +1857,10 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 		const paymentsHtml =
 			fin.payments && fin.payments.length
 				? `
-				<div class="vsh-payments-block">
-					<div class="vsh-muted text-xs font-weight-bold mb-1">${this._esc(__("Recorded Payments"))}</div>
+				<div class="mt-2 pt-2 border-top">
+					<div class="control-label small bold mb-1">${this._esc(__("Recorded Payments"))}</div>
 					<div class="table-responsive">
-						<table class="table vsh-table vsh-table--compact">
+						<table class="table table-bordered vsh-table">
 							<thead>
 								<tr>
 									<th>${this._esc(__("Payment Entry"))}</th>
@@ -1669,24 +1892,24 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 				: "";
 
 		return `
-			<div class="vsh-sub-section">
-				<div class="vsh-fin-box">
-					<div class="vsh-fin-top">
+			<div class="vsh-visit-sub">
+				<div class="frappe-card-outline">
+					<div class="d-flex justify-content-between align-items-center flex-wrap mb-2" style="gap: 8px;">
 						<div>
-							<span class="vsh-sub-heading mb-0 mr-2">${this._esc(__("Financial Summary"))}</span>
+							<span class="control-label bold mr-2">${this._esc(__("Financial Summary"))}</span>
 							${invLink}
 							${creditNotesHtml}
 						</div>
 						<div>${this._pill(fin.payment_status || "Not Invoiced")}</div>
 					</div>
-					<div class="vsh-fin-grid">
-						<div><span class="vsh-muted">${this._esc(__("Labour Charges"))}</span><strong>${this._fmt_currency(fin.labour_charges || 0)}</strong></div>
-						<div><span class="vsh-muted">${this._esc(__("Parts Charges"))}</span><strong>${this._fmt_currency(fin.parts_charges || 0)}</strong></div>
-						<div><span class="vsh-muted">${this._esc(__("Additional / Taxes"))}</span><strong>${this._fmt_currency(fin.additional_charges || 0)}</strong></div>
-						<div><span class="vsh-muted">${this._esc(__("Discounts"))}</span><strong>${this._fmt_currency(fin.discounts || 0)}</strong></div>
-						<div><span class="vsh-muted">${this._esc(__("Paid Amount"))}</span><strong>${this._fmt_currency(fin.paid_amount || 0)}</strong></div>
-						<div><span class="vsh-muted">${this._esc(__("Outstanding Amount"))}</span><strong>${this._fmt_currency(fin.outstanding_amount || 0)}</strong></div>
-						<div class="vsh-fin-total"><span class="vsh-muted">${this._esc(__("Total Invoice Value"))}</span><strong>${this._fmt_currency(fin.total_invoice_value || 0)}</strong></div>
+					<div class="row">
+						${this._kv_cell(__("Labour Charges"), this._fmt_currency(fin.labour_charges || 0))}
+						${this._kv_cell(__("Parts Charges"), this._fmt_currency(fin.parts_charges || 0))}
+						${this._kv_cell(__("Additional / Taxes"), this._fmt_currency(fin.additional_charges || 0))}
+						${this._kv_cell(__("Discounts"), this._fmt_currency(fin.discounts || 0))}
+						${this._kv_cell(__("Paid Amount"), this._fmt_currency(fin.paid_amount || 0))}
+						${this._kv_cell(__("Outstanding Amount"), this._fmt_currency(fin.outstanding_amount || 0))}
+						${this._kv_cell(__("Total Invoice Value"), this._fmt_currency(fin.total_invoice_value || 0))}
 					</div>
 					${paymentsHtml}
 				</div>
@@ -1703,12 +1926,12 @@ vehicle_service.VehicleServiceHistoryView = class VehicleServiceHistoryView {
 			fields: [{ fieldname: "preview", fieldtype: "HTML" }],
 		});
 		const metaHtml = taken
-			? `<div class="vsh-muted text-xs mt-2">${this._esc(__("Taken On"))}: ${this._fmt_datetime(taken)}</div>`
+			? `<div class="text-muted small mt-2">${this._esc(__("Taken On"))}: ${this._fmt_datetime(taken)}</div>`
 			: "";
 		d.fields_dict.preview.$wrapper.html(`
 			<div class="text-center p-2">
-				<img src="${this._esc(safeSrc)}" alt="${this._esc(desc || __("Intake Photo"))}" style="max-width: 100%; max-height: 70vh; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0);" />
-				${desc ? `<div class="mt-2 font-weight-bold">${this._esc(desc)}</div>` : ""}
+				<img src="${this._esc(safeSrc)}" alt="${this._esc(desc || __("Intake Photo"))}" class="vsh-photo-preview-img" />
+				${desc ? `<div class="mt-2 bold">${this._esc(desc)}</div>` : ""}
 				${metaHtml}
 			</div>
 		`);

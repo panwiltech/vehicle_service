@@ -26,11 +26,11 @@ extend_bootinfo = "vehicle_service.boot.extend_bootinfo"
 
 app_include_js = [
 	"/assets/vehicle_service/js/job_board.js?v=20261026-1",
-	"/assets/vehicle_service/js/vehicle_service_history.js?v=20261116-1",
+	"/assets/vehicle_service/js/vehicle_service_history.js?v=20261117-1",
 ]
 app_include_css = [
 	"/assets/vehicle_service/css/job_board.css?v=20261026-1",
-	"/assets/vehicle_service/css/vehicle_service_history.css?v=20261116-1",
+	"/assets/vehicle_service/css/vehicle_service_history.css?v=20261117-1",
 ]
 
 # Document Events
